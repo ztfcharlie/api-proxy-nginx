@@ -22,12 +22,23 @@ RUN cd /usr/local/openresty/lualib && \
     cp -r lua-resty-string-master/lib/resty/* resty/ && \
     rm -rf lua-resty-string.zip lua-resty-string-master
 
+# 手动安装 lua-resty-hmac 库 (JWT 依赖)
+RUN cd /usr/local/openresty/lualib && \
+    wget https://github.com/jkeys089/lua-resty-hmac/archive/refs/heads/master.zip -O lua-resty-hmac.zip && \
+    unzip lua-resty-hmac.zip && \
+    cp -r lua-resty-hmac-master/lib/resty/* resty/ && \
+    rm -rf lua-resty-hmac.zip lua-resty-hmac-master
+
 # 手动安装 lua-resty-jwt 库
 RUN cd /usr/local/openresty/lualib && \
     wget https://github.com/SkyLothar/lua-resty-jwt/archive/refs/heads/master.zip -O lua-resty-jwt.zip && \
     unzip lua-resty-jwt.zip && \
     cp -r lua-resty-jwt-master/lib/resty/* resty/ && \
     rm -rf lua-resty-jwt.zip lua-resty-jwt-master
+
+# 验证安装的模块
+RUN echo "验证安装的 Lua 模块:" && \
+    ls -la /usr/local/openresty/lualib/resty/ | grep -E "(http|jwt|hmac|string)" || true
 
 # 创建必要的目录
 RUN mkdir -p /usr/local/openresty/nginx/lua
