@@ -23,11 +23,9 @@ curl "http://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-00
 
 services:
   api-proxy-nginx:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: openresty/openresty:alpine
     container_name: api-proxy-nginx
-    
+
 networks:
   api-proxy:
     driver: bridge

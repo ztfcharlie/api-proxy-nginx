@@ -1,0 +1,30 @@
+version: '3.8'
+
+services:
+  api-proxy-nginx:
+    image: openresty/openresty:alpine
+    container_name: api-proxy-nginx
+    ports:
+      - "8888:8080"  # HTTP port
+      - "8443:8443"  # HTTPS port (optional)
+    volumes:
+      - ./nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf:ro
+      - ./lua:/usr/local/openresty/nginx/lua:ro
+      - ./logs:/usr/local/openresty/nginx/logs
+    env_file:
+      - ./.env
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+    networks:
+      - api-proxy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  api-proxy:
+    driver: bridge
