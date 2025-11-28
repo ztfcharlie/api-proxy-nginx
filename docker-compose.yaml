@@ -1,8 +1,15 @@
-version: '3.4'
+version: "3.4"
+
+# Docker Compose 版本检查
+x-docker-compose-version-check: &docker-compose-version-check
+
+networks:
+  gemini-proxy:
+    driver: bridge
 
 services:
   api-proxy-nginx:
-    image: nginx:1.26.1-stable
+    image: nginx:alpine
     container_name: api-proxy-nginx
     ports:
       - "8080:8080"
@@ -12,7 +19,7 @@ services:
       - ./conf.d:/etc/nginx/conf.d:ro
       - ./lua:/etc/nginx/lua:ro
       - ./logs:/var/log/nginx
-      - ./html:/usr/share/nginx/html
+      - ./html:/usr/share/nginx/html:ro
       - ./ssl:/etc/nginx/ssl:ro
     environment:
       - TZ=Asia/Shanghai
@@ -24,12 +31,12 @@ services:
       retries: 3
       start_period: 40s
     networks:
-      - api-proxy-network
+      - gemini-proxy
     depends_on:
       - api-proxy-redis
 
   api-proxy-redis:
-    image: redis:7.2.4-alpine
+    image: redis:latest
     container_name: api-proxy-redis
     ports:
       - "6379:6379"
@@ -44,7 +51,7 @@ services:
       retries: 3
       start_period: 10s
     networks:
-      - api-proxy-network
+      - gemini-proxy
 
   # 可选：日志聚合服务
   api-proxy-fluent:
@@ -58,11 +65,6 @@ services:
       - FLUENTD_CONF=fluent.conf
     restart: unless-stopped
     networks:
-      - api-proxy-network
+      - gemini-proxy
     profiles:
       - logging
-
-
-networks:
-  api-proxy-network:
-    driver: bridge
