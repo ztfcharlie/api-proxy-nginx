@@ -5,9 +5,15 @@ local _M = {}
 
 -- Generate unique request ID
 function _M.generate_request_id()
+    -- Initialize random seed if not already done
+    if not _M._random_seeded then
+        math.randomseed(ngx.now() * 1000)
+        _M._random_seeded = true
+    end
+
     local random = math.random(100000, 999999)
     local timestamp = ngx.now()
-    return string.format("req_%d_%d", timestamp * 1000, random)
+    return string.format("req_%d_%d", math.floor(timestamp * 1000), random)
 end
 
 -- Format timestamp
