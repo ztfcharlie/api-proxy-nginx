@@ -68,20 +68,66 @@ x-goog-api-key: your-google-api-key
 
 ## 日志
 
-请求日志保存在 `logs/requests.log`，包含：
-- 请求 ID
-- 时间戳
-- 请求 URL
-- Google API 返回状态码
-- 请求持续时间
-- 客户端 IP
+系统提供多种日志文件：
+
+### 📋 日志文件说明
+
+1. **自定义请求日志** (`logs/requests.log`)
+   - 请求 ID、时间戳、请求 URL、状态码、持续时间、客户端 IP
+   - 不记录请求体和响应体（隐私保护）
+
+2. **Nginx Access 日志**
+   - `logs/access.log` - 详细格式的访问日志
+   - `logs/proxy_access.log` - 代理服务器访问日志
+   - `logs/api_requests.log` - API 请求的 JSON 格式日志
+
+3. **Nginx Error 日志**
+   - `logs/error.log` - 全局错误日志
+   - `logs/proxy_error.log` - 代理服务器错误日志
+
+### 🔍 日志查看方法
 
 ```bash
-# 查看实时日志
-tail -f logs/requests.log
+# 使用日志查看工具（推荐）
+chmod +x view-logs.sh
+./view-logs.sh
+
+# 手动查看实时日志
+tail -f logs/requests.log          # 自定义请求日志
+tail -f logs/api_requests.log      # API 请求 JSON 日志
+tail -f logs/proxy_error.log       # 错误日志
 
 # 查看容器日志
 docker-compose logs -f
+docker logs -f api-proxy-nginx
+
+# 查看最近日志
+tail -50 logs/access.log           # 最近50行访问日志
+tail -50 logs/proxy_error.log      # 最近50行错误日志
+```
+
+### 📊 日志格式示例
+
+**详细访问日志格式：**
+```
+192.168.1.100 - - [28/Nov/2024:10:30:45 +0000] "POST /v1beta/models/gemini-embedding-001:embedContent HTTP/1.1" 200 1234 "-" "curl/7.68.0" "-" req_id="req_1732789845123_456789" upstream_time="0.245" request_time="0.250" upstream_status="200"
+```
+
+**JSON 格式日志：**
+```json
+{
+  "timestamp":"2024-11-28T10:30:45+00:00",
+  "remote_addr":"192.168.1.100",
+  "request_method":"POST",
+  "request_uri":"/v1beta/models/gemini-embedding-001:embedContent",
+  "status":200,
+  "body_bytes_sent":1234,
+  "request_time":0.250,
+  "upstream_response_time":"0.245",
+  "upstream_status":"200",
+  "user_agent":"curl/7.68.0",
+  "request_id":"req_1732789845123_456789"
+}
 ```
 
 ## 配置
