@@ -15,6 +15,13 @@ RUN cd /usr/local/openresty/lualib && \
     cp -r lua-resty-http-master/lib/resty/* resty/ && \
     rm -rf lua-resty-http.zip lua-resty-http-master
 
+# 手动安装 lua-resty-string 库 (JWT 依赖)
+RUN cd /usr/local/openresty/lualib && \
+    wget https://github.com/openresty/lua-resty-string/archive/refs/heads/master.zip -O lua-resty-string.zip && \
+    unzip lua-resty-string.zip && \
+    cp -r lua-resty-string-master/lib/resty/* resty/ && \
+    rm -rf lua-resty-string.zip lua-resty-string-master
+
 # 手动安装 lua-resty-jwt 库
 RUN cd /usr/local/openresty/lualib && \
     wget https://github.com/SkyLothar/lua-resty-jwt/archive/refs/heads/master.zip -O lua-resty-jwt.zip && \
