@@ -64,7 +64,7 @@ end
 
 function _M.get_request_body()
     ngx.req.read_body()
-    return ngx.req.get_body_data()
+    return ngx.var.request_body or ""
 end
 
 return _M
