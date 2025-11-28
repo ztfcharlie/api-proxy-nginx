@@ -1,10 +1,9 @@
-version: "3.4"
 
 # Docker Compose 版本检查
 x-docker-compose-version-check: &docker-compose-version-check
 
 networks:
-  gemini-proxy:
+  api-proxy:
     driver: bridge
 
 services:
@@ -31,7 +30,7 @@ services:
       retries: 3
       start_period: 40s
     networks:
-      - gemini-proxy
+      - api-proxy
     depends_on:
       - api-proxy-redis
 
@@ -51,7 +50,7 @@ services:
       retries: 3
       start_period: 10s
     networks:
-      - gemini-proxy
+      - api-proxy
 
   # 可选：日志聚合服务
   api-proxy-fluent:
@@ -65,6 +64,6 @@ services:
       - FLUENTD_CONF=fluent.conf
     restart: unless-stopped
     networks:
-      - gemini-proxy
+      - api-proxy
     profiles:
       - logging
