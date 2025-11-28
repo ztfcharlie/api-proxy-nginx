@@ -13,6 +13,9 @@ RUN apk add --no-cache \
     lua5.1-redis \
     ca-certificates
 
+# 确保OpenResty库文件存在
+RUN ls -la /usr/local/openresty/luajit/bin/ || true
+
 # 创建必要的目录
 RUN mkdir -p /usr/local/openresty/nginx/logs \
     && mkdir -p /usr/local/openresty/nginx/conf/conf.d \
