@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini API Proxy</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            border-bottom: 3px solid #3498db;
+            padding-bottom: 10px;
+        }
+        .status {
+            background: #e8f5e8;
+            border: 1px solid #4caf50;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 20px 0;
+        }
+        .endpoint {
+            background: #f8f9fa;
+            border-left: 4px solid #3498db;
+            padding: 15px;
+            margin: 10px 0;
+        }
+        code {
+            background: #f4f4f4;
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+        }
+        .footer {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 1px solid #eee;
+            color: #666;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 Gemini API Proxy</h1>
+
+        <div class="status">
+            <strong>✅ 代理服务运行正常</strong><br>
+            状态：在线 | 版本：1.0.0 | 时间：<span id="current-time"></span>
+        </div>
+
+        <h2>📋 服务信息</h2>
+        <div class="endpoint">
+            <strong>代理地址：</strong><br>
+            HTTP: <code>http://localhost:8080</code><br>
+            HTTPS: <code>https://localhost:8443</code>
+        </div>
+
+        <div class="endpoint">
+            <strong>API 端点：</strong><br>
+            <code>/v1beta/models/*</code> - Google Gemini API 代理
+        </div>
+
+        <div class="endpoint">
+            <strong>管理端点：</strong><br>
+            <code>/health</code> - 健康检查<br>
+            <code>/status</code> - 服务状态
+        </div>
+
+        <h2>🚀 快速测试</h2>
+        <div class="endpoint">
+            <strong>测试 API Key 验证：</strong><br>
+            <pre><code>curl "http://localhost:8080/v1beta/models/gemini-embedding-001:embedContent" \
+  -H "x-goog-api-key: YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"model": "models/gemini-embedding-001", "content": {"parts":[{"text": "Hello"}]}}'</code></pre>
+        </div>
+
+        <h2>📊 功能特性</h2>
+        <ul>
+            <li>✅ API Key 白名单验证</li>
+            <li>✅ 请求自动转发和替换</li>
+            <li>✅ 流式和非流式请求支持</li>
+            <li>✅ 请求限流控制</li>
+            <li>✅ 详细日志记录</li>
+            <li>✅ 健康检查和监控</li>
+        </ul>
+
+        <h2>📝 配置说明</h2>
+        <p>配置文件位置：<code>/etc/nginx/lua/config.lua</code></p>
+        <p>日志文件位置：<code>/var/log/nginx/gemini_proxy.log</code></p>
+
+        <div class="footer">
+            <p>🚀 Powered by Nginx + Lua | 📧 Support: admin@example.com</p>
+        </div>
+    </div>
+
+    <script>
+        // 显示当前时间
+        document.getElementById('current-time').textContent = new Date().toLocaleString();
+
+        // 每秒更新时间
+        setInterval(() => {
+            document.getElementById('current-time').textContent = new Date().toLocaleString();
+        }, 1000);
+    </script>
+</body>
+</html>
