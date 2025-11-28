@@ -1,0 +1,7 @@
+任务要求：
+使用python编程，我提供一个google的vetex的json格式的key，你把通过它获取到google的Oauth2的jwt。
+json我存在一个本地文件价geminiJson下.
+python代码要模块化编写，应这个获取jwt的功能我以后要做一个给模块给另外一个程序调用的。
+具体请求什么接口，你线上去查阅google的API文档。
+
+
