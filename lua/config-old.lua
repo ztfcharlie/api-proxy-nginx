@@ -45,9 +45,7 @@ local function parse_client_keys(client_keys_str)
     end
 
     for key in split(client_keys_str, ",") do
-        if key ~= "" then
-            keys[key] = true
-        end
+        keys[key] = true
     end
     return keys
 end
@@ -116,7 +114,7 @@ local function init_config()
         -- 日志配置
         logging = {
             log_request_body = (log_request_body == "true"),
-            log_response_body = (log_response_body == "true"),
+            log_response_body = (log_response_body == "false"),
             log_file = "/var/log/nginx/gemini_proxy.log",
         },
 
