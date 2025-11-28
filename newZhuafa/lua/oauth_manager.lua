@@ -6,11 +6,72 @@ local config = require "config"
 
 local _M = {}
 
--- 缓存的令牌信息
+-- 令牌缓存配置
+local CACHE_FILE = "/usr/local/openresty/nginx/cache/oauth_token.json"
+
+-- 内存缓存的令牌信息
 local token_cache = {
     access_token = nil,
     expires_at = 0
 }
+
+-- 从文件读取缓存的令牌
+function _M.load_token_from_file()
+    local file = io.open(CACHE_FILE, "r")
+    if not file then
+        return nil
+    end
+
+    local content = file:read("*all")
+    file:close()
+
+    if not content or content == "" then
+        return nil
+    end
+
+    local success, data = pcall(cjson.decode, content)
+    if not success or not data then
+        ngx.log(ngx.WARN, "Failed to parse cached token file")
+        return nil
+    end
+
+    -- 检查令牌是否过期
+    local now = ngx.time()
+    if data.expires_at and data.expires_at > now + 60 then
+        ngx.log(ngx.INFO, "Loaded valid token from cache file")
+        return data
+    else
+        ngx.log(ngx.INFO, "Cached token has expired")
+        return nil
+    end
+end
+
+-- 将令牌保存到文件
+function _M.save_token_to_file(access_token, expires_at)
+    local data = {
+        access_token = access_token,
+        expires_at = expires_at,
+        cached_at = ngx.time()
+    }
+
+    local success, json_str = pcall(cjson.encode, data)
+    if not success then
+        ngx.log(ngx.ERR, "Failed to encode token for caching")
+        return false
+    end
+
+    local file = io.open(CACHE_FILE, "w")
+    if not file then
+        ngx.log(ngx.ERR, "Failed to open cache file for writing: " .. CACHE_FILE)
+        return false
+    end
+
+    file:write(json_str)
+    file:close()
+
+    ngx.log(ngx.INFO, "Token cached to file successfully")
+    return true
+end
 
 -- 从 JSON 文件或配置中获取服务账号信息
 function _M.get_service_account()
@@ -85,10 +146,20 @@ end
 function _M.get_access_token()
     local now = ngx.time()
 
-    -- 检查缓存的令牌是否仍然有效（提前60秒刷新）
+    -- 1. 检查内存缓存的令牌是否仍然有效（提前60秒刷新）
     if token_cache.access_token and token_cache.expires_at > now + 60 then
-        ngx.log(ngx.INFO, "Using cached OAuth2 token")
+        ngx.log(ngx.INFO, "Using memory cached OAuth2 token")
         return token_cache.access_token
+    end
+
+    -- 2. 检查文件缓存的令牌
+    local cached_token = _M.load_token_from_file()
+    if cached_token and cached_token.access_token then
+        -- 更新内存缓存
+        token_cache.access_token = cached_token.access_token
+        token_cache.expires_at = cached_token.expires_at
+        ngx.log(ngx.INFO, "Using file cached OAuth2 token")
+        return cached_token.access_token
     end
 
     ngx.log(ngx.INFO, "Requesting new OAuth2 token")
@@ -148,9 +219,14 @@ function _M.get_access_token()
         return nil
     end
 
-    -- 缓存令牌
+    -- 缓存令牌到内存和文件
+    local expires_at = now + (data.expires_in or 3600) - 60  -- 提前60秒过期
+
     token_cache.access_token = data.access_token
-    token_cache.expires_at = now + (data.expires_in or 3600) - 60  -- 提前60秒过期
+    token_cache.expires_at = expires_at
+
+    -- 保存到文件缓存
+    _M.save_token_to_file(data.access_token, expires_at)
 
     ngx.log(ngx.INFO, "Successfully obtained OAuth2 token, expires in: ", data.expires_in or 3600, " seconds")
 
@@ -159,9 +235,18 @@ end
 
 -- 清除缓存的令牌
 function _M.clear_token_cache()
+    -- 清除内存缓存
     token_cache.access_token = nil
     token_cache.expires_at = 0
-    ngx.log(ngx.INFO, "OAuth2 token cache cleared")
+
+    -- 清除文件缓存
+    local file = io.open(CACHE_FILE, "w")
+    if file then
+        file:write("")
+        file:close()
+    end
+
+    ngx.log(ngx.INFO, "OAuth2 token cache cleared (memory and file)")
 end
 
 -- 检查服务账号配置是否有效
