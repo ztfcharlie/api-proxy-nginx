@@ -13,15 +13,30 @@
 
 ## 快速开始
 
-### 1. 配置环境变量
+### 1. 配置 Vertex AI Service Account
 
+#### 方式一：使用 JSON 文件 (推荐)
+```bash
+# 复制 JSON 模板文件
+cp service-account.json.example service-account.json
+
+# 将你的 Vertex AI JSON key 内容粘贴到 service-account.json 文件中
+# 文件位置: ./service-account.json
+```
+
+#### 方式二：使用环境变量 (备选)
 ```bash
 # 复制环境变量模板
 cp .env.example .env
 
-# 编辑 .env 文件，设置你的 Google API key
-# GEMINI_API_KEY=your-actual-google-api-key
+# 编辑 .env 文件，设置服务账号信息
+# GOOGLE_CLIENT_EMAIL=your-service-account@your-project.iam.gserviceaccount.com
+# GOOGLE_PROJECT_ID=your-google-project-id
+# GOOGLE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"
 ```
+
+**📁 JSON 文件位置**: `./service-account.json` (与 docker-compose.yaml 同级目录)
+**🔄 优先级**: JSON 文件 > 环境变量
 
 ### 2. 启动服务
 
@@ -63,7 +78,7 @@ x-goog-api-key: client-api-key
 **转发到 Google：**
 ```
 POST https://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent
-x-goog-api-key: your-google-api-key
+Authorization: Bearer oauth2-access-token
 ```
 
 ## 日志

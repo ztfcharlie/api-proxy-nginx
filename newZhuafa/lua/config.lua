@@ -10,8 +10,8 @@ _M.google_api = {
 
 -- API Key configuration
 _M.api_keys = {
-    -- Server-side Google API key (from environment variable)
-    google_key = os.getenv("GEMINI_API_KEY") or "your-google-api-key-here",
+    -- Whether to validate client keys (set to false to allow any client key)
+    validate_client_keys = false,
 
     -- Client API keys that should be replaced (you can add multiple)
     client_keys = {
@@ -19,6 +19,17 @@ _M.api_keys = {
         -- ["client-key-1"] = true,
         -- ["client-key-2"] = true,
     }
+}
+
+-- Google Service Account configuration
+_M.service_account = {
+    -- JSON file path (主要配置方式)
+    json_file = "/usr/local/openresty/nginx/service-account.json",
+
+    -- Fallback: environment variables (如果 JSON 文件不存在)
+    client_email = os.getenv("GOOGLE_CLIENT_EMAIL") or "",
+    private_key = os.getenv("GOOGLE_PRIVATE_KEY") or "",
+    project_id = os.getenv("GOOGLE_PROJECT_ID") or ""
 }
 
 -- Logging configuration

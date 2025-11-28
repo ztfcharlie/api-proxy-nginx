@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   api-proxy-nginx:
-    image: openresty/openresty:alpine
+    build: .
     container_name: api-proxy-nginx
     ports:
       - "8888:8080"  # HTTP port
@@ -11,6 +11,7 @@ services:
       - ./nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf:ro
       - ./lua:/usr/local/openresty/nginx/lua:ro
       - ./logs:/usr/local/openresty/nginx/logs
+      - ./service-account.json:/usr/local/openresty/nginx/service-account.json:ro
     env_file:
       - ./.env
     environment:
