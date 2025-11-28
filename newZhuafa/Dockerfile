@@ -40,12 +40,16 @@ RUN cd /usr/local/openresty/lualib && \
     cp -r lua-resty-openssl-master/lib/resty/* resty/ && \
     rm -rf lua-resty-openssl.zip lua-resty-openssl-master
 
-# 不再安装 lua-resty-jwt 库，因为它与新版 OpenSSL 不兼容
-# 我们将直接使用 lua-resty-openssl 来创建 JWT
+# 安装兼容的 lua-resty-jwt 库 (使用 cdbattags 版本，支持新版 OpenSSL)
+RUN cd /usr/local/openresty/lualib && \
+    wget https://github.com/cdbattags/lua-resty-jwt/archive/refs/heads/master.zip -O lua-resty-jwt-new.zip && \
+    unzip lua-resty-jwt-new.zip && \
+    cp -r lua-resty-jwt-master/lib/resty/* resty/ && \
+    rm -rf lua-resty-jwt-new.zip lua-resty-jwt-master
 
 # 验证安装的模块
 RUN echo "验证安装的 Lua 模块:" && \
-    ls -la /usr/local/openresty/lualib/resty/ | grep -E "(http|hmac|string|openssl)" || true && \
+    ls -la /usr/local/openresty/lualib/resty/ | grep -E "(http|jwt|hmac|string|openssl)" || true && \
     echo "OpenSSL 相关模块:" && \
     find /usr/local/openresty/lualib/resty/ -name "*openssl*" -type f | head -5 || true
 

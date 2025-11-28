@@ -1,7 +1,7 @@
 -- OAuth2 Manager for Google Service Account Authentication
 local http = require "resty.http"
 local cjson = require "cjson"
-local openssl = require "resty.openssl"
+local jwt = require "resty.jwt"
 local config = require "config"
 
 local _M = {}
@@ -111,13 +111,6 @@ function _M.get_service_account()
     }
 end
 
--- Base64 URL encode function
-local function base64url_encode(str)
-    local base64 = ngx.encode_base64(str)
-    -- Replace + with -, / with _, and remove padding =
-    return base64:gsub("+", "-"):gsub("/", "_"):gsub("=", "")
-end
-
 -- 生成 JWT 断言
 function _M.create_jwt_assertion(service_account)
     local now = ngx.time()
@@ -137,31 +130,16 @@ function _M.create_jwt_assertion(service_account)
         iat = now
     }
 
-    -- Encode header and payload
-    local header_json = cjson.encode(jwt_header)
-    local payload_json = cjson.encode(jwt_claims)
+    -- 签名 JWT
+    local jwt_token = jwt:sign(
+        service_account.private_key,
+        {
+            header = jwt_header,
+            payload = jwt_claims
+        }
+    )
 
-    local header_b64 = base64url_encode(header_json)
-    local payload_b64 = base64url_encode(payload_json)
-
-    local signing_input = header_b64 .. "." .. payload_b64
-
-    -- Sign using lua-resty-openssl
-    local pkey, err = openssl.pkey.new(service_account.private_key)
-    if not pkey then
-        ngx.log(ngx.ERR, "Failed to load private key: ", err)
-        return nil
-    end
-
-    local signature, err = pkey:sign(signing_input, "sha256")
-    if not signature then
-        ngx.log(ngx.ERR, "Failed to sign JWT: ", err)
-        return nil
-    end
-
-    local signature_b64 = base64url_encode(signature)
-
-    return signing_input .. "." .. signature_b64
+    return jwt_token
 end
 
 -- 获取 OAuth2 访问令牌
