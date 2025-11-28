@@ -4,16 +4,16 @@ FROM openresty/openresty:alpine
 # 安装必要的包
 RUN apk add --no-cache \
     git \
-    openssl-dev \
-    gcc \
-    musl-dev \
-    make
+    curl \
+    wget \
+    unzip
 
-# 安装 luarocks
-RUN /usr/local/openresty/luajit/bin/luarocks install lua-resty-jwt
-
-# 安装其他必要的 Lua 库
-RUN /usr/local/openresty/luajit/bin/luarocks install lua-cjson
+# 手动安装 lua-resty-jwt 库
+RUN cd /usr/local/openresty/lualib && \
+    wget https://github.com/SkyLothar/lua-resty-jwt/archive/refs/heads/master.zip && \
+    unzip master.zip && \
+    cp -r lua-resty-jwt-master/lib/resty/* resty/ && \
+    rm -rf master.zip lua-resty-jwt-master
 
 # 创建必要的目录
 RUN mkdir -p /usr/local/openresty/nginx/lua
