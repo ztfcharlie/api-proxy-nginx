@@ -1,12 +1,16 @@
 # 基于 OpenResty Alpine 镜像
 FROM openresty/openresty:alpine
 
-# 安装必要的包
+# 安装必要的包 (包括 OpenSSL 开发包)
 RUN apk add --no-cache \
     git \
     curl \
     wget \
-    unzip
+    unzip \
+    openssl-dev \
+    gcc \
+    musl-dev \
+    make
 
 # 手动安装 lua-resty-http 库
 RUN cd /usr/local/openresty/lualib && \
@@ -29,6 +33,13 @@ RUN cd /usr/local/openresty/lualib && \
     cp -r lua-resty-hmac-master/lib/resty/* resty/ && \
     rm -rf lua-resty-hmac.zip lua-resty-hmac-master
 
+# 手动安装 lua-resty-openssl 库 (消除 mTLS 警告)
+RUN cd /usr/local/openresty/lualib && \
+    wget https://github.com/fffonion/lua-resty-openssl/archive/refs/heads/master.zip -O lua-resty-openssl.zip && \
+    unzip lua-resty-openssl.zip && \
+    cp -r lua-resty-openssl-master/lib/resty/* resty/ && \
+    rm -rf lua-resty-openssl.zip lua-resty-openssl-master
+
 # 手动安装 lua-resty-jwt 库
 RUN cd /usr/local/openresty/lualib && \
     wget https://github.com/SkyLothar/lua-resty-jwt/archive/refs/heads/master.zip -O lua-resty-jwt.zip && \
@@ -38,7 +49,9 @@ RUN cd /usr/local/openresty/lualib && \
 
 # 验证安装的模块
 RUN echo "验证安装的 Lua 模块:" && \
-    ls -la /usr/local/openresty/lualib/resty/ | grep -E "(http|jwt|hmac|string)" || true
+    ls -la /usr/local/openresty/lualib/resty/ | grep -E "(http|jwt|hmac|string|openssl)" || true && \
+    echo "OpenSSL 相关模块:" && \
+    find /usr/local/openresty/lualib/resty/ -name "*openssl*" -type f | head -5 || true
 
 # 创建必要的目录
 RUN mkdir -p /usr/local/openresty/nginx/lua
