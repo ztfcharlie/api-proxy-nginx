@@ -1,0 +1,33 @@
+任务要求：
+使用OpenResty镜像，使用lua编程，把我的请求的key替换为googole的标准key，然后透传转发到google的api，支持http的流式请求和非流式请求。
+举例如下，原来的请求：
+curl "http://mydomain.com/v1beta/models/gemini-embedding-001:embedContent" \
+-H "x-goog-api-key: $Client_API_KEY" \
+-H 'Content-Type: application/json' \
+-d '{"model": "models/gemini-embedding-001",
+     "content": {"parts":[{"text": "What is the meaning of life?"}]}
+    }'
+
+替换后的请求：
+curl "http://generativelanguage.googleapis.com/v1beta/models/gemini-embedding-001:embedContent" \
+-H "x-goog-api-key: $GEMINI_API_KEY" \
+-H 'Content-Type: application/json' \
+-d '{"model": "models/gemini-embedding-001",
+     "content": {"parts":[{"text": "What is the meaning of life?"}]}
+    }'
+
+配置文件要求很简单，写在一个宿主机的lua的config.lua文件就行。
+
+用docker-compose.yaml的方式部署。
+要求把用户的请求写道一个log文件，方便我查，有请求ID，时间，请求的url，google那那边返回的状态就行，不需要请求体和返回体。
+
+services:
+  api-proxy-nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: api-proxy-nginx
+    
+networks:
+  api-proxy:
+    driver: bridge
