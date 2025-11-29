@@ -20,14 +20,13 @@ RUN mkdir -p /usr/local/openresty/site/lualib/resty && \
     wget https://raw.githubusercontent.com/ledgetech/lua-resty-http/master/lib/resty/http_connect.lua && \
     mv http*.lua /usr/local/openresty/site/lualib/resty/
 
-# 手动安装 lua-resty-jwt
+# 手动安装 lua-resty-jwt（简化版本，只安装核心文件）
 RUN cd /tmp && \
     wget https://raw.githubusercontent.com/SkyLothar/lua-resty-jwt/master/lib/resty/jwt.lua && \
     wget https://raw.githubusercontent.com/SkyLothar/lua-resty-jwt/master/lib/resty/evp.lua && \
-    wget https://raw.githubusercontent.com/SkyLothar/lua-resty-jwt/master/lib/resty/hmac.lua && \
     mkdir -p /usr/local/openresty/site/lualib/resty/jwt && \
     wget -P /usr/local/openresty/site/lualib/resty/jwt/ https://raw.githubusercontent.com/SkyLothar/lua-resty-jwt/master/lib/resty/jwt/validators.lua && \
-    mv jwt.lua evp.lua hmac.lua /usr/local/openresty/site/lualib/resty/
+    mv jwt.lua evp.lua /usr/local/openresty/site/lualib/resty/
 
 # 验证模块
 RUN /usr/local/openresty/luajit/bin/luajit -e "require('cjson'); print('cjson: OK')" || echo "cjson: FAILED" && \
