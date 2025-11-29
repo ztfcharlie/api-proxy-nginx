@@ -1,41 +1,38 @@
 FROM openresty/openresty:latest-focal-fat
 
-# 安装必要的包
-RUN apk add --no-cache \
+# 安装必要的包（使用 apt 而不是 apk）
+RUN apt-get update && apt-get install -y \
     wget \
     curl \
     ca-certificates \
     openssl \
     git \
     unzip \
-    && update-ca-certificates
+    && update-ca-certificates \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # 手动安装 lua-resty-http
 RUN mkdir -p /usr/local/openresty/site/lualib/resty && \
     cd /tmp && \
     wget https://raw.githubusercontent.com/ledgetech/lua-resty-http/master/lib/resty/http.lua && \
-    mv http.lua /usr/local/openresty/site/lualib/resty/
+    wget https://raw.githubusercontent.com/ledgetech/lua-resty-http/master/lib/resty/http_headers.lua && \
+    wget https://raw.githubusercontent.com/ledgetech/lua-resty-http/master/lib/resty/http_connect.lua && \
+    mv http*.lua /usr/local/openresty/site/lualib/resty/
 
 # 手动安装 lua-resty-jwt
 RUN cd /tmp && \
     wget https://raw.githubusercontent.com/SkyLothar/lua-resty-jwt/master/lib/resty/jwt.lua && \
-    mv jwt.lua /usr/local/openresty/site/lualib/resty/
-
-# 手动安装 lua-resty-string
-RUN mkdir -p /usr/local/openresty/site/lualib/resty && \
-    cd /tmp && \
-    wget https://raw.githubusercontent.com/openresty/lua-resty-string/master/lib/resty/string.lua && \
-    mv string.lua /usr/local/openresty/site/lualib/resty/
-
-# 安装兼容版本的 resty.core
-RUN cd /tmp && \
-    wget https://github.com/openresty/lua-resty-core/archive/refs/tags/v0.1.23.tar.gz && \
-    tar -xzf v0.1.23.tar.gz && \
-    cp -r lua-resty-core-0.1.23/lib/* /usr/local/openresty/site/lualib/ && \
-    rm -rf v0.1.23.tar.gz lua-resty-core-0.1.23
+    wget https://raw.githubusercontent.com/SkyLothar/lua-resty-jwt/master/lib/resty/evp.lua && \
+    wget https://raw.githubusercontent.com/SkyLothar/lua-resty-jwt/master/lib/resty/hmac.lua && \
+    mkdir -p /usr/local/openresty/site/lualib/resty/jwt && \
+    wget -P /usr/local/openresty/site/lualib/resty/jwt/ https://raw.githubusercontent.com/SkyLothar/lua-resty-jwt/master/lib/resty/jwt/validators.lua && \
+    mv jwt.lua evp.lua hmac.lua /usr/local/openresty/site/lualib/resty/
 
 # 验证模块
-RUN /usr/local/openresty/luajit/bin/luajit -e "require('cjson'); print('cjson: OK')" || echo "cjson: FAILED"
+RUN /usr/local/openresty/luajit/bin/luajit -e "require('cjson'); print('cjson: OK')" || echo "cjson: FAILED" && \
+    /usr/local/openresty/luajit/bin/luajit -e "require('resty.core'); print('resty.core: OK')" || echo "resty.core: FAILED" && \
+    /usr/local/openresty/luajit/bin/luajit -e "require('resty.string'); print('resty.string: OK')" || echo "resty.string: FAILED"
 
 # 创建必要的目录
 RUN mkdir -p /usr/local/openresty/nginx/logs \
