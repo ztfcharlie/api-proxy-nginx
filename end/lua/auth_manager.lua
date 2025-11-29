@@ -161,6 +161,52 @@ local function get_oauth2_token(service_account)
     return token_data
 end
 
+-- 选择可用的 JSON 文件（支持多个文件轮询和故障转移）
+local function select_available_json_file(client_id)
+    local json_files = config.get_client_json_files(client_id)
+    if not json_files or #json_files == 0 then
+        return nil, "No JSON files configured for client: " .. client_id
+    end
+
+    -- 如果只有一个文件，直接返回
+    if #json_files == 1 then
+        return json_files[1]
+    end
+
+    -- 多个文件时，优先选择有效 token 的文件
+    for _, json_file in ipairs(json_files) do
+        local cache_key = "token:" .. json_file
+        local cached_token_str = token_cache:get(cache_key)
+
+        if cached_token_str then
+            local cached_token = cjson.decode(cached_token_str)
+            if cached_token and not utils.is_token_expired(cached_token, config.get_app_config().token_refresh.early_refresh) then
+                if config.should_test_output("oauth_process") then
+                    ngx.log(ngx.INFO, "[TEST] Selected JSON file with valid token: ", json_file)
+                end
+                return json_file
+            end
+        end
+    end
+
+    -- 如果没有有效 token，检查文件缓存
+    for _, json_file in ipairs(json_files) do
+        local file_token = config.read_cached_token(json_file)
+        if file_token and not utils.is_token_expired(file_token, config.get_app_config().token_refresh.early_refresh) then
+            if config.should_test_output("oauth_process") then
+                ngx.log(ngx.INFO, "[TEST] Selected JSON file with valid file cache: ", json_file)
+            end
+            return json_file
+        end
+    end
+
+    -- 都没有有效 token，使用第一个文件
+    if config.should_test_output("oauth_process") then
+        ngx.log(ngx.INFO, "[TEST] No valid tokens found, using first JSON file: ", json_files[1])
+    end
+    return json_files[1]
+end
+
 -- 获取或刷新 Token
 local function get_or_refresh_token(client_id, json_file)
     local cache_key = "token:" .. json_file
@@ -249,10 +295,10 @@ function _M.authenticate_client()
         return nil
     end
 
-    -- 获取对应的 JSON 文件
-    local json_file = config.get_client_json_file(client_id)
+    -- 选择可用的 JSON 文件（支持多个文件）
+    local json_file, select_err = select_available_json_file(client_id)
     if not json_file then
-        utils.error_response(400, "No service account configured for client")
+        utils.error_response(400, "No service account configured for client: " .. (select_err or "unknown error"))
         return nil
     end
 
@@ -286,13 +332,21 @@ function _M.warmup_tokens()
         return
     end
 
-    for client_id, json_file in pairs(maps.client_json_map) do
+    for client_id, json_files in pairs(maps.client_json_map) do
         local client_status = config.get_client_status(client_id)
         if client_status == "enable" then
-            -- 异步获取 Token（不阻塞当前请求）
-            ngx.timer.at(0, function()
-                get_or_refresh_token(client_id, json_file)
-            end)
+            -- 处理多个 JSON 文件
+            local files_to_warmup = json_files
+            if type(json_files) == "string" then
+                files_to_warmup = {json_files}
+            end
+
+            -- 为每个 JSON 文件异步获取 Token
+            for _, json_file in ipairs(files_to_warmup) do
+                ngx.timer.at(0, function()
+                    get_or_refresh_token(client_id, json_file)
+                end)
+            end
         end
     end
 end

@@ -184,13 +184,38 @@ function _M.get_client_status(client_id)
     return maps.client_map[client_id]
 end
 
--- 获取客户端对应的 JSON 文件
-function _M.get_client_json_file(client_id)
+-- 获取客户端对应的 JSON 文件（支持多个文件）
+function _M.get_client_json_files(client_id)
     local maps = config_cache.maps
     if not maps or not maps.client_json_map then
         return nil
     end
-    return maps.client_json_map[client_id]
+
+    local json_files = maps.client_json_map[client_id]
+    if not json_files then
+        return nil
+    end
+
+    -- 如果是字符串（向后兼容），转换为数组
+    if type(json_files) == "string" then
+        return {json_files}
+    end
+
+    -- 如果是数组，直接返回
+    if type(json_files) == "table" then
+        return json_files
+    end
+
+    return nil
+end
+
+-- 获取客户端的第一个 JSON 文件（向后兼容）
+function _M.get_client_json_file(client_id)
+    local json_files = _M.get_client_json_files(client_id)
+    if json_files and #json_files > 0 then
+        return json_files[1]
+    end
+    return nil
 end
 
 -- 获取模型对应的 API 主机
