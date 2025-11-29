@@ -1,4 +1,4 @@
-FROM openresty/openresty:1.21.4.1-alpine-fat
+FROM openresty/openresty:latest-focal-fat
 
 # 安装必要的包
 RUN apk add --no-cache \
