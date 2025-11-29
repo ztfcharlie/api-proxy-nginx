@@ -28,12 +28,12 @@ local default_config = {
 
 -- 文件路径配置
 local paths = {
-    app_config = "/usr/local/openresty/nginx/config/app_config.json",
-    client_map = "/usr/local/openresty/nginx/data/map/map-client.json",
-    client_json_map = "/usr/local/openresty/nginx/data/map/map-client-json.json",
-    model_region_map = "/usr/local/openresty/nginx/data/map/map-json-model-region.json",
-    json_dir = "/usr/local/openresty/nginx/data/json/",
-    jwt_dir = "/usr/local/openresty/nginx/data/jwt/"
+    app_config = "/etc/nginx/config/app_config.json",
+    client_map = "/etc/nginx/data/map/map-client.json",
+    client_json_map = "/etc/nginx/data/map/map-client-json.json",
+    model_region_map = "/etc/nginx/data/map/map-json-model-region.json",
+    json_dir = "/etc/nginx/data/json/",
+    jwt_dir = "/etc/nginx/data/jwt/"
 }
 
 -- 读取 JSON 文件

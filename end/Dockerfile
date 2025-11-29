@@ -150,7 +150,9 @@ RUN apk del .build-deps && \
 
 # 创建项目目录
 RUN mkdir -p /etc/nginx/lua \
-             /etc/nginx/data \
+             /etc/nginx/data/map \
+             /etc/nginx/data/json \
+             /etc/nginx/data/jwt \
              /etc/nginx/config \
              /etc/nginx/html \
              /etc/nginx/ssl \
