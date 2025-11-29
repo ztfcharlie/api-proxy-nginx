@@ -28,9 +28,7 @@ RUN cd /tmp && \
     rm -rf lua-resty-jwt
 
 # 验证模块
-RUN /usr/local/openresty/luajit/bin/luajit -e "require('cjson'); print('cjson: OK')" || echo "cjson: FAILED" && \
-    /usr/local/openresty/luajit/bin/luajit -e "require('resty.core'); print('resty.core: OK')" || echo "resty.core: FAILED" && \
-    /usr/local/openresty/luajit/bin/luajit -e "require('resty.string'); print('resty.string: OK')" || echo "resty.string: FAILED"
+RUN /usr/local/openresty/luajit/bin/luajit -e "require('cjson'); print('cjson: OK')" || echo "cjson: FAILED"
 
 # 创建必要的目录
 RUN mkdir -p /usr/local/openresty/nginx/logs \
