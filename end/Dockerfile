@@ -8,21 +8,19 @@ RUN apk add --no-cache \
     openssl \
     git \
     unzip \
+    make \
     && update-ca-certificates
 
-# 安装 lua-resty-lrucache（lua-resty-core 的依赖）
+# 手动安装 lua-resty-lrucache（不使用 make）
 RUN cd /tmp && \
     git clone https://github.com/openresty/lua-resty-lrucache.git && \
-    cd lua-resty-lrucache && \
-    git checkout v0.09 && \
-    make install PREFIX=/usr/local/openresty
+    mkdir -p /usr/local/openresty/site/lualib/resty && \
+    cp -r lua-resty-lrucache/lib/resty/* /usr/local/openresty/site/lualib/resty/
 
-# 安装 lua-resty-core
+# 手动安装 lua-resty-core（不使用 make）
 RUN cd /tmp && \
     git clone https://github.com/openresty/lua-resty-core.git && \
-    cd lua-resty-core && \
-    git checkout v0.1.17 && \
-    make install PREFIX=/usr/local/openresty
+    cp -r lua-resty-core/lib/* /usr/local/openresty/site/lualib/
 
 # 手动安装 lua-resty-http
 RUN cd /tmp && \
