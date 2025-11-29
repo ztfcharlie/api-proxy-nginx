@@ -1,16 +1,14 @@
-FROM openresty/openresty:1.27.1.2-0-focal
+FROM openresty/openresty:1.21.4.1-alpine
 
-# 安装必要的包（使用 apt 而不是 apk）
-RUN apt-get update && apt-get install -y \
+# 安装必要的包
+RUN apk add --no-cache \
     wget \
     curl \
     ca-certificates \
     openssl \
     git \
     unzip \
-    && update-ca-certificates \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    && update-ca-certificates
 
 # 手动安装 lua-resty-http
 RUN mkdir -p /usr/local/openresty/site/lualib/resty && \
@@ -26,6 +24,12 @@ RUN cd /tmp && \
     mkdir -p /usr/local/openresty/site/lualib/resty && \
     cp -r lua-resty-jwt/lib/resty/* /usr/local/openresty/site/lualib/resty/ && \
     rm -rf lua-resty-jwt
+
+# 安装 resty.core（兼容版本）
+RUN cd /tmp && \
+    git clone https://github.com/openresty/lua-resty-core.git && \
+    cp -r lua-resty-core/lib/* /usr/local/openresty/site/lualib/ && \
+    rm -rf lua-resty-core
 
 # 验证模块
 RUN /usr/local/openresty/luajit/bin/luajit -e "require('cjson'); print('cjson: OK')" || echo "cjson: FAILED"
