@@ -145,6 +145,11 @@ RUN cd /tmp && \
     git clone https://github.com/openresty/lua-resty-lrucache.git && \
     cp -r lua-resty-lrucache/lib/resty/* /usr/local/share/lua/5.1/resty/
 
+# 安装 lua-resty-openssl (更安全的 OpenSSL 集成)
+RUN cd /tmp && \
+    git clone https://github.com/fffonion/lua-resty-openssl.git && \
+    cp -r lua-resty-openssl/lib/resty/* /usr/local/share/lua/5.1/resty/
+
 # 清理编译依赖和临时文件
 RUN apk del .build-deps && \
     rm -rf /tmp/* /var/cache/apk/*
