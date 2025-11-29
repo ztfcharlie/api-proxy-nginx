@@ -23,7 +23,7 @@ class VertexAPIFinal:
         self.model_regions = {
             "gemini-3-pro-preview": "global",
             "gemini-1.5-pro": "global",  # Based on your example
-            "gemini-1.5-flash": "global",  # Based on your example
+            "gemini-2.5-pro": "global",  # Based on your example
             "gemini-embedding-001": "us-central1"  # Regional model
         }
 
@@ -247,7 +247,7 @@ def test_vertex_api_final():
         models_to_test = [
             "gemini-3-pro-preview",
             "gemini-1.5-pro",
-            "gemini-1.5-flash"
+            "gemini-2.5-pro"
         ]
 
         success_count = 0
@@ -310,7 +310,7 @@ def show_endpoint_examples():
     global_examples = [
         ("gemini-3-pro-preview", "generateContent"),
         ("gemini-1.5-pro", "generateContent"),
-        ("gemini-1.5-flash", "streamGenerateContent?alt=sse")
+        ("gemini-2.5-pro", "streamGenerateContent?alt=sse")
     ]
 
     for model, method in global_examples:
