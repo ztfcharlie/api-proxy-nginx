@@ -25,12 +25,12 @@ RUN cd /tmp && \
     cp -r lua-resty-jwt/lib/resty/* /usr/local/openresty/site/lualib/resty/ && \
     rm -rf lua-resty-jwt
 
-# 安装兼容的 resty.core 版本
+# 安装更老的兼容 resty.core 版本
 RUN cd /tmp && \
-    wget https://github.com/openresty/lua-resty-core/archive/refs/tags/v0.1.17.tar.gz && \
-    tar -xzf v0.1.17.tar.gz && \
-    cp -r lua-resty-core-0.1.17/lib/* /usr/local/openresty/site/lualib/ && \
-    rm -rf v0.1.17.tar.gz lua-resty-core-0.1.17
+    wget https://github.com/openresty/lua-resty-core/archive/refs/tags/v0.1.13.tar.gz && \
+    tar -xzf v0.1.13.tar.gz && \
+    cp -r lua-resty-core-0.1.13/lib/* /usr/local/openresty/site/lualib/ && \
+    rm -rf v0.1.13.tar.gz lua-resty-core-0.1.13
 
 # 安装 lua-resty-lrucache（resty.core 的依赖）
 RUN cd /tmp && \
