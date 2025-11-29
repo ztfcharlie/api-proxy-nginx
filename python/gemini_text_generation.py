@@ -105,6 +105,11 @@ def generate_text_with_curl_equivalent():
             print(f"❌ Error in text generation: {e}")
             return False
 
+    except Exception as e:
+        print(f"❌ Error in generate_text_with_curl_equivalent: {e}")
+        return False
+
+
 def demonstrate_text_generation():
     """Demonstrate different text generation scenarios."""
     print("\n🎨 Multiple Text Generation Examples")
