@@ -134,6 +134,16 @@ RUN cd /tmp && \
     git clone https://github.com/SkyLothar/lua-resty-jwt.git && \
     cp -r lua-resty-jwt/lib/resty/* /usr/local/share/lua/5.1/resty/
 
+# 安装 lua-resty-core (必需的核心模块)
+RUN cd /tmp && \
+    git clone https://github.com/openresty/lua-resty-core.git && \
+    cp -r lua-resty-core/lib/resty/* /usr/local/share/lua/5.1/resty/
+
+# 安装 lua-resty-lrucache (lua-resty-core 的依赖)
+RUN cd /tmp && \
+    git clone https://github.com/openresty/lua-resty-lrucache.git && \
+    cp -r lua-resty-lrucache/lib/resty/* /usr/local/share/lua/5.1/resty/
+
 # 清理编译依赖和临时文件
 RUN apk del .build-deps && \
     rm -rf /tmp/* /var/cache/apk/*
