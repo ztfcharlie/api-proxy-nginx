@@ -31,7 +31,9 @@ RUN apk add --no-cache \
     openssl \
     pcre \
     zlib \
-    curl
+    curl \
+    libgcc \
+    libstdc++
 
 # 下载并编译 LuaJIT
 RUN cd /tmp && \
