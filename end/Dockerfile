@@ -25,10 +25,10 @@ RUN if [ ! -f /usr/local/openresty/luajit/bin/luarocks ]; then \
         cd .. && rm -rf luarocks-3.9.2*; \
     fi
 
-# 安装必需的 Lua 模块
-RUN /usr/local/openresty/luajit/bin/luarocks install lua-cjson
-RUN /usr/local/openresty/luajit/bin/luarocks install lua-resty-jwt
-RUN /usr/local/openresty/luajit/bin/luarocks install lua-resty-http
+# 使用 OPM 安装模块
+RUN opm get ledgetech/lua-resty-http
+RUN opm get SkyLothar/lua-resty-jwt
+# lua-cjson 通常已经包含在 OpenResty 中
 
 # 创建必要的目录
 RUN mkdir -p /usr/local/openresty/nginx/logs \
