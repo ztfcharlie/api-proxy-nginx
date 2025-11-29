@@ -1,4 +1,4 @@
-FROM openresty/openresty:latest-focal-fat
+FROM openresty/openresty:1.27.1.2-0-focal
 
 # 安装必要的包（使用 apt 而不是 apk）
 RUN apt-get update && apt-get install -y \
