@@ -21,5 +21,6 @@ WORKDIR /usr/local/openresty/nginx
 # 暴露端口
 EXPOSE 8080 8443
 
-# 启动命令
-CMD ["nginx", "-g", "daemon off;"]
+# 重置 ENTRYPOINT 并使用完整路径
+ENTRYPOINT []
+CMD ["/usr/local/openresty/nginx/sbin/nginx", "-g", "daemon off;"]
