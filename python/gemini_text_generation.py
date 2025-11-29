@@ -2,273 +2,277 @@
 """
 Gemini Text Generation Demo with JWT Caching
 
-This script demonstrates text generation using Gemini 2.5-flash model
-with persistent JWT authentication, equivalent to your provided curl command.
+This script demonstrates text generation using Gemini 3-pro-preview model
+with native API calls and request debugging output.
 """
 
 import json
 import time
-from gemini_client import create_gemini_client
+import requests
+import os
+from google_auth import GoogleAuthenticator
 
 
-def generate_text_with_curl_equivalent():
-    """Generate text using Gemini API with persistent JWT caching."""
-    print("🌟 Gemini Text Generation with JWT Caching")
-    print("=" * 60)
+def generate_text_with_native_api():
+    """Generate text using native Gemini 3-pro-preview API with debugging output."""
+    print("🌟 Gemini 3-pro-preview Text Generation with Native API")
+    print("=" * 70)
 
     try:
-        # Initialize client with persistent caching
-        client = create_gemini_client("service-account.json")
-        print("✅ Gemini client initialized with JWT caching")
+        # Initialize authenticator
+        auth = GoogleAuthenticator("geminiJson", enable_persistent_cache=True)
+        print("✅ Google authenticator initialized")
 
-        # Test connection first
-        test_results = client.test_connection()
-        print(f"\n🔍 Connection Test Results:")
-        print(f"  Success: {test_results['success']}")
-        print(f"  Token Valid: {test_results['token_valid']}")
-        print(f"  API Reachable: {test_results['api_reachable']}")
+        # Get JWT token
+        token = auth.get_token("service-account.json")
+        print(f"✅ JWT token obtained: {token[:50]}...")
 
-        if not test_results['success']:
-            print("❌ Connection failed. Please check:")
-            print("  1. Service account JSON key is in geminiJson/ directory")
-            print("  2. Service account has Gemini API permissions")
-            print("  3. Network connectivity to Google APIs")
-            return False
+        # API endpoint for Gemini 3-pro-preview
+        api_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent"
 
-        return True
-
-        # Equivalent to your curl command for text generation
-        print(f"\n📝 Your Original curl command:")
-        print('curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent" \\')
-        print('-H "x-goog-api-key: $GEMINI_API_KEY" \\')
-        print('-H "Content-Type: application/json" \\')
-        print('-X POST \\')
-        print('-d \'{"contents":[{"parts":[{"text":"What is the meaning of life?"}]}]\'')
-        print("")
-
-        print(f"\n🚀 Python equivalent (with JWT caching):")
-        print("from gemini_client import create_gemini_client")
-        print("")
-        print("# Initialize client (JWT automatically cached)")
-        print('client = create_gemini_client("service-account.json")')
-        print("")
-        print("# Generate text")
-        print('response = client.generate_content("What is the meaning of life?")')
-        print("print(f\"Generated text: {response}\")")
-
-        # Use the client directly
-        print(f"\n🤖 Making API call...")
-
-        # Prepare request payload for text generation
-        payload = {
-            "contents": [
-                {
-                    "parts": [
-                        {
-                            "text": "What is the meaning of life?"
-                        }
-                    ]
-                }
-            ]
+        # Prepare request headers
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json",
+            "User-Agent": "Python-Gemini-Client/1.0"
         }
 
-        # Use Gemini client to make the request
-        try:
-            # First call (will hit the API and cache the token)
-            print("📞 First API call (will get fresh token):")
-            start_time = time.time()
-            response1 = client.generate_content("What is the meaning of life?")
-            first_call_time = time.time() - start_time
-            print(f"✅ First call completed in {first_call_time:.2f} seconds")
-            print(f"Response: {response1}")
+        # Prepare request payload matching your curl command
+        payload = {
+            "contents": [{
+                "parts": [{"text": "How does AI work?"}]
+            }],
+            "generationConfig": {
+                "thinkingConfig": {
+                    "thinkingLevel": "low"
+                }
+            }
+        }
 
-            # Second call (will use cached token)
-            print("\n📞 Second API call (will use cached token):")
-            start_time = time.time()
-            response2 = client.generate_content("What is the meaning of life?")
-            second_call_time = time.time() - start_time
-            print(f"✅ Second call completed in {second_call_time:.2f} seconds")
-            print(f"✅ Performance improvement: {((first_call_time - second_call_time) / first_call_time) * 100:.1f}% faster")
-            print(f"Response: {response2}")
+        print(f"\n📝 Original curl command equivalent:")
+        print('curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent" \\')
+        print('  -H "Authorization: Bearer $JWT_TOKEN" \\')
+        print('  -H "Content-Type: application/json" \\')
+        print('  -X POST \\')
+        print('  -d \'{"contents":[{"parts":[{"text":"How does AI work?"}]}],"generationConfig":{"thinkingConfig":{"thinkingLevel":"low"}}}\'')
 
-            # Verify responses are consistent
-            if response1 == response2:
-                print("✅ Both responses are identical (caching working perfectly!)")
+        print(f"\n🔍 DEBUG: Request Details")
+        print("=" * 50)
+        print(f"🌐 API URL: {api_url}")
+        print(f"📋 Request Headers:")
+        for key, value in headers.items():
+            if key == "Authorization":
+                print(f"  {key}: Bearer {value[7:57]}...")  # Show first 50 chars of token
             else:
-                print("⚠️ Responses differ (this is normal due to randomness)")
-                print(f"Response 1 length: {len(str(response1))}")
-                print(f"Response 2 length: {len(str(response2))}")
+                print(f"  {key}: {value}")
 
-            return True
+        print(f"\n📦 Request Payload (JSON):")
+        payload_json = json.dumps(payload, indent=2, ensure_ascii=False)
+        print(payload_json)
 
-        except Exception as e:
-            print(f"❌ Error in text generation: {e}")
+        print(f"\n📏 Payload size: {len(payload_json)} bytes")
+
+        # Make the API request
+        print(f"\n🚀 Making API request...")
+        start_time = time.time()
+
+        try:
+            response = requests.post(
+                api_url,
+                headers=headers,
+                json=payload,
+                timeout=30
+            )
+
+            request_time = time.time() - start_time
+            print(f"⏱️ Request completed in {request_time:.2f} seconds")
+
+            print(f"\n📊 Response Details:")
+            print("=" * 50)
+            print(f"🔢 Status Code: {response.status_code}")
+            print(f"📋 Response Headers:")
+            for key, value in response.headers.items():
+                print(f"  {key}: {value}")
+
+            print(f"\n📦 Response Content:")
+            if response.status_code == 200:
+                try:
+                    response_json = response.json()
+                    print("✅ JSON Response:")
+                    print(json.dumps(response_json, indent=2, ensure_ascii=False))
+
+                    # Extract and display the generated text
+                    if 'candidates' in response_json and response_json['candidates']:
+                        candidate = response_json['candidates'][0]
+                        if 'content' in candidate and 'parts' in candidate['content']:
+                            generated_text = candidate['content']['parts'][0]['text']
+                            print(f"\n🤖 Generated Text:")
+                            print("=" * 50)
+                            print(generated_text)
+
+                            # Check for thinking content if available
+                            if 'thinking' in candidate:
+                                print(f"\n🧠 Thinking Process:")
+                                print("=" * 50)
+                                print(candidate['thinking'])
+
+                    return True
+
+                except json.JSONDecodeError as e:
+                    print(f"❌ Failed to parse JSON response: {e}")
+                    print(f"Raw response: {response.text}")
+                    return False
+            else:
+                print(f"❌ API request failed with status {response.status_code}")
+                print(f"Response text: {response.text}")
+                return False
+
+        except requests.exceptions.RequestException as e:
+            print(f"❌ Request failed: {e}")
             return False
 
     except Exception as e:
-        print(f"❌ Error in generate_text_with_curl_equivalent: {e}")
+        print(f"❌ Error in generate_text_with_native_api: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 
-def demonstrate_text_generation():
-    """Demonstrate different text generation scenarios."""
-    print("\n🎨 Multiple Text Generation Examples")
-    print("=" * 60)
+def demonstrate_multiple_prompts():
+    """Demonstrate multiple text generation scenarios with Gemini 3-pro-preview."""
+    print("\n🎨 Multiple Text Generation Examples with Gemini 3-pro-preview")
+    print("=" * 70)
 
-    client = create_gemini_client("service-account.json")
+    # Initialize authenticator once for all requests
+    try:
+        auth = GoogleAuthenticator("geminiJson", enable_persistent_cache=True)
+        token = auth.get_token("service-account.json")
+        print(f"✅ Authentication ready for multiple requests")
+    except Exception as e:
+        print(f"❌ Authentication failed: {e}")
+        return 0
 
     examples = [
         {
-            "name": "Simple Question",
-            "prompt": "What is artificial intelligence?",
-            "description": "Basic question about AI"
+            "name": "AI Explanation",
+            "prompt": "How does artificial intelligence work?",
+            "description": "Technical explanation with thinking"
         },
         {
             "name": "Creative Writing",
-            "prompt": "Write a short poem about technology",
-            "description": "Creative writing task"
+            "prompt": "Write a short poem about the future of technology",
+            "description": "Creative task with low thinking level"
         },
         {
-            "name": "Code Generation",
-            "prompt": "Write a Python function to calculate factorial",
-            "description": "Code generation task"
-        },
-        {
-            "name": "Translation",
-            "prompt": "Translate 'Hello world' to French",
-            "description": "Translation task"
-        },
-        {
-            "name": "Summarization",
-            "prompt": "Summarize this text: Artificial intelligence is a branch of computer science that aims to create intelligent machines.",
-            "description": "Text summarization"
+            "name": "Problem Solving",
+            "prompt": "Explain how to solve a Rubik's cube step by step",
+            "description": "Complex problem solving"
         }
     ]
 
+    successful_requests = 0
+
     for i, example in enumerate(examples, 1):
-        print(f"\n--- Example {i}: {example['name']} ---")
+        print(f"\n{'='*20} Example {i}: {example['name']} {'='*20}")
         print(f"Description: {example['description']}")
         print(f"Prompt: {example['prompt']}")
 
         try:
-            response = client.generate_content(example['prompt'])
-            print(f"✅ Response: {response}")
+            # API endpoint
+            api_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent"
 
-            if 'candidates' in response and response['candidates']:
-                candidate = response['candidates'][0]
-                if 'content' in candidate and 'parts' in candidate['content']:
-                    text = candidate['content']['parts'][0]['text']
-                    print(f"Generated text: {text}")
+            # Headers
+            headers = {
+                "Authorization": f"Bearer {token}",
+                "Content-Type": "application/json"
+            }
+
+            # Payload with thinking config
+            payload = {
+                "contents": [{
+                    "parts": [{"text": example['prompt']}]
+                }],
+                "generationConfig": {
+                    "thinkingConfig": {
+                        "thinkingLevel": "low"
+                    }
+                }
+            }
+
+            print(f"\n🔍 Request {i} Details:")
+            print(f"  URL: {api_url}")
+            print(f"  Payload: {json.dumps(payload, indent=2)}")
+
+            # Make request
+            response = requests.post(api_url, headers=headers, json=payload, timeout=30)
+
+            print(f"\n📊 Response {i}:")
+            print(f"  Status: {response.status_code}")
+
+            if response.status_code == 200:
+                response_json = response.json()
+
+                if 'candidates' in response_json and response_json['candidates']:
+                    candidate = response_json['candidates'][0]
+                    if 'content' in candidate and 'parts' in candidate['content']:
+                        generated_text = candidate['content']['parts'][0]['text']
+                        print(f"✅ Generated Text:")
+                        print(f"  {generated_text[:200]}...")
+
+                        # Show thinking if available
+                        if 'thinking' in candidate:
+                            thinking = candidate['thinking']
+                            print(f"🧠 Thinking Process:")
+                            print(f"  {thinking[:200]}...")
+
+                        successful_requests += 1
+                    else:
+                        print(f"❌ No content in response")
+                else:
+                    print(f"❌ No candidates in response")
+            else:
+                print(f"❌ Request failed: {response.status_code} - {response.text}")
+
         except Exception as e:
-            print(f"❌ Error: {e}")
+            print(f"❌ Error in example {i}: {e}")
 
-    return len(examples)
+    return successful_requests
 
-def compare_with_without_caching():
-    """Compare performance with and without JWT caching."""
-    print("\n⚡ Performance Comparison: With vs Without Caching")
-    print("=" * 60)
-
-    # Test with caching
-    print("\n🟢 WITH JWT CACHING:")
-    start_time = time.time()
-    for i in range(3):
-        client = create_gemini_client("service-account.json")
-        client.generate_content(f"Test message {i+1}")
-    with_cache_time = time.time() - start_time
-    print(f"  3 calls with caching: {with_cache_time:.2f} seconds")
-    print(f"  Average per call: {with_cache_time/3:.2f} seconds")
-
-    # Test without caching (simulate performance impact)
-    print("\n🟡 WITHOUT JWT CACHING:")
-    start_time = time.time()
-    for i in range(3):
-        from google_auth import GoogleAuthenticator
-        # Create authenticator without persistent cache to simulate fresh API calls
-        auth_no_cache = GoogleAuthenticator("geminiJson", enable_persistent_cache=False)
-        client_no_cache = create_gemini_client.__new__(cls=GeminiClient)
-        client_no_cache.auth = auth_no_cache
-        client_no_cache.key_filename = "service-account.json"
-        client_no_cache.keys_directory = "geminiJson"
-        client_no_cache.use_persistent_cache = False
-        client_no_cache.model = "gemini-2.5-flash"
-
-        client_no_cache.generate_content(f"Test message {i+1}")
-    without_cache_time = time.time() - start_time
-    print(f"  3 calls without caching: {without_cache_time:.2f} seconds")
-    print(f"  Average per call: {without_cache_time/3:.2f} seconds")
-
-    # Calculate performance improvement
-    if with_cache_time < without_cache_time:
-        improvement = ((without_cache_time - with_cache_time) / without_cache_time) * 100
-        speedup = without_cache_time / with_cache_time
-        print(f"\n📊 PERFORMANCE ANALYSIS:")
-        print(f"  Improvement: {improvement:.1f}% faster")
-        print(f"  Speedup: {speedup:.2f}x faster")
-        print(f"  Time saved: {without_cache_time - with_cache_time:.2f} seconds")
-
-    return improvement > 0
-
-
-def show_cache_statistics():
-    """Show current cache statistics."""
-    print("\n📊 Cache Statistics")
-    print("=" * 40)
-
-    try:
-        client = create_gemini_client("service-account.json")
-        cache_info = client.get_cache_info()
-
-        print(f"Total cached tokens: {cache_info['total_cached_tokens']}")
-        print(f"Valid tokens: {cache_info['valid_tokens']}")
-        print(f"Expired tokens: {cache_info['expired_tokens']}")
-        print(f"Current key file: {cache_info['current_key_filename']}")
-        print(f"Persistent cache enabled: {cache_info['persistent_cache_enabled']}")
-
-        if cache_info['tokens']:
-            print("\n📋 Token Details:")
-            for i, token in enumerate(cache_info['tokens'][:5], 1):
-                is_valid = "✅ Valid" if token['is_valid'] else "❌ Expired"
-                expires_in_min = token.get('expires_in_minutes', 0)
-                print(f"  Token {i}: {token['key_filename']} - {is_valid} ({expires_in_min:.1f} min)")
-
-    except Exception as e:
-        print(f"❌ Error getting cache info: {e}")
 
 
 def main():
     """Main demonstration function."""
-    print("🌟 Gemini Text Generation with JWT Caching Demo")
-    print("=" * 60)
-    print("This demo shows how to generate text using Gemini 2.5-flash API")
-    print("with automatic JWT token caching for improved performance.")
+    print("🌟 Gemini 3-pro-preview Native API Demo with Request Debugging")
+    print("=" * 80)
+    print("This demo shows native API calls to Gemini 3-pro-preview with detailed")
+    print("request/response debugging to help identify any issues.")
     print("\n📋 Features demonstrated:")
-    print("1. ✅ Automatic JWT token generation and caching")
-    print("2. 🚀 Text generation with Gemini 2.5-flash model")
-    print("3. 📊 Performance comparison and statistics")
-    print("4. 🔄 Multiple generation examples")
-    print("5. 🛡️ Error handling and troubleshooting")
+    print("1. ✅ Native API calls to Gemini 3-pro-preview")
+    print("2. 🔍 Detailed request headers and payload debugging")
+    print("3. 📊 Complete response analysis")
+    print("4. 🧠 ThinkingConfig with low thinking level")
+    print("5. 🛡️ Comprehensive error handling")
 
     demonstrations = [
-        ("Basic Generation", generate_text_with_curl_equivalent),
-        ("Multiple Examples", demonstrate_text_generation),
-        ("Performance Comparison", compare_with_without_caching),
-        ("Cache Statistics", show_cache_statistics)
+        ("Native API Call", generate_text_with_native_api),
+        ("Multiple Prompts", demonstrate_multiple_prompts)
     ]
 
     results = []
     for demo_name, demo_func in demonstrations:
-        print(f"\n{'='*80} {demo_name} {'='*80}")
+        print(f"\n{'='*30} {demo_name} {'='*30}")
         try:
             result = demo_func()
             results.append((demo_name, result))
             status = "✅ SUCCESS" if result else "❌ FAILED"
-            print(f"{demo_name}: {status}")
+            print(f"\n{demo_name}: {status}")
         except Exception as e:
             print(f"❌ {demo_name}: {e}")
+            import traceback
+            traceback.print_exc()
             results.append((demo_name, False))
 
-    print("\n" + "=" * 60)
+    print("\n" + "=" * 80)
     print("📊 DEMO RESULTS SUMMARY:")
     passed = 0
     for demo_name, result in results:
@@ -282,36 +286,32 @@ def main():
 
     if passed == total:
         print("\n🚀 USAGE EXAMPLES:")
-        print("\n# Basic text generation (with automatic JWT caching):")
-        print("from gemini_client import create_gemini_client")
+        print("\n# Native Gemini 3-pro-preview API call:")
+        print("import requests")
+        print("from google_auth import GoogleAuthenticator")
         print("")
-        print("# Initialize client")
-        print('client = create_gemini_client("service-account.json")')
+        print("# Get JWT token")
+        print('auth = GoogleAuthenticator("geminiJson")')
+        print('token = auth.get_token("service-account.json")')
         print("")
-        print("# Generate text")
-        print('response = client.generate_content("What is the meaning of life?")')
-        print("print(response)")
+        print("# Make API request")
+        print('url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-pro-preview:generateContent"')
+        print('headers = {"Authorization": f"Bearer {token}", "Content-Type": "application/json"}')
+        print('payload = {')
+        print('    "contents": [{"parts": [{"text": "Your question here"}]}],')
+        print('    "generationConfig": {"thinkingConfig": {"thinkingLevel": "low"}}')
+        print('}')
+        print('response = requests.post(url, headers=headers, json=payload)')
         print("")
-        print("# This uses JWT caching automatically!")
-        print("# No need to manage API keys manually.")
-        print("")
-        print("\n# For multiple generations:")
-        print("prompts = ['What is AI?', 'Explain quantum computing']")
-        print("for prompt in prompts:")
-        print('    result = client.generate_content(prompt)')
-        print('    print(f"Generated: {result}")')
-        print("")
-        print("\n# For custom configuration:")
-        print("# client = create_gemini_client('your-key.json', model='gemini-2.5-flash')")
+        print("# This matches your curl command exactly!")
     else:
         print("\n⚠️  Some demos failed. Check the error messages above.")
         print("\n🔧 TROUBLESHOOTING:")
         print("1. Ensure your Google service account JSON key is in 'geminiJson/' directory")
-        print("2. Make sure the service account has Gemini API permissions in Google Cloud Console:")
-        print("   https://console.cloud.google.com/apis/library/generativelanguage.googleapis.com")
-        print("3. Check network connectivity to Google APIs")
-        print("4. Verify the service account key file name matches your actual file")
-        print("5. Run: python check_permissions_fixed.py")
+        print("2. Make sure the service account has Gemini API permissions")
+        print("3. Check that Gemini 3-pro-preview is available in your region")
+        print("4. Verify network connectivity to Google APIs")
+        print("5. Check the request debugging output for specific error details")
 
     return passed == total
 
