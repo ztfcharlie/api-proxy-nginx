@@ -1,0 +1,74 @@
+version: '3.8'
+
+networks:
+  api-proxy:
+    driver: bridge
+
+services:
+  api-proxy-nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: api-proxy-nginx
+    ports:
+      - "8080:8080"
+      - "8443:8443"
+    environment:
+      - TZ=Asia/Shanghai
+    volumes:
+      - ./nginx/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf:ro
+      - ./nginx/conf.d:/usr/local/openresty/nginx/conf/conf.d:ro
+      - ./lua:/usr/local/openresty/lualib:ro
+      - ./logs:/usr/local/openresty/nginx/logs
+      - ./html:/usr/local/openresty/nginx/html:ro
+      - ./ssl:/usr/local/openresty/nginx/conf/ssl:ro
+      - ./data:/usr/local/openresty/nginx/data:ro
+      - ./config:/usr/local/openresty/nginx/config:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - api-proxy
+    depends_on:
+      - api-proxy-redis
+
+  api-proxy-redis:
+    image: redis:7-alpine
+    container_name: api-proxy-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - api-proxy
+
+  # 可选：日志聚合服务
+  api-proxy-fluent:
+    image: fluent/fluentd:v1.16-debian-1
+    container_name: api-proxy-fluent
+    volumes:
+      - ./logs:/fluentd/log
+      - ./fluentd/fluent.conf:/fluentd/etc/fluent.conf:ro
+      - ./logs/processed:/fluentd/log/processed
+    environment:
+      - FLUENTD_CONF=fluent.conf
+    restart: unless-stopped
+    networks:
+      - api-proxy
+    profiles:
+      - logging
+
+volumes:
+  redis-data:

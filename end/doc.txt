@@ -1,0 +1,605 @@
+# OpenResty API 代理服务开发需求文档（修订版）
+
+## 1. 项目概述
+
+### 1.1 项目背景
+
+需要开发一个基于 OpenResty 的 API 代理服务，用于转发客户端请求到 Google Vertex AI API。该服务需要处理 OAuth2 认证、动态路由和请求头部修改等功能，以简化客户端与 Google AI 模型的交互过程。同时，需要确保客户端 IP 和位置信息不会被上游 API 追踪到，并支持流式和非流式请求处理。
+
+### 1.2 项目目标
+
+开发一个高性能、可靠的 API 代理服务，实现以下核心功能：
+- 验证客户端身份和权限
+- 根据请求参数动态选择 Google 服务账号凭证
+- 自动获取和刷新 OAuth2 Token
+- 动态路由请求到正确的 API 端点
+- 替换请求头部中的认证信息
+- 保护客户端隐私，防止上游 API 追踪客户端 IP
+- 同时支持流式和非流式请求处理
+
+## 2. 功能需求
+
+### 2.1 客户端认证与授权
+
+#### 2.1.1 客户端验证
+- 系统需要验证请求中的客户端 ID 是否在授权列表中
+- 授权客户端列表存储在 `/map/map-client.json` 文件中
+- 客户端 ID 可通过请求头部或自定义参数传递
+
+#### 2.1.2 客户端与凭证映射
+- 每个客户端 ID 对应一个特定的 Google 服务账号凭证
+- 映射关系存储在 `/map/map-client-json.json` 文件中
+
+### 2.2 OAuth2 认证管理
+
+#### 2.2.1 服务账号凭证管理
+- 系统需要管理多个 Google 服务账号凭证
+- 凭证以 JSON 文件形式存储在 `/json/` 目录中
+
+#### 2.2.2 Token 获取与刷新
+- 使用服务账号凭证创建 JWT 断言
+- 通过 JWT 断言从 Google OAuth2 服务获取访问令牌
+- 定期自动刷新令牌（在过期前 5 分钟）
+- 将获取的令牌存储在内存和文件系统中
+
+#### 2.2.3 Token 存储
+- 将获取的 OAuth2 Token 存储在内存中用于快速访问
+- 同时将 Token 持久化到 `/jwt/` 目录中对应的 JSON 文件
+
+### 2.3 请求路由与转发
+
+#### 2.3.1 模型与 API 主机映射
+- 根据模型名称确定对应的 API 主机地址
+- 映射关系存储在 `/map/map-json-model-region.json` 文件中
+
+#### 2.3.2 模型名称提取
+- 从请求 URL 路径中提取模型名称（如 `gemini-3-pro-preview`）
+- 支持多种 API 端点格式，如：
+  ```
+  /v1/projects/{project_id}/locations/global/publishers/google/models/{model_name}:generateContent
+  ```
+
+#### 2.3.3 请求转发
+- 将客户端请求转发到正确的 Google API 端点
+- 保留原始请求的路径、查询参数和请求体
+- 确保 SSL/TLS 安全连接
+- 保持请求 URL 格式不变，仅替换主机部分
+
+### 2.4 流式和非流式请求处理
+
+#### 2.4.1 流式请求支持
+- 支持 Server-Sent Events (SSE) 或 HTTP 分块传输编码
+- 保持与上游 API 的长连接
+- 实时转发流式响应数据到客户端
+- 处理连接中断和恢复
+- 支持大型生成式 AI 模型的流式输出
+
+#### 2.4.2 非流式请求支持
+- 处理标准的 HTTP 请求/响应模式
+- 等待上游 API 完成响应后再返回给客户端
+- 适当处理超时情况
+
+#### 2.4.3 请求类型检测
+- 自动检测请求是流式还是非流式
+- 基于请求头部或请求体中的参数进行判断
+- 对不同类型的请求应用相应的处理逻辑
+
+### 2.5 请求头部修改
+
+#### 2.5.1 Authorization 头部替换
+- 移除客户端请求中的原始 Authorization 头部
+- 添加包含 OAuth2 Token 的新 Authorization 头部：`Bearer {token}`
+
+#### 2.5.2 隐私保护
+- **不添加** X-Forwarded-For 等可能暴露客户端 IP 的头部
+- 移除任何可能包含客户端位置或标识信息的头部
+- 确保上游 API 只能看到代理服务器的 IP，无法追踪到原始客户端
+
+#### 2.5.3 其他头部处理
+- 保留必要的原始请求头部（如 Content-Type）
+- 根据需要添加或修改其他头部，但不包括可能泄露客户端信息的头部
+- 对于流式请求，确保相关头部正确设置（如 `Accept: text/event-stream`）
+
+### 2.6 错误处理与日志
+
+#### 2.6.1 错误处理
+- 客户端认证失败：返回 403 Forbidden
+- 配置错误（如找不到映射）：返回 400 Bad Request
+- Token 获取失败：返回 500 Internal Server Error
+- 请求转发失败：返回适当的错误状态码和信息
+- 流式请求中断：适当处理连接关闭和错误恢复
+
+#### 2.6.2 日志记录
+- 记录关键操作：Token 刷新、请求转发、错误情况
+- 记录足够的调试信息，但避免记录敏感数据
+- **可配置的日志级别**：支持通过配置开关控制日志详细程度
+- **可关闭的调试日志**：生产环境中可关闭详细调试日志
+- 可选择是否记录客户端 IP（仅用于内部调试，不转发给上游 API）
+- 对流式请求记录开始和结束事件，以及可能的中断
+
+## 3. 技术要求
+
+### 3.1 开发环境
+
+#### 3.1.1 容器化部署
+- 使用 Docker 和 Docker Compose 进行容器化部署
+- 提供完整的 Docker Compose 配置文件
+
+#### 3.1.2 目录结构
+```
+project/
+├── docker-compose.yml
+├── nginx/
+│   ├── conf/
+│   │   ├── nginx.conf
+│   │   └── conf.d/
+│   │       └── default.conf
+│   └── lua/
+│       ├── auth_manager.lua
+│       ├── stream_handler.lua
+│       └── utils.lua
+├── data/
+│   ├── json/         # 存放 Google 服务账号凭证
+│   ├── jwt/          # 存放获取的 OAuth2 Token
+│   └── map/          # 存放映射配置文件
+│       ├── map-json-model-region.json
+│       ├── map-client-json.json
+│       └── map-client.json
+├── config/
+│   └── app_config.json  # 应用配置，包括日志级别设置
+└── logs/
+    ├── access.log
+    └── error.log
+```
+
+### 3.2 技术栈
+
+#### 3.2.1 核心组件
+- OpenResty（基于 Nginx 和 LuaJIT）
+- Lua 脚本语言
+
+#### 3.2.2 Lua 库依赖
+- lua-resty-jwt：处理 JWT 断言创建和签名
+- lua-resty-http：发起 HTTP 请求获取 Token
+- lua-cjson：处理 JSON 数据
+- lua-resty-core：提供核心功能支持
+- lua-resty-string：字符串处理
+
+### 3.3 性能要求
+
+- 支持高并发请求处理
+- 最小化请求延迟，特别是 Token 获取和刷新过程
+- 优化内存使用，避免频繁的文件 I/O 操作
+- 流式请求处理时保持低延迟
+- 合理管理连接池，避免资源耗尽
+
+### 3.4 安全要求
+
+- 安全存储服务账号凭证
+- 避免在日志中记录敏感信息
+- 实现适当的请求验证和授权
+- 确保 HTTPS 安全通信
+- 保护客户端 IP 和位置信息不被上游 API 获取
+
+## 4. 模块化测试要求
+
+### 4.1 Lua 脚本独立测试
+
+#### 4.1.1 auth_manager.lua 测试
+- 测试服务账号凭证读取功能
+- 测试 JWT 断言创建功能
+- 测试 OAuth2 Token 获取和刷新功能
+- 测试客户端验证和映射查询功能
+- 测试模型名称提取功能
+
+#### 4.1.2 stream_handler.lua 测试
+- 测试流式请求识别功能
+- 测试流式数据转发功能
+- 测试连接管理功能
+
+#### 4.1.3 utils.lua 测试
+- 测试辅助函数功能
+- 测试错误处理功能
+- 测试日志记录功能
+
+### 4.2 集成测试
+
+#### 4.2.1 请求处理流程测试
+- 测试完整的请求处理流程
+- 测试流式和非流式请求处理
+- 测试错误处理和恢复
+
+#### 4.2.2 性能测试
+- 测试高并发下的系统性能
+- 测试流式请求的长连接处理能力
+- 测试内存使用情况
+
+### 4.3 测试输出要求
+
+#### 4.3.1 可配置的测试输出
+- 提供配置选项以控制测试输出的详细程度
+- 支持通过环境变量或配置文件启用/禁用测试输出
+- 在 `config/app_config.json` 中设置日志级别和测试输出选项
+
+#### 4.3.2 请求头部处理测试输出
+- 当测试输出启用时，记录原始请求中的 Authorization 头部（如果存在）
+- 记录从 URL 中提取的模型名称
+- 输出示例：
+  ```
+  [INFO] Original Authorization: Bearer client-token-xyz
+  [INFO] Extracted model name: gemini-3-pro-preview from URL path: /v1/projects/carbide-team-478005-f8/locations/global/publishers/google/models/gemini-3-pro-preview:generateContent
+  ```
+
+#### 4.3.3 OAuth2 Token 获取测试输出
+- 当测试输出启用时，记录 Token 获取过程的每个步骤
+- 记录 JWT 断言创建（不包含完整内容）
+- 记录 Token 请求的响应状态
+- 记录获取到的 Token（部分隐藏）
+- 输出示例：
+  ```
+  [INFO] Creating JWT assertion for service account: service-account@project-id.iam.gserviceaccount.com
+  [INFO] JWT assertion created successfully
+  [INFO] Requesting OAuth2 token from: https://oauth2.googleapis.com/token
+  [INFO] Token request successful with status: 200
+  [INFO] Received access_token: ya29.a0AfB_byC...truncated...
+  [INFO] Token expires in: 3599 seconds
+  [INFO] Token stored in memory and written to file: /jwt/client-key-aaaa.json
+  ```
+
+#### 4.3.4 上游 API 请求头部测试输出
+- 当测试输出启用时，记录发送到上游 API 的所有请求头部
+- 确认 Authorization 头部已正确替换
+- 确认没有包含客户端隐私信息的头部
+- 输出示例：
+  ```
+  [INFO] Sending request to: https://aiplatform.googleapis.com/v1/projects/carbide-team-478005-f8/locations/global/publishers/google/models/gemini-3-pro-preview:generateContent
+  [INFO] Request headers:
+  [INFO] - Host: aiplatform.googleapis.com
+  [INFO] - Content-Type: application/json
+  [INFO] - Authorization: Bearer ya29.a0AfB_byC...truncated...
+  [INFO] - Accept: application/json
+  [INFO] - Content-Length: 123
+  ```
+
+## 5. 配置文件规范
+
+### 5.1 map-json-model-region.json
+
+```json
+{
+  "client-key-aaaa.json": {
+    "gemini-embedding-001": "us-central1-aiplatform.googleapis.com",
+    "gemini-2.5-pro": "aiplatform.googleapis.com",
+    "gemini-3-pro-preview": "aiplatform.googleapis.com"
+  },
+  "client-key-bbbb.json": {
+    "text-bison": "europe-west4-aiplatform.googleapis.com",
+    "gemini-pro": "europe-west4-aiplatform.googleapis.com"
+  }
+}
+```
+
+### 5.2 map-client-json.json
+
+```json
+{
+  "client-abc": "client-key-aaaa.json",
+  "client-xyz": "client-key-bbbb.json"
+}
+```
+
+### 5.3 map-client.json
+
+```json
+{
+  "authorized_clients": ["client-abc", "client-xyz", "client-123"]
+}
+```
+
+### 5.4 app_config.json
+
+```json
+{
+  "log_level": "info",  // 可选值: debug, info, warn, error
+  "debug_mode": false,  // 是否启用调试模式
+  "test_output": {
+    "enabled": false,  // 是否启用测试输出
+    "request_headers": false,  // 是否记录请求头部
+    "oauth_process": false,  // 是否记录 OAuth 过程
+    "upstream_headers": false  // 是否记录上游请求头部
+  },
+  "token_refresh": {
+    "interval": 3000,  // Token 刷新间隔（秒）
+    "early_refresh": 300  // 提前刷新时间（秒）
+  },
+  "timeouts": {
+    "proxy_read": 300,  // 代理读取超时（秒）
+    "proxy_connect": 60,  // 代理连接超时（秒）
+    "keepalive": 65  // 保持连接超时（秒）
+  }
+}
+```
+
+### 5.5 Google 服务账号凭证格式
+
+```json
+{
+  "type": "service_account",
+  "project_id": "project-id",
+  "private_key_id": "private-key-id",
+  "private_key": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n",
+  "client_email": "service-account@project-id.iam.gserviceaccount.com",
+  "client_id": "client-id",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/service-account%40project-id.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}
+```
+
+## 6. API 接口规范
+
+### 6.1 直接 URL 转发接口
+
+#### 请求格式
+```
+GET /v1/projects/{project_id}/locations/{location}/publishers/google/models/{model_name}:{operation} HTTP/1.1
+Host: api.burncloud.com:8080
+X-Client-ID: {client_id}
+Content-Type: application/json
+
+{request_body}
+```
+
+#### 示例（非流式请求）
+```
+POST /v1/projects/carbide-team-478005-f8/locations/global/publishers/google/models/gemini-3-pro-preview:generateContent HTTP/1.1
+Host: api.burncloud.com:8080
+X-Client-ID: client-abc
+Content-Type: application/json
+
+{
+  "contents": [{"parts": [{"text": "Hello, world!"}]}]
+}
+```
+
+#### 示例（流式请求）
+```
+POST /v1/projects/carbide-team-478005-f8/locations/global/publishers/google/models/gemini-3-pro-preview:streamGenerateContent HTTP/1.1
+Host: api.burncloud.com:8080
+X-Client-ID: client-abc
+Content-Type: application/json
+Accept: text/event-stream
+
+{
+  "contents": [{"parts": [{"text": "Hello, world!"}]}],
+  "stream": true
+}
+```
+
+### 6.2 健康检查接口
+
+#### 请求格式
+```
+GET /health HTTP/1.1
+Host: api.burncloud.com:8080
+```
+
+#### 响应
+```
+HTTP/1.1 200 OK
+Content-Type: application/json
+
+{"status":"ok"}
+```
+
+## 7. 错误处理规范
+
+### 7.1 错误响应格式
+
+所有错误响应应使用 JSON 格式：
+
+```json
+{
+  "error": "错误描述信息"
+}
+```
+
+### 7.2 错误状态码
+
+- 400 Bad Request：请求格式错误、无法提取模型名称、找不到模型映射
+- 403 Forbidden：客户端未授权
+- 500 Internal Server Error：Token 获取失败、内部处理错误
+- 502 Bad Gateway：上游 API 服务器错误
+- 504 Gateway Timeout：上游 API 服务器超时
+
+## 8. 流式请求处理详细规范
+
+### 8.1 流式请求识别
+
+系统需要能够识别流式请求，可通过以下方式：
+- 请求 URL 中包含 "stream" 相关字段（如 `:streamGenerateContent`）
+- 请求头部包含 `Accept: text/event-stream`
+- 请求体中包含 `"stream": true` 参数
+
+### 8.2 流式响应处理
+
+- 保持与上游 API 的连接开放，直到流结束
+- 实时转发每个数据块，不缓冲完整响应
+- 保留原始的分块格式和事件类型
+- 确保正确处理 SSE 格式（每个事件以 `data: ` 开头，以 `\n\n` 结尾）
+- 处理特殊事件（如 `[DONE]` 标记）
+
+### 8.3 流式连接管理
+
+- 设置适当的超时参数，避免连接过早关闭
+- 处理客户端断开连接的情况，同时关闭与上游 API 的连接
+- 实现重试机制，处理临时连接问题
+- 监控流式连接的健康状态
+
+### 8.4 流式请求配置
+
+在 Nginx 配置中需要特别注意以下参数：
+- `proxy_buffering off`：禁用代理缓冲，实时转发数据
+- `proxy_read_timeout`：设置较长的读取超时时间
+- `keepalive_timeout`：保持连接活跃
+- `chunked_transfer_encoding on`：启用分块传输编码
+
+## 9. 部署与维护
+
+### 9.1 部署步骤
+
+1. 准备目录结构和配置文件
+2. 添加 Google 服务账号凭证到 `/json/` 目录
+3. 配置映射文件和应用配置
+4. 启动 Docker Compose 服务
+
+### 9.2 监控与日志
+
+- 监控 Token 刷新状态和频率
+- 监控请求成功率和响应时间
+- 监控流式连接的持续时间和状态
+- 定期检查日志文件，确保没有异常错误
+
+### 9.3 配置更新
+
+- 添加新的客户端：更新 `map-client.json` 和 `map-client-json.json`
+- 添加新的服务账号：将凭证添加到 `/json/` 目录，并更新相应的映射文件
+- 添加新的模型支持：更新 `map-json-model-region.json` 文件
+- 调整日志级别和测试输出：更新 `app_config.json` 文件
+
+## 10. 隐私保护实现细节
+
+### 10.1 请求头部处理
+
+以下头部应从转发请求中移除，以保护客户端隐私：
+- X-Forwarded-For
+- X-Real-IP
+- X-Client-IP
+- X-Forwarded-Host
+- X-Forwarded-Proto
+- Via
+- Referer
+- Origin
+- User-Agent（可选）
+
+### 10.2 IP 地址保护
+
+- 确保代理服务器不记录或转发客户端 IP 地址
+- 使用代理服务器自身的 IP 地址与上游 API 通信
+- 不添加任何可能泄露客户端网络信息的头部
+
+### 10.3 请求内容审查
+
+- 检查请求体中是否包含可能泄露客户端信息的内容（可选）
+- 提供选项以过滤或修改这些内容
+
+## 11. 调试与日志输出规范
+
+### 11.1 日志级别配置
+
+在 `app_config.json` 中配置日志级别：
+- `debug`：最详细的日志，包括所有调试信息
+- `info`：一般信息日志，包括正常操作流程
+- `warn`：警告信息，可能的问题但不影响主要功能
+- `error`：错误信息，影响功能的问题
+
+### 11.2 测试输出配置
+
+在 `app_config.json` 中配置测试输出选项：
+- `enabled`：总开关，控制是否启用测试输出
+- `request_headers`：是否记录请求头部处理信息
+- `oauth_process`：是否记录 OAuth 认证过程信息
+- `upstream_headers`：是否记录上游请求头部信息
+
+### 11.3 日志格式
+
+所有日志应包含以下信息：
+- 时间戳
+- 日志级别（DEBUG、INFO、WARN、ERROR）
+- 模块名称
+- 请求 ID（用于跟踪单个请求的完整流程）
+- 详细信息
+
+示例：
+```
+[2025-11-29 14:30:45] [INFO] [auth_manager] [req:a1b2c3] Creating JWT assertion for client-key-aaaa.json
+[2025-11-29 14:30:45] [INFO] [auth_manager] [req:a1b2c3] Token request successful with status: 200
+[2025-11-29 14:30:45] [INFO] [request_handler] [req:a1b2c3] Forwarding request to aiplatform.googleapis.com
+```
+
+## 12. 未来扩展
+
+### 12.1 短期扩展
+
+- 实现请求速率限制
+- 添加请求和响应的详细日志记录（不包含隐私信息）
+- 实现配置热更新，无需重启服务
+- 优化流式请求处理性能
+
+### 12.2 长期扩展
+
+- 使用 Redis 替代文件系统存储 Token 和配置
+- 实现多实例部署和负载均衡
+- 添加管理 API 用于动态配置更新
+- 实现更复杂的客户端认证机制
+- 添加流量分析和监控功能
+
+## 13. 验收标准
+
+### 13.1 功能验收
+
+- 客户端认证正常工作
+- OAuth2 Token 自动获取和刷新
+- 请求正确转发到目标 API
+- 错误处理符合规范
+- URL 格式保持一致，仅替换主机部分
+- 流式请求和非流式请求都能正确处理
+
+### 13.2 性能验收
+
+- 在高并发下保持稳定
+- Token 刷新不影响正常请求处理
+- 内存使用在合理范围内
+- 流式请求的延迟保持在可接受范围
+
+### 13.3 安全验收
+
+- 凭证和 Token 安全存储
+- 所有通信使用 HTTPS 加密
+- 日志中不包含敏感信息
+- 客户端 IP 和位置信息不会被上游 API 获取
+
+### 13.4 测试输出验收
+
+- 确认测试输出可以通过配置开关控制
+- 当测试输出启用时，确认能够从客户端请求中提取 Authorization 头部
+- 当测试输出启用时，确认能够从 URL 中提取模型名称
+- 当测试输出启用时，确认 OAuth2 Token 获取过程正常，并有详细日志
+- 当测试输出启用时，确认发送到上游 API 的请求头部正确，不包含隐私信息
+
+## 14. 项目时间线
+
+1. 环境搭建与配置：2 天
+2. Lua 脚本模块开发与独立测试：4 天
+3. 核心功能集成：3 天
+4. 流式请求处理实现：3 天
+5. 测试与调优：4 天
+6. 文档完善与部署：2 天
+
+总计：18 个工作日
+
+## 15. 特别说明
+
+1. **URL 格式一致性**：客户端请求的 URL 格式与上游 API 的 URL 格式保持一致，仅主机名和协议可能不同。例如：
+   - 上游 API：`https://aiplatform.googleapis.com/v1/projects/carbide-team-478005-f8/locations/global/publishers/google/models/gemini-3-pro-preview:generateContent`
+   - 代理 API：`http://api.burncloud.com:8080/v1/projects/carbide-team-478005-f8/locations/global/publishers/google/models/gemini-3-pro-preview:generateContent`
+
+2. **客户端隐私保护**：代理服务器不会向上游 API 传递任何可能泄露客户端 IP 或位置的信息，确保上游 API 只能追踪到代理服务器，而无法追踪到原始客户端。
+
+3. **流式和非流式支持**：系统需同时支持流式和非流式请求，能够自动识别请求类型并应用相应的处理逻辑，确保流式响应实时传递给客户端。
+
+4. **模块化测试**：开发过程中需要先独立测试 Lua 脚本功能，再进行与 Nginx 的集成测试，确保各个模块正常工作。
+
+5. **可配置的日志和测试输出**：系统提供灵活的配置选项，允许在开发环境中启用详细的测试输出，而在生产环境中关闭这些输出，以优化性能和减少日志量。

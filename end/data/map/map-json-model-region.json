@@ -1,0 +1,9 @@
+{
+  "hulaoban-202504.json": {
+    "gemini-embedding-001": "us-central1-aiplatform.googleapis.com",
+    "gemini-2.5-pro": "aiplatform.googleapis.com",
+    "gemini-3-pro-preview": "aiplatform.googleapis.com",
+    "gemini-pro": "aiplatform.googleapis.com",
+    "text-bison": "us-central1-aiplatform.googleapis.com"
+  }
+}

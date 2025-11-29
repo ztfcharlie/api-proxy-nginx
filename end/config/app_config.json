@@ -1,0 +1,19 @@
+{
+  "log_level": "info",
+  "debug_mode": false,
+  "test_output": {
+    "enabled": true,
+    "request_headers": true,
+    "oauth_process": true,
+    "upstream_headers": true
+  },
+  "token_refresh": {
+    "interval": 3000,
+    "early_refresh": 300
+  },
+  "timeouts": {
+    "proxy_read": 300,
+    "proxy_connect": 60,
+    "keepalive": 65
+  }
+}

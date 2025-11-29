@@ -71,3 +71,6 @@ secrets.lua
 # Windows
 *.lnk
 *.url
+
+end/data/json
+end/data/jwt
