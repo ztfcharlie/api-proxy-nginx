@@ -5,4 +5,4 @@ docker compose down
 cd ../
 git pull
 cd end
-docker compose up -d -build
+docker compose up -d --build
