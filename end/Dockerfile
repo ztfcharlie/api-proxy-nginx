@@ -1,4 +1,4 @@
-FROM openresty/openresty:1.21.4.1-alpine
+FROM openresty/openresty:1.19.9.1-alpine
 
 # 安装必要的包
 RUN apk add --no-cache \
@@ -25,7 +25,19 @@ RUN cd /tmp && \
     cp -r lua-resty-jwt/lib/resty/* /usr/local/openresty/site/lualib/resty/ && \
     rm -rf lua-resty-jwt
 
-# 不安装 resty.core - 使用 lua_load_resty_core off 禁用
+# 安装兼容的 resty.core 版本
+RUN cd /tmp && \
+    wget https://github.com/openresty/lua-resty-core/archive/refs/tags/v0.1.17.tar.gz && \
+    tar -xzf v0.1.17.tar.gz && \
+    cp -r lua-resty-core-0.1.17/lib/* /usr/local/openresty/site/lualib/ && \
+    rm -rf v0.1.17.tar.gz lua-resty-core-0.1.17
+
+# 安装 lua-resty-lrucache（resty.core 的依赖）
+RUN cd /tmp && \
+    wget https://github.com/openresty/lua-resty-lrucache/archive/refs/tags/v0.09.tar.gz && \
+    tar -xzf v0.09.tar.gz && \
+    cp -r lua-resty-lrucache-0.09/lib/* /usr/local/openresty/site/lualib/ && \
+    rm -rf v0.09.tar.gz lua-resty-lrucache-0.09
 
 # 验证模块
 RUN /usr/local/openresty/luajit/bin/luajit -e "require('cjson'); print('cjson: OK')" || echo "cjson: FAILED"
