@@ -1,4 +1,4 @@
-FROM openresty/openresty:1.21.4.1-alpine
+FROM openresty/openresty:1.21.4.1-alpine-fat
 
 # 安装必要的包
 RUN apk add --no-cache \
