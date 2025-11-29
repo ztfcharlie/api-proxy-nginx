@@ -11,7 +11,7 @@ services:
       dockerfile: Dockerfile
     container_name: api-proxy-nginx
     ports:
-      - "8080:8080"
+      - "8888:8080"
       - "8443:8443"
     environment:
       - TZ=Asia/Shanghai
