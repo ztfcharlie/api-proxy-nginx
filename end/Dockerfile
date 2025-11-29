@@ -25,11 +25,7 @@ RUN cd /tmp && \
     cp -r lua-resty-jwt/lib/resty/* /usr/local/openresty/site/lualib/resty/ && \
     rm -rf lua-resty-jwt
 
-# 安装 resty.core（兼容版本）
-RUN cd /tmp && \
-    git clone https://github.com/openresty/lua-resty-core.git && \
-    cp -r lua-resty-core/lib/* /usr/local/openresty/site/lualib/ && \
-    rm -rf lua-resty-core
+# 不安装 resty.core - 使用 lua_load_resty_core off 禁用
 
 # 验证模块
 RUN /usr/local/openresty/luajit/bin/luajit -e "require('cjson'); print('cjson: OK')" || echo "cjson: FAILED"
