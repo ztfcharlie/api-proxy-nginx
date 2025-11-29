@@ -16,14 +16,14 @@ services:
     environment:
       - TZ=Asia/Shanghai
     volumes:
-      - ./nginx/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf:ro
-      - ./nginx/conf.d:/usr/local/openresty/nginx/conf/conf.d:ro
-      - ./lua:/usr/local/openresty/lualib:ro
-      - ./logs:/usr/local/openresty/nginx/logs
-      - ./html:/usr/local/openresty/nginx/html:ro
-      - ./ssl:/usr/local/openresty/nginx/conf/ssl:ro
-      - ./data:/usr/local/openresty/nginx/data:ro
-      - ./config:/usr/local/openresty/nginx/config:ro
+      - ./nginx/nginx-lua.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./lua:/etc/nginx/lua:ro
+      - ./logs:/var/log/nginx
+      - ./html:/etc/nginx/html:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - ./data:/etc/nginx/data:ro
+      - ./config:/etc/nginx/config:ro
     restart: unless-stopped
     networks:
       - api-proxy
