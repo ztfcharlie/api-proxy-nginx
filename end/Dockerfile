@@ -32,6 +32,7 @@ RUN apk add --no-cache \
     pcre \
     zlib \
     curl \
+    wget \
     libgcc \
     libstdc++
 
