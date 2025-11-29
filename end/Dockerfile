@@ -22,4 +22,4 @@ WORKDIR /usr/local/openresty/nginx
 EXPOSE 8080 8443
 
 # 启动命令
-CMD ["/usr/local/openresty/bin/openresty", "-g", "daemon off;"]
+CMD ["nginx", "-g", "daemon off;"]
