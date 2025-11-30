@@ -181,17 +181,40 @@ local function select_available_json_file(client_id)
         if cached_token_str then
             local ok, cached_token = pcall(cjson.decode, cached_token_str)
             if ok and cached_token then
-                -- 简单检查 token 是否存在，避免复杂的配置调用
-                if cached_token.access_token and cached_token.expires_in then
-                    ngx.log(ngx.INFO, "[AUTH] Selected JSON file with cached token: ", json_file)
+                -- 安全地获取配置并检查 token 有效性
+                local app_config = config.get_app_config()
+                local early_refresh = app_config and app_config.token_refresh and app_config.token_refresh.early_refresh or 300
+
+                if cached_token and not utils.is_token_expired(cached_token, early_refresh) then
+                    if config.should_test_output("oauth_process") then
+                        ngx.log(ngx.INFO, "[TEST] Selected JSON file with valid token: ", json_file)
+                    end
                     return json_file
                 end
             end
         end
     end
 
-    -- 如果没有有效的内存缓存，使用第一个文件
-    ngx.log(ngx.INFO, "[AUTH] No cached tokens found, using first JSON file: ", json_files[1])
+    -- 如果没有有效 token，检查文件缓存
+    for _, json_file in ipairs(json_files) do
+        local ok, file_token = pcall(config.read_cached_token, json_file)
+        if ok and file_token then
+            local app_config = config.get_app_config()
+            local early_refresh = app_config and app_config.token_refresh and app_config.token_refresh.early_refresh or 300
+
+            if not utils.is_token_expired(file_token, early_refresh) then
+                if config.should_test_output("oauth_process") then
+                    ngx.log(ngx.INFO, "[TEST] Selected JSON file with valid file cache: ", json_file)
+                end
+                return json_file
+            end
+        end
+    end
+
+    -- 都没有有效 token，使用第一个文件
+    if config.should_test_output("oauth_process") then
+        ngx.log(ngx.INFO, "[TEST] No valid tokens found, using first JSON file: ", json_files[1])
+    end
     return json_files[1]
 end
 
