@@ -1,0 +1,9 @@
+{
+    "error": {
+        "code": 400,
+        "message": "Bad Request",
+        "details": "The request could not be understood by the server due to malformed syntax."
+    },
+    "timestamp": "2025-11-30T00:00:00Z",
+    "request_id": "error-400"
+}

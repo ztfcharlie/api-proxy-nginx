@@ -179,31 +179,19 @@ local function select_available_json_file(client_id)
         local cached_token_str = token_cache:get(cache_key)
 
         if cached_token_str then
-            local cached_token = cjson.decode(cached_token_str)
-            if cached_token and not utils.is_token_expired(cached_token, config.get_app_config().token_refresh.early_refresh) then
-                if config.should_test_output("oauth_process") then
-                    ngx.log(ngx.INFO, "[TEST] Selected JSON file with valid token: ", json_file)
+            local ok, cached_token = pcall(cjson.decode, cached_token_str)
+            if ok and cached_token then
+                -- 简单检查 token 是否存在，避免复杂的配置调用
+                if cached_token.access_token and cached_token.expires_in then
+                    ngx.log(ngx.INFO, "[AUTH] Selected JSON file with cached token: ", json_file)
+                    return json_file
                 end
-                return json_file
             end
         end
     end
 
-    -- 如果没有有效 token，检查文件缓存
-    for _, json_file in ipairs(json_files) do
-        local file_token = config.read_cached_token(json_file)
-        if file_token and not utils.is_token_expired(file_token, config.get_app_config().token_refresh.early_refresh) then
-            if config.should_test_output("oauth_process") then
-                ngx.log(ngx.INFO, "[TEST] Selected JSON file with valid file cache: ", json_file)
-            end
-            return json_file
-        end
-    end
-
-    -- 都没有有效 token，使用第一个文件
-    if config.should_test_output("oauth_process") then
-        ngx.log(ngx.INFO, "[TEST] No valid tokens found, using first JSON file: ", json_files[1])
-    end
+    -- 如果没有有效的内存缓存，使用第一个文件
+    ngx.log(ngx.INFO, "[AUTH] No cached tokens found, using first JSON file: ", json_files[1])
     return json_files[1]
 end
 
