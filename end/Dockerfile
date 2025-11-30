@@ -144,15 +144,15 @@ RUN cd /tmp && \
     git clone https://github.com/openresty/lua-resty-lrucache.git && \
     cp -r lua-resty-lrucache/lib/resty/* /usr/local/share/lua/5.1/resty/
 
-# 安装 lua-resty-string (lua-resty-http 的依赖)
+# 安装 lua-resty-openssl 及其依赖
 RUN cd /tmp && \
+    # 安装 lua-resty-string (提供 ngx.base64)
     git clone https://github.com/openresty/lua-resty-string.git && \
-    cp -r lua-resty-string/lib/resty/* /usr/local/share/lua/5.1/resty/
-
-# 安装 lua-resty-openssl (完整版本)
-RUN cd /tmp && \
+    cp -r lua-resty-string/lib/resty/* /usr/local/nginx/lualib/resty/ && \
+    # 安装 lua-resty-openssl
     git clone https://github.com/fffonion/lua-resty-openssl.git && \
-    cp -r lua-resty-openssl/lib/resty/* /usr/local/share/lua/5.1/resty/
+    cp -r lua-resty-openssl/lib/resty/* /usr/local/nginx/lualib/resty/ && \
+    rm -rf lua-resty-string lua-resty-openssl
 
 # 清理编译依赖和临时文件
 RUN apk del .build-deps && \
