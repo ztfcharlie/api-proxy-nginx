@@ -147,6 +147,11 @@ RUN cd /tmp && \
     git clone https://github.com/openresty/lua-resty-string.git && \
     cp -r lua-resty-string/lib/resty/* /usr/local/share/lua/5.1/resty/
 
+# 安装 lua-resty-openssl (完整版本)
+RUN cd /tmp && \
+    git clone https://github.com/fffonion/lua-resty-openssl.git && \
+    cp -r lua-resty-openssl/lib/resty/* /usr/local/share/lua/5.1/resty/
+
 # 清理编译依赖和临时文件
 RUN apk del .build-deps && \
     rm -rf /tmp/* /var/cache/apk/*
