@@ -1,5 +1,4 @@
 local cjson = require "cjson"
-local jwt = require "resty.jwt"
 local http = require "resty.http"
 local config = require "config"
 local utils = require "utils"
