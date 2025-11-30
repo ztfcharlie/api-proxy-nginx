@@ -3,7 +3,7 @@ FROM alpine:3.18
 # 设置环境变量
 ENV NGINX_VERSION=1.24.0
 ENV LUA_VERSION=5.1.5
-ENV LUAJIT_VERSION=2.1-20240314
+ENV LUAJIT_VERSION=2.1-20230410
 ENV NGX_DEVEL_KIT_VERSION=0.3.2
 ENV LUA_NGINX_MODULE_VERSION=0.10.29
 
@@ -102,7 +102,7 @@ RUN cd /tmp/nginx-${NGINX_VERSION} && \
         --with-stream_ssl_preread_module \
         --add-module=/tmp/ngx_devel_kit-${NGX_DEVEL_KIT_VERSION} \
         --add-module=/tmp/lua-nginx-module-${LUA_NGINX_MODULE_VERSION} && \
-    make -j$(nproc) CFLAGS="-DNGX_LUA_USE_ASSERT -DNGX_LUA_ABORT_AT_PANIC" && \
+    make -j$(nproc) && \
     make install
 
 # 创建 nginx 用户和必要目录
