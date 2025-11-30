@@ -151,7 +151,7 @@ RUN cd /tmp && \
 RUN apk del .build-deps && \
     rm -rf /tmp/* /var/cache/apk/*
 
-# 创建项目目录
+# 创建项目目录和 OpenSSL 兼容层目录
 RUN mkdir -p /etc/nginx/lua \
              /etc/nginx/data/map \
              /etc/nginx/data/json \
@@ -159,7 +159,8 @@ RUN mkdir -p /etc/nginx/lua \
              /etc/nginx/config \
              /etc/nginx/html \
              /etc/nginx/ssl \
-             /var/log/nginx
+             /var/log/nginx \
+             /usr/local/share/lua/5.1/resty/openssl/x509
 
 # 设置工作目录
 WORKDIR /etc/nginx
