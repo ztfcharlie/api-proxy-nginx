@@ -150,6 +150,26 @@ RUN cd /tmp && \
     git clone https://github.com/fffonion/lua-resty-openssl.git && \
     cp -r lua-resty-openssl/lib/resty/* /usr/local/share/lua/5.1/resty/
 
+# 安装 lua-resty-string (JWT 依赖)
+RUN cd /tmp && \
+    git clone https://github.com/openresty/lua-resty-string.git && \
+    cp -r lua-resty-string/lib/resty/* /usr/local/share/lua/5.1/resty/
+
+# 安装 lua-resty-hmac (JWT 依赖)
+RUN cd /tmp && \
+    git clone https://github.com/jkeys089/lua-resty-hmac.git && \
+    cp -r lua-resty-hmac/lib/resty/* /usr/local/share/lua/5.1/resty/
+
+# 安装 lua-resty-aes (JWT 的 AES 依赖)
+RUN cd /tmp && \
+    git clone https://github.com/bungle/lua-resty-aes.git && \
+    cp -r lua-resty-aes/lib/resty/* /usr/local/share/lua/5.1/resty/
+
+# 安装 lua-resty-random (AES 依赖)
+RUN cd /tmp && \
+    git clone https://github.com/bungle/lua-resty-random.git && \
+    cp -r lua-resty-random/lib/resty/* /usr/local/share/lua/5.1/resty/
+
 # 清理编译依赖和临时文件
 RUN apk del .build-deps && \
     rm -rf /tmp/* /var/cache/apk/*
