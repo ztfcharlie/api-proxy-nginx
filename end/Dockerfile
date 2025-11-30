@@ -147,7 +147,10 @@ RUN cd /tmp && \
     git clone https://github.com/fffonion/lua-resty-openssl.git && \
     cp -r lua-resty-openssl/lib/resty/* /usr/local/share/lua/5.1/resty/
 
-# 注意：我们使用系统 OpenSSL 命令进行 JWT 签名，不需要额外的加密库
+# 安装 lua-resty-string (lua-resty-http 的依赖)
+RUN cd /tmp && \
+    git clone https://github.com/openresty/lua-resty-string.git && \
+    cp -r lua-resty-string/lib/resty/* /usr/local/share/lua/5.1/resty/
 
 # 清理编译依赖和临时文件
 RUN apk del .build-deps && \
