@@ -1,108 +1,76 @@
-# 构建参数（与 docker-compose.yml 中的 args 对应）
-ARG OPENRESTY_VERSION=alpine-fat
-FROM openresty/openresty:${OPENRESTY_VERSION}
+# 使用 OpenResty Alpine Fat 镜像，包含更多预装模块
+FROM openresty/openresty:alpine-fat
 
-# 元数据标签（更规范）
-LABEL maintainer="API Proxy Team"
-LABEL description="OpenResty-based API Proxy for Google Vertex AI"
-LABEL version="1.0.0"
+# 设置维护者信息
+LABEL maintainer="API Proxy Service"
+LABEL description="OpenResty-based API proxy service for Google Vertex AI"
 
-# 环境变量（可通过 docker-compose 覆盖）
-ENV TZ=Asia/Shanghai \
-    LANG=C.UTF-8 \
-    NGINX_HOME=/etc/nginx \
-    OPENRESTY_HOME=/usr/local/openresty \
-    LUA_PATH="$LUA_PATH;/etc/nginx/lua/?.lua;/etc/nginx/lua/?/init.lua" \
-    LUA_CPATH="$LUA_CPATH;/etc/nginx/lua/?.so"
-
-# 安装系统依赖（精简必要工具，减少镜像体积）
+# 安装必要的系统包
 RUN apk add --no-cache \
-    ca-certificates \
     openssl \
+    ca-certificates \
     curl \
     bash \
     tzdata \
-    jq \
-    && : "设置时区" \
-    && cp /usr/share/zoneinfo/${TZ} /etc/localtime \
-    && echo "${TZ}" > /etc/timezone \
-    && : "清理 apk 缓存（进一步减小体积）" \
-    && rm -rf /var/cache/apk/*
+    && update-ca-certificates
 
-# 安装 Lua 依赖（优化安装命令，增加版本锁定）
-RUN : "安装 lua-resty-http（指定稳定版本）" \
-    && ${OPENRESTY_HOME}/luajit/bin/luarocks install lua-resty-http 0.17.1 \
-    && : "安装 lua-resty-jwt（适配 JWT 验证场景）" \
-    && ${OPENRESTY_HOME}/luajit/bin/luarocks install lua-resty-jwt 0.2.2 \
-    && : "安装 lua-resty-redis（Redis 客户端，适配缓存场景）" \
-    && ${OPENRESTY_HOME}/luajit/bin/luarocks install lua-resty-redis 0.27 \
-    && : "清理 luarocks 缓存" \
-    && rm -rf ${OPENRESTY_HOME}/luajit/lib/luarocks/cache/*
+# 设置时区
+ENV TZ=Asia/Shanghai
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
-# 创建目录结构（与 docker-compose 挂载目录对齐，设置合理权限）
+# 创建必要的目录
 RUN mkdir -p \
-    ${NGINX_HOME}/lua \
-    ${NGINX_HOME}/conf.d \
-    ${NGINX_HOME}/data/map \
-    ${NGINX_HOME}/data/json \
-    ${NGINX_HOME}/data/jwt \
-    ${NGINX_HOME}/config \
-    ${NGINX_HOME}/html \
-    ${NGINX_HOME}/ssl \
+    /etc/nginx/conf.d \
+    /etc/nginx/lua \
+    /etc/nginx/config \
+    /etc/nginx/data/json \
+    /etc/nginx/data/jwt \
+    /etc/nginx/data/map \
     /var/log/nginx \
-    /var/cache/nginx/client_temp \
-    /var/cache/nginx/proxy_temp \
-    && : "设置目录权限（遵循最小权限原则）" \
-    && chown -R nobody:nobody \
-        ${NGINX_HOME}/data \
-        /var/log/nginx \
-        /var/cache/nginx \
-    && chmod -R 700 ${NGINX_HOME}/data/jwt \  # JWT 目录更严格（仅所有者可读写）
-    && chmod -R 755 \
-        ${NGINX_HOME}/data/map \
-        ${NGINX_HOME}/data/json \
-        /var/log/nginx \
-        /var/cache/nginx \
-    && chmod -R 744 \
-        ${NGINX_HOME}/lua \
-        ${NGINX_HOME}/conf.d \
-        ${NGINX_HOME}/config \
-        ${NGINX_HOME}/html \
-        ${NGINX_HOME}/ssl
+    /var/cache/nginx \
+    /tmp/nginx
 
-# 健康检查脚本（优化逻辑，增加容错性）
-RUN echo '#!/bin/bash' > /usr/local/bin/healthcheck.sh \
-    && echo 'set -euo pipefail' >> /usr/local/bin/healthcheck.sh \
-    && echo '#' >> /usr/local/bin/healthcheck.sh \
-    && echo '# 检查 Nginx 进程是否存活' >> /usr/local/bin/healthcheck.sh \
-    && echo 'if ! pgrep -x "openresty" > /dev/null; then' >> /usr/local/bin/healthcheck.sh \
-    && echo '  echo "OpenResty process not running"' >> /usr/local/bin/healthcheck.sh \
-    && echo '  exit 1' >> /usr/local/bin/healthcheck.sh \
-    && echo 'fi' >> /usr/local/bin/healthcheck.sh \
-    && echo '#' >> /usr/local/bin/healthcheck.sh \
-    && echo '# 检查健康接口是否可访问' >> /usr/local/bin/healthcheck.sh \
-    && echo 'if ! curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health | grep -q "200"; then' >> /usr/local/bin/healthcheck.sh \
-    && echo '  echo "Health check endpoint failed"' >> /usr/local/bin/healthcheck.sh \
-    && echo '  exit 1' >> /usr/local/bin/healthcheck.sh \
-    && echo 'fi' >> /usr/local/bin/healthcheck.sh \
-    && echo 'echo "Health check passed"' >> /usr/local/bin/healthcheck.sh \
-    && chmod +x /usr/local/bin/healthcheck.sh
+# 设置目录权限
+RUN chown -R nobody:nobody \
+    /etc/nginx/data \
+    /var/log/nginx \
+    /var/cache/nginx \
+    /tmp/nginx
 
-# 优化 Nginx 配置（禁用默认配置，避免冲突）
-RUN rm -f ${NGINX_HOME}/conf.d/default.conf \
-    && : "设置 OpenResty 启动参数（优化性能）" \
-    && echo "worker_processes \${NGINX_WORKER_PROCESSES:-auto};" > ${NGINX_HOME}/nginx.conf.d/worker_processes.conf \
-    && echo "user \${NGINX_USER:-nobody};" > ${NGINX_HOME}/nginx.conf.d/user.conf
+# 复制 nginx 配置文件
+COPY nginx/nginx.conf /etc/nginx/nginx.conf
+COPY nginx/conf.d/ /etc/nginx/conf.d/
 
-# 工作目录
-WORKDIR ${NGINX_HOME}
+# 复制 Lua 模块
+COPY lua/ /etc/nginx/lua/
 
-# 暴露端口（与 docker-compose 端口映射对齐）
+# 复制配置文件
+COPY config/ /etc/nginx/config/
+
+# 复制数据文件（如果存在）
+COPY data/ /etc/nginx/data/
+
+# 复制启动脚本
+COPY start.sh /usr/local/bin/start.sh
+RUN chmod +x /usr/local/bin/start.sh
+
+# 复制测试脚本
+COPY test-api.sh /usr/local/bin/test-api.sh
+RUN chmod +x /usr/local/bin/test-api.sh
+
+# 创建 nginx 用户（如果不存在）
+RUN addgroup -g 101 -S nginx 2>/dev/null || true
+RUN adduser -S -D -H -u 101 -h /var/cache/nginx -s /sbin/nologin -G nginx -g nginx nginx 2>/dev/null || true
+
+# 设置工作目录
+WORKDIR /etc/nginx
+
+# 暴露端口
 EXPOSE 8080 8443
 
-# 健康检查（与 docker-compose 健康检查逻辑一致，避免重复配置）
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD /usr/local/bin/healthcheck.sh
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
 
-# 启动命令（优化参数，增加日志输出控制）
-CMD ["/usr/local/openresty/bin/openresty", "-g", "daemon off; error_log /var/log/nginx/error.log warn;"]
+# 设置启动命令
+CMD ["/usr/local/bin/start.sh"]
