@@ -7,7 +7,7 @@ echo "Starting API Proxy Service..."
 
 # 检查必要的目录
 echo "Checking directories..."
-for dir in "/etc/nginx/data/json" "/etc/nginx/data/jwt" "/etc/nginx/data/map" "/var/log/nginx"; do
+for dir in "/usr/local/openresty/nginx/data/json" "/usr/local/openresty/nginx/data/jwt" "/usr/local/openresty/nginx/data/map" "/var/log/nginx"; do
     if [ ! -d "$dir" ]; then
         echo "Creating directory: $dir"
         mkdir -p "$dir"
@@ -29,8 +29,8 @@ fi
 
 # 检查必要的配置文件是否存在
 CONFIG_FILES=(
-    "/etc/nginx/config/app_config.json"
-    "/etc/nginx/data/map/map-config.json"
+    "/usr/local/openresty/nginx/config/app_config.json"
+    "/usr/local/openresty/nginx/data/map/map-config.json"
 )
 
 for config_file in "${CONFIG_FILES[@]}"; do
@@ -39,7 +39,7 @@ for config_file in "${CONFIG_FILES[@]}"; do
         echo "Creating default configuration..."
 
         case "$config_file" in
-            "/etc/nginx/config/app_config.json")
+            "/usr/local/openresty/nginx/config/app_config.json")
                 cat > "$config_file" << 'EOF'
 {
     "log_level": "info",
@@ -62,7 +62,7 @@ for config_file in "${CONFIG_FILES[@]}"; do
 }
 EOF
                 ;;
-            "/etc/nginx/data/map/map-config.json")
+            "/usr/local/openresty/nginx/data/map/map-config.json")
                 cat > "$config_file" << 'EOF'
 {
     "clients": [],
@@ -107,9 +107,9 @@ chown nobody:nobody /var/run
 
 # 启动 OpenResty
 echo "Starting OpenResty..."
-echo "Configuration: /etc/nginx/nginx.conf"
-echo "Lua modules: /etc/nginx/lua/"
-echo "Data directory: /etc/nginx/data/"
+echo "Configuration: /usr/local/openresty/nginx/conf/nginx.conf"
+echo "Lua modules: /usr/local/openresty/nginx/lua/"
+echo "Data directory: /usr/local/openresty/nginx/data/"
 echo "Log directory: /var/log/nginx/"
 
 # 使用 exec 确保 OpenResty 成为 PID 1

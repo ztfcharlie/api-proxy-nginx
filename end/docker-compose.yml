@@ -13,14 +13,14 @@ services:
       - "8443:8443"   # HTTPS 端口（如果启用）
     volumes:
       # 配置文件挂载
-      - ./config:/etc/nginx/config:ro
-      - ./data:/etc/nginx/data
+      - ./config:/usr/local/openresty/nginx/config:ro
+      - ./data:/usr/local/openresty/nginx/data
       # 日志挂载
       - ./logs:/var/log/nginx
       # SSL 证书挂载（如果需要）
-      - ./ssl:/etc/nginx/ssl:ro
+      - ./ssl:/usr/local/openresty/nginx/ssl:ro
       # 静态文件挂载（如果需要）
-      - ./html:/etc/nginx/html:ro
+      - ./html:/usr/local/openresty/nginx/html:ro
     environment:
       # OpenResty 配置
       - WORKER_PROCESSES=auto

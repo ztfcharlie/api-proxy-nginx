@@ -28,10 +28,10 @@ local default_config = {
 
 -- 文件路径配置
 local paths = {
-    app_config = "/etc/nginx/config/app_config.json",
-    map_config = "/etc/nginx/data/map/map-config.json",
-    json_dir = "/etc/nginx/data/json/",
-    jwt_dir = "/etc/nginx/data/jwt/"
+    app_config = "/usr/local/openresty/nginx/config/app_config.json",
+    map_config = "/usr/local/openresty/nginx/data/map/map-config.json",
+    json_dir = "/usr/local/openresty/nginx/data/json/",
+    jwt_dir = "/usr/local/openresty/nginx/data/jwt/"
 }
 
 -- 读取 JSON 文件

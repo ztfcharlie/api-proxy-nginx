@@ -101,6 +101,7 @@ TOKEN_EARLY_REFRESH=300
 ### 配置文件
 
 #### 1. 应用配置 (`config/app_config.json`)
+容器内路径: `/usr/local/openresty/nginx/config/app_config.json`
 
 ```json
 {
@@ -125,6 +126,7 @@ TOKEN_EARLY_REFRESH=300
 ```
 
 #### 2. 客户端映射配置 (`data/map/map-config.json`)
+容器内路径: `/usr/local/openresty/nginx/data/map/map-config.json`
 
 ```json
 {
@@ -157,6 +159,7 @@ TOKEN_EARLY_REFRESH=300
 #### 3. Google 服务账号凭证
 
 将 Google Cloud 服务账号 JSON 文件放在 `data/json/` 目录中。
+容器内路径: `/usr/local/openresty/nginx/data/json/`
 
 ## API 使用
 

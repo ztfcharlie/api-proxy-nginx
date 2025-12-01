@@ -20,29 +20,29 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 # 创建必要的目录
 RUN mkdir -p \
-    /etc/nginx/conf.d \
-    /etc/nginx/lua \
-    /etc/nginx/config \
-    /etc/nginx/data/json \
-    /etc/nginx/data/jwt \
-    /etc/nginx/data/map \
+    /usr/local/openresty/nginx/conf/conf.d \
+    /usr/local/openresty/nginx/lua \
+    /usr/local/openresty/nginx/config \
+    /usr/local/openresty/nginx/data/json \
+    /usr/local/openresty/nginx/data/jwt \
+    /usr/local/openresty/nginx/data/map \
     /var/log/nginx \
     /var/cache/nginx \
     /tmp/nginx
 
 # 设置目录权限
 RUN chown -R nobody:nobody \
-    /etc/nginx/data \
+    /usr/local/openresty/nginx/data \
     /var/log/nginx \
     /var/cache/nginx \
     /tmp/nginx
 
 # 复制 nginx 配置文件
-COPY nginx/nginx.conf /etc/nginx/nginx.conf
-COPY nginx/conf.d/ /etc/nginx/conf.d/
+COPY nginx/nginx.conf /usr/local/openresty/nginx/conf/nginx.conf
+COPY nginx/conf.d/ /usr/local/openresty/nginx/conf/conf.d/
 
 # 复制 Lua 模块
-COPY lua/ /etc/nginx/lua/
+COPY lua/ /usr/local/openresty/nginx/lua/
 
 # 配置文件将通过挂载卷提供或在启动时创建
 
@@ -59,7 +59,7 @@ RUN addgroup -g 101 -S nginx 2>/dev/null || true
 RUN adduser -S -D -H -u 101 -h /var/cache/nginx -s /sbin/nologin -G nginx -g nginx nginx 2>/dev/null || true
 
 # 设置工作目录
-WORKDIR /etc/nginx
+WORKDIR /usr/local/openresty/nginx
 
 # 暴露端口
 EXPOSE 8080 8443

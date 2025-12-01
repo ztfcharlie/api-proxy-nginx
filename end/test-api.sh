@@ -97,25 +97,25 @@ echo ""
 echo "=== Configuration Check ==="
 
 # 检查配置文件
-if [ -f "/etc/nginx/data/map/map-config.json" ]; then
+if [ -f "/usr/local/openresty/nginx/data/map/map-config.json" ]; then
     echo -e "Configuration file: ${GREEN}✓ EXISTS${NC}"
 
     # 检查是否有配置的客户端
     if command -v jq >/dev/null 2>&1; then
-        client_count=$(jq '.clients | length' /etc/nginx/data/map/map-config.json 2>/dev/null || echo "0")
+        client_count=$(jq '.clients | length' /usr/local/openresty/nginx/data/map/map-config.json 2>/dev/null || echo "0")
         echo "Configured clients: $client_count"
     fi
 else
     echo -e "Configuration file: ${RED}✗ MISSING${NC}"
-    echo "Create /etc/nginx/data/map/map-config.json with client configuration"
+    echo "Create /usr/local/openresty/nginx/data/map/map-config.json with client configuration"
 fi
 
 # 检查服务账号文件
-json_files=$(ls /etc/nginx/data/json/*.json 2>/dev/null | wc -l || echo "0")
+json_files=$(ls /usr/local/openresty/nginx/data/json/*.json 2>/dev/null | wc -l || echo "0")
 echo "Service account files: $json_files"
 
 if [ "$json_files" -eq 0 ]; then
-    echo -e "${YELLOW}WARNING: No service account files found in /etc/nginx/data/json/${NC}"
+    echo -e "${YELLOW}WARNING: No service account files found in /usr/local/openresty/nginx/data/json/${NC}"
     echo "Add Google Cloud service account JSON files to enable API proxy functionality"
 fi
 
