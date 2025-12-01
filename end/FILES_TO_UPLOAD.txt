@@ -1,0 +1,176 @@
+# 上传到服务器的文件清单
+
+## ✅ 必需文件（核心）
+
+### Docker 配置
+□ Dockerfile.new                      # 新的 Dockerfile
+□ docker-compose.new.yml              # 新的 docker-compose 配置
+
+### 部署脚本
+□ deploy.sh                           # 一键部署脚本（需要 chmod +x）
+
+### Nginx 配置
+□ nginx/nginx.conf                    # Nginx 主配置
+□ nginx/conf.d/gemini-proxy.conf      # 代理服务器配置
+
+### Lua 脚本
+□ lua/config.lua                      # 配置管理模块
+□ lua/utils.lua                       # 工具函数模块
+□ lua/auth_manager.lua                # OAuth2 认证管理模块
+□ lua/stream_handler.lua              # 流式请求处理模块
+
+### 配置文件
+□ data/map/map-config.json            # 统一配置文件（核心）
+□ data/json/*.json                    # Google 服务账号凭证文件
+□ config/app_config.json              # 应用配置（可选）
+
+## 📚 文档文件（推荐）
+
+□ README_DEPLOYMENT.md                # 部署文档总览
+□ SERVER_DEPLOYMENT.md                # 快速部署指南（推荐）
+□ PRE_DEPLOYMENT_CHECKLIST.md         # 部署前检查清单
+□ DEPLOYMENT_GUIDE.md                 # 详细部署指南
+□ data/map/README-NEW-CONFIG.md       # 配置文件说明
+□ TESTING_CHECKLIST.md                # 测试检查清单
+
+## 🧪 测试脚本（可选）
+
+□ test-new-config.sh                  # API 测试脚本
+□ test_lua_modules.sh                 # Lua 模块测试脚本
+□ check_lua_syntax.sh                 # 语法检查脚本
+
+## 📁 目录结构（会自动创建）
+
+以下目录会在部署时自动创建，不需要上传：
+- logs/                               # 日志目录
+- data/jwt/                           # Token 缓存目录
+- redis-data/                         # Redis 数据目录
+
+## 🚫 不需要上传的文件
+
+以下文件不需要上传到服务器：
+- Dockerfile（旧版本）
+- docker-compose.yml（旧版本）
+- tests/                              # 本地测试文件
+- .git/                               # Git 仓库
+- *.log                               # 日志文件
+- data/jwt/*.json                     # Token 缓存
+- redis-data/                         # Redis 数据
+
+## 📦 打包命令
+
+### 方法 1: 使用 tar（推荐）
+
+```bash
+# 在 D:\www\nginxzhuanfa 目录下
+cd D:\www\nginxzhuanfa
+
+# 打包整个 end 目录
+tar -czf end.tar.gz end/
+
+# 或者只打包必需文件（更小）
+tar -czf end-minimal.tar.gz \
+  end/Dockerfile.new \
+  end/docker-compose.new.yml \
+  end/deploy.sh \
+  end/nginx/ \
+  end/lua/ \
+  end/data/map/ \
+  end/data/json/ \
+  end/config/ \
+  end/*.md \
+  end/*.sh
+```
+
+### 方法 2: 使用 7-Zip（Windows）
+
+1. 右键点击 `end` 文件夹
+2. 选择 "7-Zip" -> "添加到压缩包..."
+3. 压缩格式选择 "tar.gz"
+4. 点击确定
+
+## 📤 上传到服务器
+
+### 使用 SCP
+
+```bash
+scp end.tar.gz user@your-server-ip:/home/user/
+```
+
+### 使用 SFTP 工具
+
+- FileZilla
+- WinSCP
+- MobaXterm
+
+## ✅ 验证上传
+
+```bash
+# SSH 登录服务器
+ssh user@your-server-ip
+
+# 检查文件
+ls -lh /home/user/end.tar.gz
+
+# 解压
+cd /home/user
+tar -xzf end.tar.gz
+
+# 验证文件完整性
+cd end
+ls -la Dockerfile.new docker-compose.new.yml deploy.sh
+ls -la data/map/map-config.json
+ls -la data/json/
+```
+
+## 📋 文件大小参考
+
+- 完整打包: ~50-100MB（包含文档和测试脚本）
+- 最小打包: ~10-20MB（仅核心文件）
+- 主要占用: data/json/*.json（服务账号文件）
+
+## 🔍 检查清单
+
+上传前确认：
+□ 所有必需文件都已包含
+□ map-config.json 格式正确
+□ 服务账号文件存在且有效
+□ deploy.sh 有执行权限（chmod +x）
+□ 文档文件已包含（方便查阅）
+
+上传后确认：
+□ 压缩包完整上传
+□ 解压成功
+□ 文件权限正确
+□ 目录结构完整
+
+## 🚀 下一步
+
+上传完成后，按照以下步骤部署：
+
+1. 解压项目
+   ```bash
+   tar -xzf end.tar.gz && cd end
+   ```
+
+2. 添加执行权限
+   ```bash
+   chmod +x deploy.sh
+   ```
+
+3. 检查环境
+   ```bash
+   ./deploy.sh check
+   ```
+
+4. 启动服务
+   ```bash
+   ./deploy.sh start
+   ```
+
+5. 验证部署
+   ```bash
+   ./deploy.sh test
+   ```
+
+详细步骤请参考 `SERVER_DEPLOYMENT.md`

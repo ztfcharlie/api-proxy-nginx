@@ -65,7 +65,8 @@ function _M.log_request()
     if config.should_log("info") then
         local log_data = {
             request_id = ngx.var.request_id,
-            client_id = ngx.var.client_id,
+            client_token = ngx.var.client_token,
+            key_filename = ngx.var.key_filename,
             model_name = ngx.var.model_name,
             api_host = ngx.var.api_host,
             method = ngx.var.request_method,
@@ -92,25 +93,30 @@ function _M.extract_model_name(uri)
     return model_name
 end
 
--- 提取客户端ID从 Authorization 头部
-function _M.extract_client_id()
+-- 提取客户端 Token 从 Authorization 头部
+function _M.extract_client_token()
     local auth_header = ngx.var.http_authorization
     if not auth_header then
         return nil, "Missing Authorization header"
     end
 
     -- 匹配 Bearer token 格式
-    local client_id = auth_header:match("^Bearer%s+(.+)$")
-    if not client_id then
+    local client_token = auth_header:match("^Bearer%s+(.+)$")
+    if not client_token then
         return nil, "Invalid Authorization header format"
     end
 
     if config.should_test_output("request_headers") then
         ngx.log(ngx.INFO, "[TEST] Original Authorization: ", auth_header)
-        ngx.log(ngx.INFO, "[TEST] Extracted client ID: ", client_id)
+        ngx.log(ngx.INFO, "[TEST] Extracted client token: ", client_token)
     end
 
-    return client_id
+    return client_token
+end
+
+-- 向后兼容的别名
+function _M.extract_client_id()
+    return _M.extract_client_token()
 end
 
 -- Base64 编码

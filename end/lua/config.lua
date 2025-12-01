@@ -29,9 +29,7 @@ local default_config = {
 -- 文件路径配置
 local paths = {
     app_config = "/etc/nginx/config/app_config.json",
-    client_map = "/etc/nginx/data/map/map-client.json",
-    client_json_map = "/etc/nginx/data/map/map-client-json.json",
-    model_region_map = "/etc/nginx/data/map/map-json-model-region.json",
+    map_config = "/etc/nginx/data/map/map-config.json",
     json_dir = "/etc/nginx/data/json/",
     jwt_dir = "/etc/nginx/data/jwt/"
 }
@@ -100,30 +98,64 @@ local function load_app_config()
     return merged_config
 end
 
--- 加载客户端映射
-local function load_client_maps()
-    local client_map, err1 = read_json_file(paths.client_map)
-    if not client_map then
-        ngx.log(ngx.ERR, "Cannot load client map: ", err1)
+-- 解析服务类型前缀（gemini-, claude- 等）
+local function parse_service_type(client_token)
+    if not client_token then
         return nil
     end
 
-    local client_json_map, err2 = read_json_file(paths.client_json_map)
-    if not client_json_map then
-        ngx.log(ngx.ERR, "Cannot load client-json map: ", err2)
+    -- 提取前缀（如 "gemini-", "claude-"）
+    local prefix = client_token:match("^([^%-]+)%-")
+    return prefix
+end
+
+-- 加载统一配置文件
+local function load_map_config()
+    local map_config, err = read_json_file(paths.map_config)
+    if not map_config then
+        ngx.log(ngx.ERR, "Cannot load map config: ", err)
         return nil
     end
 
-    local model_region_map, err3 = read_json_file(paths.model_region_map)
-    if not model_region_map then
-        ngx.log(ngx.ERR, "Cannot load model-region map: ", err3)
+    -- 验证配置结构
+    if not map_config.clients or type(map_config.clients) ~= "table" then
+        ngx.log(ngx.ERR, "Invalid map config: missing or invalid 'clients' field")
         return nil
+    end
+
+    -- 构建索引以便快速查找
+    local client_index = {}
+    for _, client in ipairs(map_config.clients) do
+        if client.client_token then
+            client_index[client.client_token] = client
+        end
+    end
+
+    -- 构建服务账号文件到模型映射的索引
+    local key_models_index = {}
+
+    -- 处理 gemini 服务账号
+    if map_config.key_filename_gemini then
+        for _, key_config in ipairs(map_config.key_filename_gemini) do
+            if key_config.key_filename and key_config.models then
+                key_models_index[key_config.key_filename] = key_config.models
+            end
+        end
+    end
+
+    -- 处理 claude 服务账号
+    if map_config.key_filename_claude then
+        for _, key_config in ipairs(map_config.key_filename_claude) do
+            if key_config.key_filename and key_config.models then
+                key_models_index[key_config.key_filename] = key_config.models
+            end
+        end
     end
 
     return {
-        client_map = client_map,
-        client_json_map = client_json_map,
-        model_region_map = model_region_map
+        raw_config = map_config,
+        client_index = client_index,
+        key_models_index = key_models_index
     }
 end
 
@@ -132,14 +164,14 @@ function _M.init()
     -- 加载应用配置
     config_cache.app = load_app_config()
 
-    -- 加载映射配置
-    local maps = load_client_maps()
-    if maps then
-        config_cache.maps = maps
+    -- 加载统一映射配置
+    local map_config = load_map_config()
+    if map_config then
+        config_cache.map_config = map_config
         config_loaded = true
         ngx.log(ngx.INFO, "Configuration loaded successfully")
     else
-        ngx.log(ngx.ERR, "Failed to load configuration maps")
+        ngx.log(ngx.ERR, "Failed to load map configuration")
         config_loaded = false
     end
 
@@ -160,11 +192,6 @@ function _M.get_app_config()
     return config_cache.app or default_config
 end
 
--- 获取映射配置
-function _M.get_maps()
-    return config_cache.maps
-end
-
 -- 获取路径配置
 function _M.get_paths()
     return config_cache.paths or paths
@@ -175,62 +202,68 @@ function _M.is_loaded()
     return config_loaded
 end
 
+-- 根据 client_token 获取客户端配置
+function _M.get_client_config(client_token)
+    local map_config = config_cache.map_config
+    if not map_config or not map_config.client_index then
+        return nil
+    end
+    return map_config.client_index[client_token]
+end
+
 -- 获取客户端状态
-function _M.get_client_status(client_id)
-    local maps = config_cache.maps
-    if not maps or not maps.client_map then
+function _M.get_client_status(client_token)
+    local client_config = _M.get_client_config(client_token)
+    if not client_config then
         return nil
     end
-    return maps.client_map[client_id]
+    return client_config.enable and "enable" or "disable"
 end
 
--- 获取客户端对应的 JSON 文件（支持多个文件）
-function _M.get_client_json_files(client_id)
-    local maps = config_cache.maps
-    if not maps or not maps.client_json_map then
+-- 根据 client_token 和服务类型获取可用的服务账号文件列表
+function _M.get_client_key_files(client_token)
+    local client_config = _M.get_client_config(client_token)
+    if not client_config then
+        return nil, "Client not found"
+    end
+
+    -- 解析服务类型
+    local service_type = parse_service_type(client_token)
+    if not service_type then
+        return nil, "Cannot parse service type from client_token"
+    end
+
+    -- 根据服务类型选择对应的 key_filename 字段
+    local key_field = "key_filename_" .. service_type
+    local key_files = client_config[key_field]
+
+    if not key_files or type(key_files) ~= "table" or #key_files == 0 then
+        return nil, "No key files configured for service type: " .. service_type
+    end
+
+    return key_files, nil
+end
+
+-- 获取模型对应的 API 域名
+function _M.get_model_domain(key_filename, model_name)
+    local map_config = config_cache.map_config
+    if not map_config or not map_config.key_models_index then
         return nil
     end
 
-    local json_files = maps.client_json_map[client_id]
-    if not json_files then
+    local models = map_config.key_models_index[key_filename]
+    if not models then
         return nil
     end
 
-    -- 如果是字符串（向后兼容），转换为数组
-    if type(json_files) == "string" then
-        return {json_files}
-    end
-
-    -- 如果是数组，直接返回
-    if type(json_files) == "table" then
-        return json_files
+    -- 遍历模型列表查找匹配的模型
+    for _, model_config in ipairs(models) do
+        if model_config.model == model_name then
+            return model_config.domain
+        end
     end
 
     return nil
-end
-
--- 获取客户端的第一个 JSON 文件（向后兼容）
-function _M.get_client_json_file(client_id)
-    local json_files = _M.get_client_json_files(client_id)
-    if json_files and #json_files > 0 then
-        return json_files[1]
-    end
-    return nil
-end
-
--- 获取模型对应的 API 主机
-function _M.get_model_api_host(json_file, model_name)
-    local maps = config_cache.maps
-    if not maps or not maps.model_region_map then
-        return nil
-    end
-
-    local json_config = maps.model_region_map[json_file]
-    if not json_config then
-        return nil
-    end
-
-    return json_config[model_name]
 end
 
 -- 读取服务账号凭证

@@ -3,6 +3,7 @@
 # 定义要创建的目录列表
 directories=(
     "redis-data"
+    "nginx-logs"
     "nginx"
     "nginx/conf.d"
     "lua"

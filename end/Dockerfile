@@ -1,165 +1,33 @@
-FROM alpine:3.18
+FROM openresty/openresty:alpine-fat
+
+# 设置维护者信息
+LABEL maintainer="API Proxy Team"
+LABEL description="OpenResty-based API Proxy for Google Vertex AI"
 
 # 设置环境变量
-ENV NGINX_VERSION=1.24.0
-ENV LUA_VERSION=5.1.5
-ENV LUAJIT_VERSION=2.1-20230410
-ENV NGX_DEVEL_KIT_VERSION=0.3.2
-ENV LUA_NGINX_MODULE_VERSION=0.10.29
+ENV TZ=Asia/Shanghai \
+    LANG=C.UTF-8
 
-# 安装编译依赖
-RUN apk add --no-cache --virtual .build-deps \
-    gcc \
-    libc-dev \
-    make \
-    openssl-dev \
-    pcre-dev \
-    zlib-dev \
-    linux-headers \
-    curl \
-    gnupg \
-    libxslt-dev \
-    gd-dev \
-    geoip-dev \
-    wget \
-    git \
-    unzip
-
-# 安装运行时依赖
+# 安装必要的系统工具和依赖
 RUN apk add --no-cache \
     ca-certificates \
     openssl \
-    pcre \
-    zlib \
     curl \
     wget \
-    libgcc \
-    libstdc++
-
-# 下载并编译 LuaJIT
-RUN cd /tmp && \
-    wget https://github.com/openresty/luajit2/archive/refs/tags/v${LUAJIT_VERSION}.tar.gz && \
-    tar -xzf v${LUAJIT_VERSION}.tar.gz && \
-    cd luajit2-${LUAJIT_VERSION} && \
-    make && make install PREFIX=/usr/local && \
-    ln -sf /usr/local/bin/luajit-2.1.0-beta3 /usr/local/bin/luajit
-
-# 设置 LuaJIT 环境变量
-ENV LUAJIT_LIB=/usr/local/lib
-ENV LUAJIT_INC=/usr/local/include/luajit-2.1
-
-# 下载 Nginx 和模块
-RUN cd /tmp && \
-    wget http://nginx.org/download/nginx-${NGINX_VERSION}.tar.gz && \
-    tar -xzf nginx-${NGINX_VERSION}.tar.gz && \
-    wget https://github.com/vision5/ngx_devel_kit/archive/refs/tags/v${NGX_DEVEL_KIT_VERSION}.tar.gz && \
-    tar -xzf v${NGX_DEVEL_KIT_VERSION}.tar.gz && \
-    wget https://github.com/openresty/lua-nginx-module/archive/refs/tags/v${LUA_NGINX_MODULE_VERSION}.tar.gz && \
-    tar -xzf v${LUA_NGINX_MODULE_VERSION}.tar.gz
-
-# 编译 Nginx (设置环境变量确保完整功能)
-RUN cd /tmp/nginx-${NGINX_VERSION} && \
-    export LUAJIT_LIB=/usr/local/lib && \
-    export LUAJIT_INC=/usr/local/include/luajit-2.1 && \
-    ./configure \
-        --prefix=/etc/nginx \
-        --sbin-path=/usr/sbin/nginx \
-        --modules-path=/usr/lib/nginx/modules \
-        --conf-path=/etc/nginx/nginx.conf \
-        --error-log-path=/var/log/nginx/error.log \
-        --http-log-path=/var/log/nginx/access.log \
-        --pid-path=/var/run/nginx.pid \
-        --lock-path=/var/run/nginx.lock \
-        --http-client-body-temp-path=/var/cache/nginx/client_temp \
-        --http-proxy-temp-path=/var/cache/nginx/proxy_temp \
-        --http-fastcgi-temp-path=/var/cache/nginx/fastcgi_temp \
-        --http-uwsgi-temp-path=/var/cache/nginx/uwsgi_temp \
-        --http-scgi-temp-path=/var/cache/nginx/scgi_temp \
-        --with-perl_modules_path=/usr/lib/perl5/vendor_perl \
-        --user=nginx \
-        --group=nginx \
-        --with-compat \
-        --with-file-aio \
-        --with-threads \
-        --with-http_addition_module \
-        --with-http_auth_request_module \
-        --with-http_dav_module \
-        --with-http_flv_module \
-        --with-http_gunzip_module \
-        --with-http_gzip_static_module \
-        --with-http_mp4_module \
-        --with-http_random_index_module \
-        --with-http_realip_module \
-        --with-http_secure_link_module \
-        --with-http_slice_module \
-        --with-http_ssl_module \
-        --with-http_stub_status_module \
-        --with-http_sub_module \
-        --with-http_v2_module \
-        --with-stream \
-        --with-stream_realip_module \
-        --with-stream_ssl_module \
-        --with-stream_ssl_preread_module \
-        --add-module=/tmp/ngx_devel_kit-${NGX_DEVEL_KIT_VERSION} \
-        --add-module=/tmp/lua-nginx-module-${LUA_NGINX_MODULE_VERSION} && \
-    make -j$(nproc) && \
-    make install
-
-# 创建 nginx 用户和必要目录
-RUN addgroup -g 101 -S nginx && \
-    adduser -S -D -H -u 101 -h /var/cache/nginx -s /sbin/nologin -G nginx -g nginx nginx && \
-    mkdir -p /var/cache/nginx/client_temp \
-             /var/cache/nginx/proxy_temp \
-             /var/cache/nginx/fastcgi_temp \
-             /var/cache/nginx/uwsgi_temp \
-             /var/cache/nginx/scgi_temp \
-             /var/log/nginx \
-             /etc/nginx/conf.d \
-             /usr/local/lib/lua/5.1 \
-             /usr/local/share/lua/5.1
+    bash \
+    tzdata \
+    jq \
+    && cp /usr/share/zoneinfo/${TZ} /etc/localtime \
+    && echo "${TZ}" > /etc/timezone
 
 # 安装 Lua 模块
-# 安装 lua-cjson
-RUN cd /tmp && \
-    git clone https://github.com/openresty/lua-cjson.git && \
-    cd lua-cjson && \
-    make LUA_INCLUDE_DIR=/usr/local/include/luajit-2.1 && \
-    make install LUA_CMODULE_DIR=/usr/local/lib/lua/5.1
+# lua-cjson 已经包含在 openresty:alpine-fat 中
+# lua-resty-http 需要安装
+RUN /usr/local/openresty/luajit/bin/luarocks install lua-resty-http
 
-# 安装 lua-resty-http
-RUN cd /tmp && \
-    git clone https://github.com/ledgetech/lua-resty-http.git && \
-    mkdir -p /usr/local/share/lua/5.1/resty && \
-    cp -r lua-resty-http/lib/resty/* /usr/local/share/lua/5.1/resty/
-
-# 注意：我们使用自定义 JWT 实现，不需要 lua-resty-jwt 库
-
-# 安装 lua-resty-core (必需的核心模块)
-RUN cd /tmp && \
-    git clone https://github.com/openresty/lua-resty-core.git && \
-    cp -r lua-resty-core/lib/resty/* /usr/local/share/lua/5.1/resty/
-
-# 安装 lua-resty-lrucache (lua-resty-core 的依赖)
-RUN cd /tmp && \
-    git clone https://github.com/openresty/lua-resty-lrucache.git && \
-    cp -r lua-resty-lrucache/lib/resty/* /usr/local/share/lua/5.1/resty/
-
-# 安装 lua-resty-openssl 及其依赖
-RUN cd /tmp && \
-    # 安装 lua-resty-string (提供 ngx.base64)
-    git clone https://github.com/openresty/lua-resty-string.git && \
-    cp -r lua-resty-string/lib/resty/* /usr/local/nginx/lualib/resty/ && \
-    # 安装 lua-resty-openssl
-    git clone https://github.com/fffonion/lua-resty-openssl.git && \
-    cp -r lua-resty-openssl/lib/resty/* /usr/local/nginx/lualib/resty/ && \
-    rm -rf lua-resty-string lua-resty-openssl
-
-# 清理编译依赖和临时文件
-RUN apk del .build-deps && \
-    rm -rf /tmp/* /var/cache/apk/*
-
-# 创建项目目录和 OpenSSL 兼容层目录
+# 创建必要的目录结构
 RUN mkdir -p /etc/nginx/lua \
+             /etc/nginx/conf.d \
              /etc/nginx/data/map \
              /etc/nginx/data/json \
              /etc/nginx/data/jwt \
@@ -167,7 +35,20 @@ RUN mkdir -p /etc/nginx/lua \
              /etc/nginx/html \
              /etc/nginx/ssl \
              /var/log/nginx \
-             /usr/local/share/lua/5.1/resty/openssl/x509
+             /var/cache/nginx/client_temp \
+             /var/cache/nginx/proxy_temp
+
+# 设置目录权限
+RUN chown -R nobody:nobody /etc/nginx/data \
+    && chown -R nobody:nobody /var/log/nginx \
+    && chown -R nobody:nobody /var/cache/nginx \
+    && chmod -R 755 /etc/nginx/data \
+    && chmod -R 755 /var/log/nginx
+
+# 创建健康检查脚本
+RUN echo '#!/bin/sh' > /usr/local/bin/healthcheck.sh && \
+    echo 'curl -f http://localhost:8080/health || exit 1' >> /usr/local/bin/healthcheck.sh && \
+    chmod +x /usr/local/bin/healthcheck.sh
 
 # 设置工作目录
 WORKDIR /etc/nginx
@@ -175,5 +56,9 @@ WORKDIR /etc/nginx
 # 暴露端口
 EXPOSE 8080 8443
 
+# 健康检查
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD /usr/local/bin/healthcheck.sh
+
 # 启动命令
-CMD ["nginx", "-g", "daemon off;"]
+CMD ["/usr/local/openresty/bin/openresty", "-g", "daemon off;"]

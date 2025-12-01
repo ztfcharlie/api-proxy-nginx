@@ -1,56 +1,93 @@
-version: '3.3'
+version: '3.8'
 
 networks:
   api-proxy:
     driver: bridge
 
 services:
+  # OpenResty API Proxy 服务
   api-proxy-nginx:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.new
     container_name: api-proxy-nginx
+    hostname: api-proxy-nginx
     ports:
-      - "8888:8080"
-      - "8443:8443"
+      - "8888:8080"   # HTTP 端口
+      - "8443:8443"   # HTTPS 端口（如果需要）
     environment:
       - TZ=Asia/Shanghai
+      - LANG=C.UTF-8
     volumes:
+      # Nginx 配置文件（只读）
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
+
+      # Lua 脚本（只读）
       - ./lua:/etc/nginx/lua:ro
-      - ./logs:/var/log/nginx
-      - ./html:/etc/nginx/html:ro
-      - ./ssl:/etc/nginx/ssl:ro
-      - ./data:/etc/nginx/data:ro
+
+      # 数据目录（读写）
+      - ./data/map:/etc/nginx/data/map:rw
+      - ./data/json:/etc/nginx/data/json:ro
+      - ./data/jwt:/etc/nginx/data/jwt:rw
+
+      # 配置文件（只读）
       - ./config:/etc/nginx/config:ro
+
+      # 静态文件（只读）
+      - ./html:/etc/nginx/html:ro
+
+      # SSL 证书（只读）
+      - ./ssl:/etc/nginx/ssl:ro
+
+      # 日志目录（读写）
+      - ./nginx-logs:/var/log/nginx
     restart: unless-stopped
     networks:
       - api-proxy
     depends_on:
-      - api-proxy-redis
+      api-proxy-redis:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8080/health || exit 1"]
+      test: ["CMD-SHELL", "/usr/local/bin/healthcheck.sh"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
+  # Redis 缓存服务
   api-proxy-redis:
-    image: redis:6-alpine
+    image: redis:7-alpine
     container_name: api-proxy-redis
+    hostname: api-proxy-redis
     ports:
       - "6379:6379"
     volumes:
       - ./redis-data:/data
-    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --save 900 1
+      --save 300 10
+      --save 60 10000
     restart: unless-stopped
     networks:
       - api-proxy
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli ping || exit 1"]
-      interval: 30s
-      timeout: 10s
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      interval: 10s
+      timeout: 5s
       retries: 3
       start_period: 10s
-      
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
