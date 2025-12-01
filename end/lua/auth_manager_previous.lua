@@ -5,11 +5,8 @@ local config = require "config"
 local utils = require "utils"
 local _M = {}
 
--- 共享内存缓存（安全访问）
-local token_cache
-if ngx and ngx.shared then
-    token_cache = ngx.shared.token_cache
-end
+-- 共享内存缓存
+local token_cache = ngx.shared.token_cache
 
 -- 使用curl获取OAuth2 Token（简化版）
 local function get_oauth2_token_simple(service_account)
@@ -48,10 +45,7 @@ local function get_or_refresh_token(client_token, key_filename)
     local cache_key = "token:" .. key_filename
 
     -- 1. 检查内存缓存
-    local cached_token_str
-    if token_cache then
-        cached_token_str = token_cache:get(cache_key)
-    end
+    local cached_token_str = token_cache:get(cache_key)
     if cached_token_str then
         local ok, token_data = pcall(cjson.decode, cached_token_str)
         if ok and token_data then
@@ -75,9 +69,7 @@ local function get_or_refresh_token(client_token, key_filename)
 
         if not utils.is_token_expired(file_token, early_refresh) then
             -- 更新内存缓存
-            if token_cache then
-                token_cache:set(cache_key, cjson.encode(file_token), file_token.expires_in)
-            end
+            token_cache:set(cache_key, cjson.encode(file_token), file_token.expires_in)
             if config.should_test_output("oauth_process") then
                 ngx.log(ngx.INFO, "[OAuth2] Using file cached token for: ", key_filename)
             end
@@ -114,11 +106,9 @@ local function get_or_refresh_token(client_token, key_filename)
     end
 
     -- 缓存Token
-    if token_cache then
-        local cache_success = token_cache:set(cache_key, cjson.encode(token_data), token_data.expires_in)
-        if not cache_success then
-            ngx.log(ngx.WARN, "[OAuth2] Failed to cache token in memory for: ", key_filename)
-        end
+    local cache_success = token_cache:set(cache_key, cjson.encode(token_data), token_data.expires_in)
+    if not cache_success then
+        ngx.log(ngx.WARN, "[OAuth2] Failed to cache token in memory for: ", key_filename)
     end
 
     -- 写入文件缓存
