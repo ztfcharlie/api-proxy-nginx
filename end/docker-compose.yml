@@ -9,7 +9,7 @@ services:
     container_name: api-proxy-nginx
     restart: unless-stopped
     ports:
-      - "8080:8080"   # HTTP 端口
+      - "8888:8080"   # HTTP 端口
       - "8443:8443"   # HTTPS 端口（如果启用）
     volumes:
       # 配置文件挂载
