@@ -67,7 +67,7 @@ services:
     ports:
       - "6379:6379"
     volumes:
-      - redis-data:/data
+      - ./redis-data:/data
       - ./redis/redis.conf:/etc/redis/redis.conf:ro
     command: >
       sh -c "
@@ -101,7 +101,7 @@ services:
     volumes:
       - ./fluentd/conf:/fluentd/etc:ro
       - ./logs:/var/log/nginx:ro
-      - fluentd-data:/var/log/fluentd
+      - ./fluentd-data:/var/log/fluentd
     environment:
       - FLUENTD_CONF=fluent.conf
       - TZ=Asia/Shanghai
@@ -117,12 +117,3 @@ networks:
   api-proxy-network:
     driver: bridge
     name: api-proxy-network
-
-# 数据卷配置
-volumes:
-  redis-data:
-    driver: local
-    name: api-proxy-redis-data
-  fluentd-data:
-    driver: local
-    name: api-proxy-fluentd-data

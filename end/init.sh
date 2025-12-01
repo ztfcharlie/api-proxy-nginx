@@ -12,6 +12,7 @@ directories=(
     "ssl"
     "data"
     "config"
+    "redis"
 )
 
 # 创建目录
