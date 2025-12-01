@@ -83,7 +83,7 @@ docker-compose down -v
 
 ```bash
 # Redis 配置
-REDIS_PASSWORD=
+REDIS_PASSWORD=123456
 
 # 日志配置
 LOG_LEVEL=info

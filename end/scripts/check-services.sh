@@ -34,7 +34,7 @@ fi
 
 # 检查 Redis
 echo -n "Redis Health: "
-if docker-compose exec -T redis redis-cli ping > /dev/null 2>&1; then
+if docker-compose exec -T api-proxy-redis redis-cli -a 123456 ping > /dev/null 2>&1; then
     echo "✓ Healthy"
 else
     echo "✗ Unhealthy"

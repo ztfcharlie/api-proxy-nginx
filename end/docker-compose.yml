@@ -30,9 +30,9 @@ services:
       - WORKER_CONNECTIONS=1024
 
       # Redis 配置
-      - REDIS_HOST=redis
+      - REDIS_HOST=api-proxy-redis
       - REDIS_PORT=6379
-      - REDIS_PASSWORD=${REDIS_PASSWORD:-}
+      - REDIS_PASSWORD=123456
 
       # 日志配置
       - LOG_LEVEL=info
@@ -56,9 +56,29 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+    depends_on:
+      - api-proxy-redis
     labels:
       - "com.api-proxy.service=nginx"
       - "com.api-proxy.version=1.0.0"
+
+
+
+  api-proxy-redis:
+    image: redis:latest
+    container_name: api-proxy-redis
+    volumes:
+      - ./redis-data:/data
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru --requirepass 123456
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "123456", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - api-proxy-network
 
 # 网络配置
 networks:
