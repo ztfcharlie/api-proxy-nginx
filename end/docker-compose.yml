@@ -15,8 +15,8 @@ services:
       # 配置文件挂载
       - ./nginx/conf.d:/usr/local/openresty/nginx/conf/conf.d/
       - ./nginx/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
+      - ./lua:/usr/local/openresty/lualib/
       - ./data:/usr/local/openresty/nginx/data/
-      - ./lua:/usr/local/openresty/nginx/lua/
       # 日志挂载
       - ./logs:/var/log/nginx
       # SSL 证书挂载（如果需要）
