@@ -51,7 +51,7 @@
 - ✅ 配置健康检查
 - ✅ 优化镜像大小
 
-#### docker-compose.new.yml
+#### docker compose.new.yml
 - ✅ 配置 OpenResty 服务
 - ✅ 配置 Redis 服务
 - ✅ 配置卷挂载（只读/读写分离）
@@ -158,7 +158,7 @@
 ```
 end/
 ├── Dockerfile.new                    # 新 Dockerfile ⭐
-├── docker-compose.new.yml            # 新 docker-compose ⭐
+├── docker compose.new.yml            # 新 docker compose ⭐
 ├── deploy.sh                         # 部署脚本 ⭐
 │
 ├── nginx/                            # Nginx 配置

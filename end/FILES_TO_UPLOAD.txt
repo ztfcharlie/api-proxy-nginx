@@ -4,7 +4,7 @@
 
 ### Docker 配置
 □ Dockerfile.new                      # 新的 Dockerfile
-□ docker-compose.new.yml              # 新的 docker-compose 配置
+□ docker compose.new.yml              # 新的 docker compose 配置
 
 ### 部署脚本
 □ deploy.sh                           # 一键部署脚本（需要 chmod +x）
@@ -50,7 +50,7 @@
 
 以下文件不需要上传到服务器：
 - Dockerfile（旧版本）
-- docker-compose.yml（旧版本）
+- docker compose.yml（旧版本）
 - tests/                              # 本地测试文件
 - .git/                               # Git 仓库
 - *.log                               # 日志文件
@@ -71,7 +71,7 @@ tar -czf end.tar.gz end/
 # 或者只打包必需文件（更小）
 tar -czf end-minimal.tar.gz \
   end/Dockerfile.new \
-  end/docker-compose.new.yml \
+  end/docker compose.new.yml \
   end/deploy.sh \
   end/nginx/ \
   end/lua/ \
@@ -118,7 +118,7 @@ tar -xzf end.tar.gz
 
 # 验证文件完整性
 cd end
-ls -la Dockerfile.new docker-compose.new.yml deploy.sh
+ls -la Dockerfile.new docker compose.new.yml deploy.sh
 ls -la data/map/map-config.json
 ls -la data/json/
 ```

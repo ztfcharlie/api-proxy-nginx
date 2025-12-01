@@ -141,8 +141,8 @@ show_help() {
 📁 项目结构
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   必需文件：
-    ├── Dockerfile.new                # Docker 镜像配置
-    ├── docker-compose.new.yml        # 服务编排配置
+    ├── Dockerfile                # Docker 镜像配置
+    ├── docker-compose.yml        # 服务编排配置
     ├── nginx/nginx.conf              # Nginx 主配置
     ├── nginx/conf.d/*.conf           # 代理配置
     ├── lua/*.lua                     # Lua 脚本
@@ -265,8 +265,8 @@ check_environment() {
         "data/map/map-config.json"
         "nginx/nginx.conf"
         "nginx/conf.d/gemini-proxy.conf"
-        "Dockerfile.new"
-        "docker-compose.new.yml"
+        "Dockerfile"
+        "docker-compose.yml"
     )
 
     local missing_files=0
@@ -337,17 +337,6 @@ check_environment() {
 build_images() {
     print_info "准备构建 Docker 镜像..."
     echo ""
-
-    # 复制新配置文件
-    if [ ! -f "docker-compose.yml" ] || [ "docker-compose.new.yml" -nt "docker-compose.yml" ]; then
-        print_info "使用新的 docker-compose 配置..."
-        cp docker-compose.new.yml docker-compose.yml
-    fi
-
-    if [ ! -f "Dockerfile" ] || [ "Dockerfile.new" -nt "Dockerfile" ]; then
-        print_info "使用新的 Dockerfile..."
-        cp Dockerfile.new Dockerfile
-    fi
 
     print_info "开始构建镜像（这可能需要几分钟）..."
     docker compose build

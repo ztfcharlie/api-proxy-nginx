@@ -25,7 +25,7 @@
 
 #### Docker 配置
 - **Dockerfile.new** - 基于 `openresty/openresty:alpine-fat` 镜像
-- **docker-compose.new.yml** - 完整的服务编排配置
+- **docker compose.new.yml** - 完整的服务编排配置
 - 自动安装 lua-resty-http 模块
 - 配置健康检查和日志轮转
 - 优化卷挂载（只读/读写分离）
@@ -142,7 +142,7 @@
 #### 旧方式（手动）
 ```bash
 docker build -t api-proxy .
-docker-compose up -d
+docker compose up -d
 ```
 
 #### 新方式（一键）

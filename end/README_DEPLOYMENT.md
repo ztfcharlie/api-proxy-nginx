@@ -9,6 +9,11 @@
    - **内容**: 三步完成部署的简化流程
    - **适合**: 快速部署和日常维护
 
+### 0. **DOCKER_COMPOSE_V2_UPDATE.md** ℹ️ 重要更新
+   - **用途**: Docker Compose V2 更新说明
+   - **内容**: V1 到 V2 的变更、安装方法、验证步骤
+   - **适合**: 了解 Docker Compose V2 的变化
+
 ### 2. **PRE_DEPLOYMENT_CHECKLIST.md**
    - **用途**: 部署前检查清单
    - **内容**: 上传前验证、环境检查、部署步骤

@@ -196,7 +196,7 @@
 
 5. **重启服务**
    ```bash
-   docker-compose restart api-proxy-nginx
+   docker compose restart api-proxy-nginx
    ```
 
 ## 故障排查
@@ -205,7 +205,7 @@
 
 检查日志：
 ```bash
-docker-compose logs api-proxy-nginx | grep "Configuration"
+docker compose logs api-proxy-nginx | grep "Configuration"
 ```
 
 常见问题：
@@ -222,7 +222,7 @@ docker-compose logs api-proxy-nginx | grep "Configuration"
 
 查看详细日志：
 ```bash
-docker-compose logs -f api-proxy-nginx | grep "oauth_process"
+docker compose logs -f api-proxy-nginx | grep "oauth_process"
 ```
 
 ### 模型不支持
