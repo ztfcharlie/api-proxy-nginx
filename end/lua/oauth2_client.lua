@@ -136,34 +136,58 @@ function _M.get_oauth2_token_via_curl(jwt_assertion)
     local post_data = "grant_type=" .. ngx.escape_uri("urn:ietf:params:oauth:grant-type:jwt-bearer") ..
                      "&assertion=" .. ngx.escape_uri(jwt_assertion)
 
+    -- 记录OAuth2请求详细信息
+    ngx.log(ngx.INFO, "[OAuth2-DEBUG] ===== OAuth2 Request Details =====")
+    ngx.log(ngx.INFO, "[OAuth2-DEBUG] Target URL: https://oauth2.googleapis.com/token")
+    ngx.log(ngx.INFO, "[OAuth2-DEBUG] Method: POST")
+    ngx.log(ngx.INFO, "[OAuth2-DEBUG] Headers:")
+    ngx.log(ngx.INFO, "[OAuth2-DEBUG]   Content-Type: application/x-www-form-urlencoded")
+    ngx.log(ngx.INFO, "[OAuth2-DEBUG] POST Data Length: ", string.len(post_data))
+    ngx.log(ngx.INFO, "[OAuth2-DEBUG] Grant Type: urn:ietf:params:oauth:grant-type:jwt-bearer")
+    ngx.log(ngx.INFO, "[OAuth2-DEBUG] JWT Assertion Length: ", string.len(jwt_assertion))
+    ngx.log(ngx.INFO, "[OAuth2-DEBUG] JWT Assertion (first 100 chars): ", string.sub(jwt_assertion, 1, 100), "...")
+
     -- 创建临时文件存储响应
     local temp_response_file = "/tmp/oauth2_response_" .. ngx.worker.pid() .. "_" .. ngx.time() .. ".json"
 
-    -- 使用curl发送请求
+    -- 使用curl发送请求（添加详细输出）
     local cmd = string.format(
-        "curl -s -X POST 'https://oauth2.googleapis.com/token' " ..
+        "curl -v -X POST 'https://oauth2.googleapis.com/token' " ..
         "-H 'Content-Type: application/x-www-form-urlencoded' " ..
-        "-d '%s' -o %s -w '%%{http_code}'",
+        "-d '%s' -o %s -w '%%{http_code}' 2>&1",
         post_data, temp_response_file
     )
 
+    ngx.log(ngx.INFO, "[OAuth2-DEBUG] Executing curl command...")
+
     local handle = io.popen(cmd)
     if not handle then
+        ngx.log(ngx.ERR, "[OAuth2-DEBUG] Cannot execute curl command")
         return nil, "Cannot execute curl command"
     end
 
-    local http_code = handle:read("*a")
+    local curl_output = handle:read("*a")
     handle:close()
+
+    -- 记录curl的详细输出
+    ngx.log(ngx.INFO, "[OAuth2-DEBUG] ===== Curl Output =====")
+    ngx.log(ngx.INFO, "[OAuth2-DEBUG] Full curl output: ", curl_output)
+
+    -- 提取HTTP状态码（curl输出的最后一行）
+    local http_code = string.match(curl_output, "(%d+)$")
+    ngx.log(ngx.INFO, "[OAuth2-DEBUG] HTTP Status Code: ", http_code or "unknown")
 
     -- 检查HTTP状态码
     if http_code ~= "200" then
+        ngx.log(ngx.ERR, "[OAuth2-DEBUG] OAuth2 request failed with HTTP ", http_code or "unknown")
         os.remove(temp_response_file)
-        return nil, "OAuth2 request failed with HTTP " .. http_code
+        return nil, "OAuth2 request failed with HTTP " .. (http_code or "unknown")
     end
 
     -- 读取响应
     local response_file = io.open(temp_response_file, "r")
     if not response_file then
+        ngx.log(ngx.ERR, "[OAuth2-DEBUG] Cannot read response file: ", temp_response_file)
         os.remove(temp_response_file)
         return nil, "Cannot read response file"
     end
@@ -172,15 +196,35 @@ function _M.get_oauth2_token_via_curl(jwt_assertion)
     response_file:close()
     os.remove(temp_response_file)
 
+    -- 记录响应详细信息
+    ngx.log(ngx.INFO, "[OAuth2-DEBUG] ===== OAuth2 Response =====")
+    ngx.log(ngx.INFO, "[OAuth2-DEBUG] Response Body Length: ", string.len(response_body or ""))
+    ngx.log(ngx.INFO, "[OAuth2-DEBUG] Response Body: ", response_body or "empty")
+
     -- 解析JSON响应
     local ok, token_data = pcall(cjson.decode, response_body)
     if not ok then
+        ngx.log(ngx.ERR, "[OAuth2-DEBUG] Failed to parse JSON response: ", tostring(token_data))
+        ngx.log(ngx.ERR, "[OAuth2-DEBUG] Raw response was: ", response_body or "empty")
         return nil, "Failed to parse OAuth2 response: " .. tostring(token_data)
     end
 
+    ngx.log(ngx.INFO, "[OAuth2-DEBUG] JSON parsing successful")
+
     if not token_data.access_token then
+        ngx.log(ngx.ERR, "[OAuth2-DEBUG] No access_token in response")
+        -- 记录可用字段
+        local fields = {}
+        for k, v in pairs(token_data or {}) do
+            table.insert(fields, k)
+        end
+        ngx.log(ngx.ERR, "[OAuth2-DEBUG] Available fields: ", table.concat(fields, ", "))
         return nil, "No access_token in response"
     end
+
+    ngx.log(ngx.INFO, "[OAuth2-DEBUG] Access token obtained successfully")
+    ngx.log(ngx.INFO, "[OAuth2-DEBUG] Token type: ", token_data.token_type or "unknown")
+    ngx.log(ngx.INFO, "[OAuth2-DEBUG] Expires in: ", token_data.expires_in or "unknown", " seconds")
 
     -- 添加过期时间
     local expires_in = tonumber(token_data.expires_in) or 3600
