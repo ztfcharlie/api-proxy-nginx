@@ -3,6 +3,7 @@ version: '3.8'
 networks:
   api-proxy:
     driver: bridge
+    name: api-proxy-network  # 显式指定网络名称，便于管理
 
 services:
   # OpenResty API Proxy 服务
@@ -10,55 +11,60 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      args:
+        - OPENRESTY_VERSION=alpine-fat  # 构建参数，便于后续版本切换
     container_name: api-proxy-nginx
     hostname: api-proxy-nginx
     ports:
-      - "8888:8080"   # HTTP 端口
-      - "8443:8443"   # HTTPS 端口（如果需要）
+      - "8888:8080"   # HTTP 端口（宿主:容器）
+      - "8443:8443"   # HTTPS 端口（宿主:容器）
     environment:
       - TZ=Asia/Shanghai
       - LANG=C.UTF-8
+      - NGINX_USER=nobody  # 明确 Nginx 运行用户
+      - NGINX_WORKER_PROCESSES=auto  # 自动适配 CPU 核心数
     volumes:
-      # Nginx 配置文件（只读）
+      # Nginx 核心配置（只读，避免容器内修改）
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
-
       # Lua 脚本（只读）
       - ./lua:/etc/nginx/lua:ro
-
-      # 数据目录（读写）
-      - ./data/map:/etc/nginx/data/map:rw
-      - ./data/json:/etc/nginx/data/json:ro
-      - ./data/jwt:/etc/nginx/data/jwt:rw
-
+      # 数据目录（按权限细分，更安全）
+      - ./data/map:/etc/nginx/data/map:rw  # 可写（如动态更新映射）
+      - ./data/json:/etc/nginx/data/json:ro  # 只读（静态配置）
+      - ./data/jwt:/etc/nginx/data/jwt:rw  # 可写（如刷新密钥）
       # 配置文件（只读）
       - ./config:/etc/nginx/config:ro
-
       # 静态文件（只读）
       - ./html:/etc/nginx/html:ro
-
-      # SSL 证书（只读）
+      # SSL 证书（只读，避免泄露）
       - ./ssl:/etc/nginx/ssl:ro
-
-      # 日志目录（读写）
-      - ./nginx-logs:/var/log/nginx
+      # 日志目录（持久化，权限优化）
+      - ./nginx-logs:/var/log/nginx:rw
+      # 临时目录（避免容器内缓存累积）
+      - ./nginx-cache/client_temp:/var/cache/nginx/client_temp:rw
+      - ./nginx-cache/proxy_temp:/var/cache/nginx/proxy_temp:rw
     restart: unless-stopped
     networks:
       - api-proxy
     depends_on:
       api-proxy-redis:
-        condition: service_healthy
+        condition: service_healthy  # 确保 Redis 健康后再启动 Nginx
     healthcheck:
       test: ["CMD-SHELL", "/usr/local/bin/healthcheck.sh"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 40s
+      start_period: 40s  # 适配 Nginx 启动+Lua 模块加载时间
     logging:
       driver: "json-file"
       options:
         max-size: "10m"
         max-file: "3"
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535  # 提高文件描述符限制，适配高并发
 
   # Redis 缓存服务
   api-proxy-redis:
@@ -68,20 +74,24 @@ services:
     ports:
       - "6379:6379"
     volumes:
-      - ./redis-data:/data
+      - ./redis-data:/data:rw  # 数据持久化
+      - ./redis.conf:/etc/redis/redis.conf:ro  # 挂载自定义 Redis 配置（可选）
     command: >
-      redis-server
+      redis-server /etc/redis/redis.conf  # 使用自定义配置（若无则删去路径，用默认）
       --appendonly yes
       --maxmemory 256mb
       --maxmemory-policy allkeys-lru
       --save 900 1
       --save 300 10
       --save 60 10000
+      --requirepass ${REDIS_PASSWORD:-default-redis-pass}  # 环境变量注入密码（更安全）
+    environment:
+      - TZ=Asia/Shanghai
     restart: unless-stopped
     networks:
       - api-proxy
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli ping | grep PONG"]
+      test: ["CMD-SHELL", "redis-cli -a ${REDIS_PASSWORD:-default-redis-pass} ping | grep PONG"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -91,3 +101,5 @@ services:
       options:
         max-size: "5m"
         max-file: "2"
+    sysctls:
+      - net.core.somaxconn=1024  # 提高 Redis 最大连接数
