@@ -13,7 +13,19 @@ RUN apk add --no-cache \
     curl \
     bash \
     tzdata \
+    git \
+    tar \
     && update-ca-certificates
+
+# 安装lua-resty-http模块
+RUN cd /tmp && \
+    curl -L -o lua-resty-http.tar.gz https://github.com/ledgetech/lua-resty-http/archive/refs/tags/v0.16.1.tar.gz && \
+    tar -xzf lua-resty-http.tar.gz && \
+    cd lua-resty-http-* && \
+    mkdir -p /usr/local/openresty/lualib/resty && \
+    cp lib/resty/http.lua /usr/local/openresty/lualib/resty/ && \
+    cp lib/resty/http_headers.lua /usr/local/openresty/lualib/resty/ && \
+    cd /tmp && rm -rf lua-resty-http*
 
 # 设置时区
 ENV TZ=Asia/Shanghai

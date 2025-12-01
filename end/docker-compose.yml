@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # 主要的 API 代理服务
   api-proxy-nginx:
