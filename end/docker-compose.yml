@@ -9,7 +9,7 @@ services:
   api-proxy-nginx:
     build:
       context: .
-      dockerfile: Dockerfile.new
+      dockerfile: Dockerfile
     container_name: api-proxy-nginx
     hostname: api-proxy-nginx
     ports:
