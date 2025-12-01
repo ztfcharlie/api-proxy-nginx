@@ -123,7 +123,7 @@ docker-compose ps
 # 检查健康状态
 echo "Checking health status..."
 for i in {1..30}; do
-    if curl -f http://localhost:8080/health &>/dev/null; then
+    if curl -f http://localhost:8888/health &>/dev/null; then
         echo "✓ API Proxy service is healthy"
         break
     fi
@@ -131,7 +131,7 @@ for i in {1..30}; do
     sleep 2
 done
 
-if ! curl -f http://localhost:8080/health &>/dev/null; then
+if ! curl -f http://localhost:8888/health &>/dev/null; then
     echo "✗ API Proxy service health check failed"
     echo "Checking logs..."
     docker-compose logs api-proxy-nginx
@@ -141,9 +141,9 @@ fi
 echo "✓ All services started successfully!"
 echo ""
 echo "Service URLs:"
-echo "  - API Proxy: http://localhost:8080"
-echo "  - Health Check: http://localhost:8080/health"
-echo "  - Status: http://localhost:8080/status"
+echo "  - API Proxy: http://localhost:8888"
+echo "  - Health Check: http://localhost:8888/health"
+echo "  - Status: http://localhost:8888/status"
 echo "  - Redis: localhost:6379"
 echo ""
 echo "To view logs: docker-compose logs -f"

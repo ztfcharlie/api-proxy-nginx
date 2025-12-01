@@ -36,7 +36,7 @@ docker-compose --profile logging up -d
 docker-compose ps
 
 # 健康检查
-curl http://localhost:8080/health
+curl http://localhost:8888/health
 
 # 或使用脚本检查
 ./scripts/check-services.sh
@@ -60,7 +60,7 @@ docker-compose down -v
 
 ### 服务组件
 
-- **api-proxy-nginx**: 主要的 API 代理服务（端口 8080, 8443）
+- **api-proxy-nginx**: 主要的 API 代理服务（端口 8888→8080, 8443）
 - **redis**: 缓存和会话存储（端口 6379）
 - **fluentd**: 日志聚合服务（可选，端口 24224）
 
@@ -166,19 +166,19 @@ TOKEN_EARLY_REFRESH=300
 ### 健康检查
 
 ```bash
-curl http://localhost:8080/health
+curl http://localhost:8888/health
 ```
 
 ### 状态检查
 
 ```bash
-curl http://localhost:8080/status
+curl http://localhost:8888/status
 ```
 
 ### API 代理请求
 
 ```bash
-curl -X POST http://localhost:8080/v1/projects/PROJECT_ID/locations/global/publishers/google/models/gemini-pro:generateContent \
+curl -X POST http://localhost:8888/v1/projects/PROJECT_ID/locations/global/publishers/google/models/gemini-pro:generateContent \
   -H "Authorization: Bearer your-client-token" \
   -H "Content-Type: application/json" \
   -d '{

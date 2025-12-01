@@ -25,9 +25,9 @@ echo "=== Health Checks ==="
 
 # 检查 API Proxy
 echo -n "API Proxy Health: "
-if curl -f -s http://localhost:8080/health > /dev/null 2>&1; then
+if curl -f -s http://localhost:8888/health > /dev/null 2>&1; then
     echo "✓ Healthy"
-    echo "  Response: $(curl -s http://localhost:8080/health | jq -r '.status // "unknown"')"
+    echo "  Response: $(curl -s http://localhost:8888/health | jq -r '.status // "unknown"')"
 else
     echo "✗ Unhealthy"
 fi
@@ -42,9 +42,9 @@ fi
 
 echo ""
 echo "=== Service URLs ==="
-echo "  - API Proxy: http://localhost:8080"
-echo "  - Health Check: http://localhost:8080/health"
-echo "  - Status: http://localhost:8080/status"
+echo "  - API Proxy: http://localhost:8888"
+echo "  - Health Check: http://localhost:8888/health"
+echo "  - Status: http://localhost:8888/status"
 echo "  - Redis: localhost:6379"
 
 echo ""
