@@ -3,6 +3,7 @@
     {
       "client_token":"gemini-client-key-aaaa",
       "enable":true,
+      "service_type": "google",
       "key_filename_gemini":[
           {
             "key_filename":"hulaoban-202504.json",
@@ -17,9 +18,10 @@
         ]
     },
     {
-      "client_token":"gemini-client-key-bbbb",
-      "enable":false,
-      "key_filename_gemini":[
+        "client_token": "azure-openai-key-bbbb",
+        "service_type": "azure",
+        "enable": false,
+        "key_filename_gemini":[
           {
             "key_filename":"company-vertex-1.json",
             "key_weight":2
@@ -29,17 +31,22 @@
             "key_weight":1
           }
         ]
-    },
-    {
-      "client_token":"gemini-client-key-cccc",
-      "enable":true,
-      "key_filename_gemini":[
+      },
+      {
+        "client_token": "claude-api-key-cccc",
+        "service_type": "anthropic",
+        "enable": true,
+        "key_filename_gemini":[
           {
-            "key_filename":"backup-vertex.json",
+            "key_filename":"company-vertex-1.json",
+            "key_weight":2
+          },
+          {
+            "key_filename":"company-vertex-2.json",
             "key_weight":1
           }
         ]
-    }
+      }
   ],
 
   "key_filename_gemini":[
