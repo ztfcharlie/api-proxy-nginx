@@ -29,7 +29,7 @@ fi
 echo ""
 echo "2. Testing OAuth2 flow without authentication..."
 echo "Making request without Authorization header (should return 401):"
-no_auth_response=$(curl -s -w "%{http_code}" -X POST http://localhost:8888/v1/projects/test/locations/global/publishers/google/models/gemini-pro:generateContent \
+no_auth_response=$(curl -s -w "%{http_code}" -X POST http://localhost:8888/v1/projects/carbide-team-478005-f8/locations/global/publishers/google/models/gemini-2.5-pro:generateContent \
   -H "Content-Type: application/json" \
   -d '{"contents":[{"parts":[{"text":"test"}]}]}')
 no_auth_code="${no_auth_response: -3}"
@@ -45,7 +45,7 @@ echo "3. Testing OAuth2 flow with authentication..."
 echo "Making request with client token (will trigger OAuth2 flow):"
 
 # 启用详细输出以查看OAuth2过程
-curl -v -X POST http://localhost:8888/v1/projects/test/locations/global/publishers/google/models/gemini-pro:generateContent \
+curl -v -X POST http://localhost:8888/v1/projects/carbide-team-478005-f8/locations/global/publishers/google/models/gemini-2.5-pro:generateContent \
   -H "Authorization: Bearer gemini-client-key-aaaa" \
   -H "Content-Type: application/json" \
   -d '{"contents":[{"parts":[{"text":"Hello from curl OAuth2!"}]}]}' 2>&1 | head -20
@@ -64,7 +64,7 @@ docker logs api-proxy-nginx --tail 30 | grep -i error | tail -5 || echo "No rece
 echo ""
 echo "6. Testing token caching (second request)..."
 echo "Making second request to test caching:"
-second_response=$(curl -s -w "%{http_code}" -X POST http://localhost:8888/v1/projects/test/locations/global/publishers/google/models/gemini-pro:generateContent \
+second_response=$(curl -s -w "%{http_code}" -X POST http://localhost:8888/v1/projects/carbide-team-478005-f8/locations/global/publishers/google/models/gemini-2.5-pro:generateContent \
   -H "Authorization: Bearer gemini-client-key-aaaa" \
   -H "Content-Type: application/json" \
   -d '{"contents":[{"parts":[{"text":"cached request test"}]}]}')
