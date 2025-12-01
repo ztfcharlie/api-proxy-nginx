@@ -44,19 +44,15 @@ COPY nginx/conf.d/ /etc/nginx/conf.d/
 # 复制 Lua 模块
 COPY lua/ /etc/nginx/lua/
 
-# 复制配置文件
-COPY config/ /etc/nginx/config/
+# 配置文件将通过挂载卷提供或在启动时创建
 
-# 复制数据文件（如果存在）
-COPY data/ /etc/nginx/data/
+# 数据文件将通过挂载卷提供，这里只创建目录结构
 
 # 复制启动脚本
 COPY start.sh /usr/local/bin/start.sh
 RUN chmod +x /usr/local/bin/start.sh
 
-# 复制测试脚本
-COPY test-api.sh /usr/local/bin/test-api.sh
-RUN chmod +x /usr/local/bin/test-api.sh
+# 测试脚本将在运行时通过挂载卷提供
 
 # 创建 nginx 用户（如果不存在）
 RUN addgroup -g 101 -S nginx 2>/dev/null || true
