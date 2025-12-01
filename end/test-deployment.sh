@@ -80,8 +80,8 @@ echo ""
 echo "=== Network Connectivity Check ==="
 
 # 检查端口是否开放
-test_service "Port 8080 (HTTP)" "nc -z localhost 8080" || {
-    echo -e "${YELLOW}WARNING: Port 8080 is not accessible${NC}"
+test_service "Port 8888 (HTTP)" "nc -z localhost 8888" || {
+    echo -e "${YELLOW}WARNING: Port 8888 is not accessible${NC}"
 }
 
 test_service "Port 6379 (Redis)" "nc -z localhost 6379" || {
@@ -92,13 +92,13 @@ echo ""
 echo "=== API Endpoint Tests ==="
 
 # 测试健康检查端点
-test_url "http://localhost:8080/health" "200" "Health Check Endpoint"
+test_url "http://localhost:8888/health" "200" "Health Check Endpoint"
 
 # 测试状态端点
-test_url "http://localhost:8080/status" "200" "Status Endpoint"
+test_url "http://localhost:8888/status" "200" "Status Endpoint"
 
 # 测试不存在的端点（应该返回 404）
-test_url "http://localhost:8080/nonexistent" "404" "Non-existent Endpoint"
+test_url "http://localhost:8888/nonexistent" "404" "Non-existent Endpoint"
 
 echo ""
 echo "=== Configuration File Check ==="

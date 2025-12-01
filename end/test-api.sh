@@ -7,7 +7,7 @@ set -e
 echo "Testing API Proxy Service..."
 
 # 基本配置
-API_HOST="localhost:8080"
+API_HOST="localhost:8888"
 CLIENT_TOKEN="${CLIENT_TOKEN:-demo-client-token}"
 
 # 颜色定义
