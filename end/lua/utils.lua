@@ -95,21 +95,49 @@ end
 
 -- 提取客户端 Token 从 Authorization 头部
 function _M.extract_client_token()
+    ngx.log(ngx.INFO, "[EXTRACT-DEBUG] ===== Extracting Client Token =====")
+
+    -- 获取所有请求头部用于调试
+    local headers = ngx.req.get_headers()
+    ngx.log(ngx.INFO, "[EXTRACT-DEBUG] All request headers:")
+    for name, value in pairs(headers) do
+        if name:lower() == "authorization" then
+            ngx.log(ngx.INFO, "[EXTRACT-DEBUG]   ", name, ": ", value)
+        else
+            ngx.log(ngx.INFO, "[EXTRACT-DEBUG]   ", name, ": ", _M.truncate_string(tostring(value), 100))
+        end
+    end
+
     local auth_header = ngx.var.http_authorization
+    ngx.log(ngx.INFO, "[EXTRACT-DEBUG] Authorization header from ngx.var: ", auth_header or "nil")
+
+    -- 也尝试从请求头部直接获取
+    local auth_header_direct = ngx.req.get_headers()["Authorization"] or ngx.req.get_headers()["authorization"]
+    ngx.log(ngx.INFO, "[EXTRACT-DEBUG] Authorization header direct: ", auth_header_direct or "nil")
+
+    -- 使用可用的头部
+    auth_header = auth_header or auth_header_direct
+
     if not auth_header then
+        ngx.log(ngx.ERR, "[EXTRACT-DEBUG] Missing Authorization header")
         return nil, "Missing Authorization header"
     end
+
+    ngx.log(ngx.INFO, "[EXTRACT-DEBUG] Found Authorization header: ", auth_header)
+    ngx.log(ngx.INFO, "[EXTRACT-DEBUG] Authorization header length: ", string.len(auth_header))
 
     -- 匹配 Bearer token 格式
     local client_token = auth_header:match("^Bearer%s+(.+)$")
     if not client_token then
+        ngx.log(ngx.ERR, "[EXTRACT-DEBUG] Invalid Authorization header format")
+        ngx.log(ngx.ERR, "[EXTRACT-DEBUG] Expected format: 'Bearer <token>'")
+        ngx.log(ngx.ERR, "[EXTRACT-DEBUG] Actual format: ", auth_header)
         return nil, "Invalid Authorization header format"
     end
 
-    if config.should_test_output("request_headers") then
-        ngx.log(ngx.INFO, "[TEST] Original Authorization: ", auth_header)
-        ngx.log(ngx.INFO, "[TEST] Extracted client token: ", client_token)
-    end
+    ngx.log(ngx.INFO, "[EXTRACT-DEBUG] Successfully extracted client token: ", client_token)
+    ngx.log(ngx.INFO, "[EXTRACT-DEBUG] Client token length: ", string.len(client_token))
+    ngx.log(ngx.INFO, "[EXTRACT-DEBUG] ===== Client Token Extraction Complete =====")
 
     return client_token
 end
