@@ -16,7 +16,7 @@ services:
       - ./config/app_config.json:/usr/local/openresty/nginx/config/app_config.json:ro
       - ./nginx/conf.d:/usr/local/openresty/nginx/conf/conf.d/
       - ./nginx/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
-      - ./lua:/usr/local/openresty/lualib/
+      - ./lua:/usr/local/openresty/lua/
       - ./data:/usr/local/openresty/nginx/data/
       # 日志挂载
       - ./logs:/var/log/nginx
