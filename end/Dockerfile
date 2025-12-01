@@ -1,6 +1,6 @@
 # 使用 OpenResty Alpine Fat 镜像，包含更多预装模块
-#FROM openresty/openresty:alpine-fat
-FROM openresty/openresty:1.27.1.2-0-jammy
+FROM openresty/openresty:alpine-fat
+#FROM openresty/openresty:1.27.1.2-0-jammy
 
 # 设置维护者信息
 LABEL maintainer="API Proxy Service"
