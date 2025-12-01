@@ -37,17 +37,6 @@ RUN chown -R nobody:nobody \
     /var/cache/nginx \
     /tmp/nginx
 
-# 复制 nginx 配置文件
-COPY nginx/nginx.conf /usr/local/openresty/nginx/conf/nginx.conf
-COPY nginx/conf.d/ /usr/local/openresty/nginx/conf/conf.d/
-
-# 复制 Lua 模块
-COPY lua/ /usr/local/openresty/nginx/lua/
-
-# 配置文件将通过挂载卷提供或在启动时创建
-
-# 数据文件将通过挂载卷提供，这里只创建目录结构
-
 # 复制启动脚本
 COPY start.sh /usr/local/bin/start.sh
 RUN chmod +x /usr/local/bin/start.sh
