@@ -13,6 +13,7 @@ services:
       - "8443:8443"   # HTTPS 端口（如果启用）
     volumes:
       # 配置文件挂载
+      - ./config/app_config.json:/usr/local/openresty/nginx/config/app_config.json:ro
       - ./nginx/conf.d:/usr/local/openresty/nginx/conf/conf.d/
       - ./nginx/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
       - ./lua:/usr/local/openresty/lualib/
