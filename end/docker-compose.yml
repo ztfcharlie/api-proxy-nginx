@@ -47,8 +47,6 @@ services:
       # 令牌刷新配置
       - TOKEN_REFRESH_INTERVAL=3000
       - TOKEN_EARLY_REFRESH=300
-    depends_on:
-      - redis
     networks:
       - api-proxy-network
     healthcheck:
@@ -60,59 +58,6 @@ services:
     labels:
       - "com.api-proxy.service=nginx"
       - "com.api-proxy.version=1.0.0"
-
-  # Redis 缓存服务
-  redis:
-    image: redis:7-alpine
-    container_name: api-proxy-redis
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
-    volumes:
-      - ./redis-data:/data
-      - ./redis/redis.conf:/etc/redis/redis.conf:ro
-    command: >
-      sh -c "
-        if [ -f /etc/redis/redis.conf ]; then
-          redis-server /etc/redis/redis.conf
-        else
-          redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
-        fi
-      "
-    environment:
-      - TZ=Asia/Shanghai
-    networks:
-      - api-proxy-network
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 5s
-    labels:
-      - "com.api-proxy.service=redis"
-
-  # 日志聚合服务（可选，使用 profile 控制）
-  fluentd:
-    image: fluent/fluentd:v1.16-debian-1
-    container_name: api-proxy-fluentd
-    restart: unless-stopped
-    ports:
-      - "24224:24224"
-      - "24224:24224/udp"
-    volumes:
-      - ./fluentd/conf:/fluentd/etc:ro
-      - ./logs:/var/log/nginx:ro
-      - ./fluentd-data:/var/log/fluentd
-    environment:
-      - FLUENTD_CONF=fluent.conf
-      - TZ=Asia/Shanghai
-    networks:
-      - api-proxy-network
-    profiles:
-      - logging
-    labels:
-      - "com.api-proxy.service=fluentd"
 
 # 网络配置
 networks:
