@@ -162,15 +162,15 @@ echo ""
 echo "=== Test Summary ==="
 
 # 获取服务状态
-if curl -f -s http://localhost:8080/health > /dev/null 2>&1; then
+if curl -f -s http://localhost:8888/health > /dev/null 2>&1; then
     echo -e "Overall Status: ${GREEN}✓ HEALTHY${NC}"
     echo ""
     echo "Service is ready for use!"
     echo ""
     echo "Available endpoints:"
-    echo "  - Health Check: http://localhost:8080/health"
-    echo "  - Status: http://localhost:8080/status"
-    echo "  - API Proxy: http://localhost:8080/v1/projects/.../models/..."
+    echo "  - Health Check: http://localhost:8888/health"
+    echo "  - Status: http://localhost:8888/status"
+    echo "  - API Proxy: http://localhost:8888/v1/projects/.../models/..."
     echo ""
     echo "To test API proxy, you need to:"
     echo "1. Add your Google service account JSON files to data/json/"
