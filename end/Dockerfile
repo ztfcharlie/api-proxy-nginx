@@ -51,7 +51,7 @@ RUN chown -R nobody:nobody \
     /tmp/nginx
 
 # 复制启动脚本
-COPY start.sh /usr/local/bin/start.sh
+COPY scripts/start.sh /usr/local/bin/start.sh
 RUN chmod +x /usr/local/bin/start.sh
 
 # 测试脚本将在运行时通过挂载卷提供
