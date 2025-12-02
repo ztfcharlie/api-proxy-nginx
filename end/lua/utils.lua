@@ -50,7 +50,8 @@ function _M.clean_response_headers()
         "x-goog-gapi-key",
         "server",
         "x-content-type-options",
-        "x-frame-options"
+        "x-frame-options",
+        "content-disposition"  -- 移除这个头部，防止客户端将流式响应视为文件下载
     }
 
     for _, header in ipairs(response_headers_to_remove) do

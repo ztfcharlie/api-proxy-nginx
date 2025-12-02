@@ -55,9 +55,6 @@ function _M.handle_streaming_response()
         -- 实时转发数据块，不进行缓冲
         ngx.arg[1] = chunk
 
-        -- 立即刷新输出缓冲区，确保客户端能立即收到数据
-        ngx.flush(true)
-
         if config.should_log("debug") then
             ngx.log(ngx.DEBUG, "[STREAM] Forwarding chunk of size: ", #chunk)
         end
@@ -65,9 +62,6 @@ function _M.handle_streaming_response()
 
     -- 如果是流结束
     if eof then
-        -- 确保最后的数据也被刷新
-        ngx.flush(true)
-
         if config.should_log("info") then
             ngx.log(ngx.INFO, "[STREAM] Stream ended for request: ", ngx.var.request_id)
         end
@@ -76,6 +70,9 @@ end
 
 -- 设置流式响应头部
 function _M.set_streaming_headers()
+    -- 明确移除可能导致问题的头部
+    ngx.header["Content-Disposition"] = nil
+
     -- 设置流式响应相关头部
     ngx.header["Cache-Control"] = "no-cache, no-store, must-revalidate"
     ngx.header["Pragma"] = "no-cache"
