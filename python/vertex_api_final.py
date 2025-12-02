@@ -24,7 +24,10 @@ class VertexAPIFinal:
             "gemini-3-pro-preview": "global",
             "gemini-1.5-pro": "global",  # Based on your example
             "gemini-2.5-pro": "global",  # Based on your example
-            "gemini-embedding-001": "us-central1"  # Regional model
+            "gemini-embedding-001": "us-central1",  # Regional model
+            "veo-3.1-generate-preview": "global",  # Video generation model
+            "veo-2": "global",  # Video generation model
+            "veo-3": "global"  # Video generation model
         }
 
         self.auth = GoogleAuthenticator("geminiJson", enable_persistent_cache=True)
@@ -243,6 +246,102 @@ class VertexAPIFinal:
             print(f"[ERROR] Request exception: {e}")
             return None
 
+    def generate_video(self, model_name, prompt, video_config=None):
+        """
+        Generate video using Veo models.
+
+        Args:
+            model_name: Veo model name (e.g., "veo-3.1-generate-preview", "veo-2", "veo-3")
+            prompt: Text prompt for video generation
+            video_config: Video configuration parameters
+        """
+        print(f"\n*** Generating Video with {model_name} ***")
+        print("=" * 60)
+
+        # Build endpoint for video generation
+        endpoint, region = self._build_endpoint(model_name, "predict")
+
+        # Get authentication token
+        token = self._get_access_token()
+
+        headers = {
+            "Authorization": f"Bearer {token}",
+            "Content-Type": "application/json"
+        }
+
+        # Default video configuration
+        default_config = {
+            "duration": "5s",  # Video duration
+            "aspectRatio": "16:9",  # Aspect ratio
+            "quality": "high",  # Video quality
+            "fps": 24  # Frames per second
+        }
+
+        if video_config:
+            default_config.update(video_config)
+
+        # Prepare payload for video generation
+        payload = {
+            "instances": [{
+                "prompt": prompt,
+                "videoConfig": default_config
+            }],
+            "parameters": {
+                "sampleCount": 1  # Number of videos to generate
+            }
+        }
+
+        print(f"[REQUEST] Model: {model_name}")
+        print(f"[REQUEST] Region: {region}")
+        print(f"[REQUEST] Method: predict")
+        print(f"[REQUEST] Endpoint: {endpoint}")
+        print(f"[REQUEST] Video Config: {json.dumps(default_config, indent=2)}")
+        print(f"[REQUEST] Prompt: {prompt}")
+
+        try:
+            response = requests.post(endpoint, headers=headers, json=payload, timeout=120)  # Longer timeout for video
+
+            print(f"\n[RESPONSE] Status: {response.status_code}")
+
+            if response.status_code == 200:
+                result = response.json()
+                print(f"[SUCCESS] Video generation request submitted")
+
+                # Extract video generation results
+                if 'predictions' in result and result['predictions']:
+                    prediction = result['predictions'][0]
+
+                    print(f"\n[VIDEO GENERATION RESULT]:")
+                    print("=" * 50)
+
+                    # Check for video URL or generation status
+                    if 'videoUri' in prediction:
+                        video_uri = prediction['videoUri']
+                        print(f"[VIDEO_URI] {video_uri}")
+
+                    if 'status' in prediction:
+                        status = prediction['status']
+                        print(f"[STATUS] {status}")
+
+                    if 'generationId' in prediction:
+                        generation_id = prediction['generationId']
+                        print(f"[GENERATION_ID] {generation_id}")
+                        print(f"[INFO] Use this ID to check generation status")
+
+                    # Print full response for debugging
+                    print(f"\n[FULL_RESPONSE]:")
+                    print(json.dumps(result, indent=2, ensure_ascii=False))
+
+                return result
+            else:
+                print(f"[ERROR] Video generation failed: {response.status_code}")
+                print(f"[ERROR] Response: {response.text}")
+                return None
+
+        except Exception as e:
+            print(f"[ERROR] Video generation exception: {e}")
+            return None
+
 
 def streaming_example():
     """独立的流式请求示例 - 可以单独调用"""
@@ -458,7 +557,29 @@ def test_vertex_api_final():
         else:
             print(f"[FAILED] Embeddings test failed")
 
-        total_tests = len(models_to_test) + 1
+        # Test Veo video generation
+        print(f"\n{'='*70}")
+        print("Testing veo-3.1-generate-preview (Video Generation)")
+        print('='*70)
+
+        video_result = client.generate_video(
+            model_name="veo-3.1-generate-preview",
+            prompt="A beautiful sunset over the ocean with gentle waves",
+            video_config={
+                "duration": "5s",
+                "aspectRatio": "16:9",
+                "quality": "high",
+                "fps": 24
+            }
+        )
+
+        if video_result:
+            print(f"[SUCCESS] Veo video generation test passed")
+            success_count += 1
+        else:
+            print(f"[FAILED] Veo video generation test failed")
+
+        total_tests = len(models_to_test) + 2  # +1 for embeddings, +1 for video
         print(f"\n[SUMMARY] {success_count}/{total_tests} tests passed")
 
         return success_count > 0
@@ -483,7 +604,10 @@ def show_endpoint_examples():
     global_examples = [
         ("gemini-3-pro-preview", "generateContent"),
         ("gemini-1.5-pro", "generateContent"),
-        ("gemini-2.5-pro", "streamGenerateContent?alt=sse")
+        ("gemini-2.5-pro", "streamGenerateContent?alt=sse"),
+        ("veo-3.1-generate-preview", "predict"),
+        ("veo-3", "predict"),
+        ("veo-2", "predict")
     ]
 
     for model, method in global_examples:
