@@ -33,63 +33,32 @@
           "domain": "us-central1-aiplatform.googleapis.com"
         },
         {
-          "model":"gemini-2.5-pro",
-          "domain": "aiplatform.googleapis.com"
-        },
-        {
           "model":"gemini-3-pro-preview",
           "domain": "aiplatform.googleapis.com"
         },
         {
-          "model":"gemini-pro",
-          "domain": "aiplatform.googleapis.com"
+          "model":"veo-3.0-generate-001",
+          "domain": "us-central1-aiplatform.googleapis.com"
+        },
+        {
+          "model":"veo-3.0-fast-generate-001",
+          "domain": "us-central1-aiplatform.googleapis.com"
+        },
+        {
+          "model":"veo-3.0-generate-001",
+          "domain": "us-central1-aiplatform.googleapis.com"
+        },
+        {
+          "model":"veo-3.0-fast-generate-001",
+          "domain": "us-central1-aiplatform.googleapis.com"
         },
         {
           "model":"veo-3.1-generate-preview",
           "domain": "us-central1-aiplatform.googleapis.com"
         },
         {
-          "model":"veo-3.1-fast-generate-preview",
+          "model":" veo-3.1-fast-generate-preview",
           "domain": "us-central1-aiplatform.googleapis.com"
-        }
-      ]
-    },
-    {
-      "key_filename":"company-vertex-1.json",
-      "models":[
-        {
-          "model":"gemini-embedding-001",
-          "domain": "us-central1-aiplatform.googleapis.com"
-        },
-        {
-          "model":"gemini-2.5-pro",
-          "domain": "aiplatform.googleapis.com"
-        },
-        {
-          "model":"gemini-3-pro-preview",
-          "domain": "aiplatform.googleapis.com"
-        }
-      ]
-    },
-    {
-      "key_filename":"company-vertex-2.json",
-      "models":[
-        {
-          "model":"gemini-embedding-001",
-          "domain": "us-central1-aiplatform.googleapis.com"
-        },
-        {
-          "model":"gemini-2.5-pro",
-          "domain": "aiplatform.googleapis.com"
-        }
-      ]
-    },
-    {
-      "key_filename":"backup-vertex.json",
-      "models":[
-        {
-          "model":"gemini-pro",
-          "domain": "aiplatform.googleapis.com"
         }
       ]
     }

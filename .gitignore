@@ -72,5 +72,6 @@ secrets.lua
 *.lnk
 *.url
 
+end/data/map/*.json
 end/data/json/*.json
 end/data/jwt/*.json
