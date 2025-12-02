@@ -130,10 +130,39 @@ class VertexAPIFinal:
             if response.status_code == 200:
                 if streaming:
                     print(f"[SUCCESS] Streaming response initiated")
+                    print(f"[STREAM] Processing streaming data...")
+                    print("=" * 50)
+
                     # Handle streaming response
+                    full_response = ""
                     for line in response.iter_lines():
                         if line:
-                            print(f"[STREAM] {line.decode('utf-8')}")
+                            line_text = line.decode('utf-8')
+                            print(f"[RAW] {line_text}")
+
+                            # Parse SSE data
+                            if line_text.startswith('data: '):
+                                try:
+                                    json_data = line_text[6:]  # Remove 'data: ' prefix
+                                    if json_data.strip() and json_data != '[DONE]':
+                                        chunk_data = json.loads(json_data)
+
+                                        # Extract content from chunk
+                                        if 'candidates' in chunk_data and chunk_data['candidates']:
+                                            candidate = chunk_data['candidates'][0]
+                                            if 'content' in candidate and 'parts' in candidate['content']:
+                                                for part in candidate['content']['parts']:
+                                                    if 'text' in part:
+                                                        chunk_text = part['text']
+                                                        print(f"[CHUNK] {chunk_text}", end='', flush=True)
+                                                        full_response += chunk_text
+                                except json.JSONDecodeError as e:
+                                    print(f"[JSON_ERROR] Failed to parse: {json_data[:100]}...")
+
+                    print(f"\n\n[COMPLETE_RESPONSE]:")
+                    print("=" * 50)
+                    print(full_response)
+                    return {"streaming_response": full_response}
                 else:
                     result = response.json()
                     print(f"[SUCCESS] Non-streaming response received")
@@ -213,6 +242,150 @@ class VertexAPIFinal:
         except Exception as e:
             print(f"[ERROR] Request exception: {e}")
             return None
+
+
+def streaming_example():
+    """独立的流式请求示例 - 可以单独调用"""
+    print("*** 独立流式请求示例 ***")
+    print("=" * 50)
+
+    # 查找服务账户文件
+    service_account_file = None
+    gemini_dir = Path("geminiJson")
+
+    for filename in ["service-account.json", "service-account-aaa.json"]:
+        if (gemini_dir / filename).exists():
+            service_account_file = filename
+            break
+
+    if not service_account_file:
+        print("[ERROR] 未找到服务账户文件")
+        print("请确保在 geminiJson/ 目录下有有效的服务账户 JSON 文件")
+        return
+
+    try:
+        # 创建客户端
+        client = VertexAPIFinal(
+            service_account_file=service_account_file,
+            project_id="carbide-team-478005-f8"
+        )
+
+        # 示例1: 简单的流式对话
+        print(f"\n{'='*60}")
+        print("示例1: 简单流式对话")
+        print('='*60)
+
+        result1 = client.generate_content(
+            model_name="gemini-3-pro-preview",
+            prompt="你好！请简单介绍一下你自己。",
+            streaming=True
+        )
+
+        # 示例2: 代码生成流式请求
+        print(f"\n{'='*60}")
+        print("示例2: 代码生成流式请求")
+        print('='*60)
+
+        code_prompt = """请用Python写一个简单的计算器类，包含以下功能：
+1. 加法
+2. 减法
+3. 乘法
+4. 除法
+请包含错误处理。"""
+
+        result2 = client.generate_content(
+            model_name="gemini-3-pro-preview",
+            prompt=code_prompt,
+            streaming=True
+        )
+
+        # 示例3: 长文本生成流式请求
+        print(f"\n{'='*60}")
+        print("示例3: 长文本生成流式请求")
+        print('='*60)
+
+        long_prompt = """请写一篇关于机器学习在医疗领域应用的文章，包括：
+1. 引言
+2. 主要应用领域（至少3个）
+3. 技术挑战
+4. 未来展望
+5. 结论
+
+文章应该有逻辑性，每个部分都要详细说明。"""
+
+        result3 = client.generate_content(
+            model_name="gemini-3-pro-preview",
+            prompt=long_prompt,
+            streaming=True
+        )
+
+        print(f"\n[INFO] 流式请求示例完成！")
+
+    except Exception as e:
+        print(f"[ERROR] 示例执行失败: {e}")
+
+
+def test_streaming_gemini_3_pro_preview():
+    """专门测试 Gemini-3-Pro-Preview 模型的流式请求示例"""
+    print("*** Gemini-3-Pro-Preview 流式请求示例 ***")
+    print("=" * 60)
+
+    # 查找服务账户文件
+    service_account_file = None
+    gemini_dir = Path("geminiJson")
+
+    for filename in ["service-account.json", "service-account-aaa.json"]:
+        if (gemini_dir / filename).exists():
+            service_account_file = filename
+            break
+
+    if not service_account_file:
+        print("[ERROR] 未找到服务账户文件")
+        return False
+
+    print(f"[INFO] 使用服务账户: {service_account_file}")
+
+    try:
+        client = VertexAPIFinal(
+            service_account_file=service_account_file,
+            project_id="carbide-team-478005-f8"
+        )
+
+        # 流式请求示例
+        print(f"\n{'='*70}")
+        print("流式请求 Gemini-3-Pro-Preview 模型")
+        print('='*70)
+
+        # 测试提示词
+        test_prompt = """请写一个关于人工智能发展历程的简短介绍，包括以下几个要点：
+1. 人工智能的起源
+2. 重要的发展里程碑
+3. 当前的应用领域
+4. 未来的发展趋势
+
+请用中文回答，大约200-300字。"""
+
+        print(f"[PROMPT] {test_prompt}")
+        print("\n[开始流式响应]")
+        print("=" * 50)
+
+        # 执行流式请求
+        result = client.generate_content(
+            model_name="gemini-3-pro-preview",
+            prompt=test_prompt,
+            streaming=True
+        )
+
+        if result:
+            print(f"\n[SUCCESS] 流式请求成功完成")
+            return True
+        else:
+            print(f"\n[FAILED] 流式请求失败")
+            return False
+
+    except Exception as e:
+        print(f"[ERROR] 流式请求异常: {e}")
+        return False
 
 
 def test_vertex_api_final():
@@ -335,11 +508,34 @@ if __name__ == "__main__":
 
     show_endpoint_examples()
 
-    success = test_vertex_api_final()
+    # 首先测试流式请求示例
+    print(f"\n{'='*80}")
+    print("流式请求示例测试")
+    print('='*80)
 
-    if success:
-        print(f"\n[SUCCESS] Implementation matches your code analysis!")
+    streaming_success = test_streaming_gemini_3_pro_preview()
+
+    # 然后测试常规功能
+    print(f"\n{'='*80}")
+    print("常规功能测试")
+    print('='*80)
+
+    regular_success = test_vertex_api_final()
+
+    # 总结结果
+    print(f"\n{'='*80}")
+    print("测试结果总结")
+    print('='*80)
+
+    if streaming_success:
+        print(f"[SUCCESS] 流式请求测试通过!")
     else:
-        print(f"\n[INFO] Implementation ready, needs valid service account")
+        print(f"[INFO] 流式请求测试需要有效的服务账户")
 
-    exit(0 if success else 1)
+    if regular_success:
+        print(f"[SUCCESS] 常规功能测试通过!")
+    else:
+        print(f"[INFO] 常规功能测试需要有效的服务账户")
+
+    overall_success = streaming_success or regular_success
+    exit(0 if overall_success else 1)

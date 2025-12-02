@@ -124,8 +124,8 @@ function _M.handle_streaming_response()
     -- [调试侦听] 记录 Google 返回的原始数据块
     if chunk and #chunk > 0 then
         -- 使用 truncate_string 防止日志过长，但保留足够长度以看清格式
-        -- 注意：这里使用 INFO 级别确保一定能看到日志
-        ngx.log(ngx.INFO, "[RAW-STREAM-DEBUG] Chunk received (len=" .. #chunk .. "): " .. utils.truncate_string(chunk, 500))
+        -- 注意：这里使用 ERR 级别确保一定能看到日志，同时加上请求ID
+        ngx.log(ngx.ERR, "[RAW-STREAM-DEBUG][" .. tostring(ngx.var.request_id) .. "] Chunk received (len=" .. #chunk .. "): " .. utils.truncate_string(chunk, 500))
     end
 
     -- 如果不是 SSE 模式，直接透传，不做任何处理
