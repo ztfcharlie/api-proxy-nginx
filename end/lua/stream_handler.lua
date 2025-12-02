@@ -121,6 +121,13 @@ function _M.handle_streaming_response()
     local chunk = ngx.arg[1]
     local eof = ngx.arg[2]
 
+    -- [调试侦听] 记录 Google 返回的原始数据块
+    if chunk and #chunk > 0 then
+        -- 使用 truncate_string 防止日志过长，但保留足够长度以看清格式
+        -- 注意：这里使用 INFO 级别确保一定能看到日志
+        ngx.log(ngx.INFO, "[RAW-STREAM-DEBUG] Chunk received (len=" .. #chunk .. "): " .. utils.truncate_string(chunk, 500))
+    end
+
     -- 如果不是 SSE 模式，直接透传，不做任何处理
     if not ngx.ctx.is_sse_mode then
         if config.should_log("debug") and chunk then
@@ -129,8 +136,9 @@ function _M.handle_streaming_response()
         return
     end
 
-    -- SSE 转换逻辑
+    -- SSE 转换逻辑 (目前已被禁用，is_sse_mode 恒为 false)
     if chunk and #chunk > 0 then
+        -- ... (原有代码保持不变)
         -- 清空原始 chunk，我们将手动替换输出
         ngx.arg[1] = nil
         
@@ -151,8 +159,6 @@ function _M.handle_streaming_response()
             -- 检查是否到达流结尾 ']'
             if buffer:match("^%s*%]") then
                 buffer = "" -- 结束
-                -- 可选：发送 [DONE] 事件，如果客户端需要兼容 OpenAI 格式
-                -- output_data = output_data .. "data: [DONE]\n\n" 
                 break
             end
             
@@ -172,9 +178,8 @@ function _M.handle_streaming_response()
                     break
                 end
             else
-                -- 如果遇到非期望字符（且不是空字符串），可能是格式错误或换行符，简单跳过或保留
+                -- 如果遇到非期望字符（且不是空字符串）
                 if #buffer > 0 and not buffer:match("^%s+$") then
-                     -- 可能是乱序或非 JSON 数据，暂时保留等待更多数据
                      break
                 else
                     buffer = "" -- 只是空白
