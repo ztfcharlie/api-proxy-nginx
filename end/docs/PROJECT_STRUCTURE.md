@@ -77,38 +77,6 @@ D:\www\nginxzhuanfa\end\      # 项目根目录
 - **config/app_config.json**: 应用运行时配置
 - **data/map/map-config.json**: 客户端到服务账号的映射配置
 
-### 管理脚本
-
-- **scripts/start-services.sh**: 一键启动所有服务
-- **scripts/stop-services.sh**: 停止服务和清理
-- **scripts/check-services.sh**: 检查服务状态和健康度
-- **test-deployment.sh**: 部署后的完整测试
-
-## 依赖关系
-
-### Lua 模块依赖
-
-```
-cjson          # JSON 处理
-resty.http     # HTTP 客户端
-ngx.*          # OpenResty 内置模块
-```
-
-### 系统依赖
-
-```
-OpenSSL        # JWT 签名
-ca-certificates # SSL 证书验证
-curl           # 健康检查
-bash           # 脚本执行
-```
-
-### 服务依赖
-
-```
-Redis          # 缓存和会话存储
-Fluentd        # 日志聚合（可选）
-```
 
 ## 数据流
 
