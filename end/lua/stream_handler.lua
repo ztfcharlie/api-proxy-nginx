@@ -80,40 +80,8 @@ function _M.set_streaming_headers()
     ngx.header["Connection"] = "keep-alive"
     ngx.header["X-Accel-Buffering"] = "no"
 
-    -- 检测是否为 SSE 格式请求
-    local uri = ngx.var.request_uri
-    local accept_header = ngx.var.http_accept
-    local is_sse = false
-
-    -- 检查URL中是否包含 alt=sse 参数
-    if uri and uri:match("alt=sse") then
-        is_sse = true
-    end
-
-    -- 检查Accept头部
-    if accept_header and accept_header:match("text/event%-stream") then
-        is_sse = true
-    end
-
-    -- 如果是 SSE 格式，设置相应头部
-    if is_sse then
-        ngx.header["Content-Type"] = "text/event-stream; charset=utf-8"
-        ngx.header["Access-Control-Allow-Origin"] = "*"
-        ngx.header["Access-Control-Allow-Headers"] = "Cache-Control, Content-Type, Authorization"
-        ngx.header["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
-
-        if config.should_log("info") then
-            ngx.log(ngx.INFO, "[STREAM] Set SSE headers for request: ", ngx.var.request_id)
-        end
-    else
-        -- 对于非SSE的流式请求，设置适当的Content-Type
-        if not ngx.header["Content-Type"] then
-            ngx.header["Content-Type"] = "application/json; charset=utf-8"
-        end
-
-        if config.should_log("info") then
-            ngx.log(ngx.INFO, "[STREAM] Set streaming headers for request: ", ngx.var.request_id)
-        end
+    if config.should_log("info") then
+        ngx.log(ngx.INFO, "[STREAM] Set streaming headers for request: ", ngx.var.request_id)
     end
 end
 
