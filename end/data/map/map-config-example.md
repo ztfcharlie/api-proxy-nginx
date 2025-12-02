@@ -9,6 +9,12 @@
             "key_filename":"hulaoban-202504.json",
             "key_weight":1
           }
+        ],
+      "key_filename_claude":[
+          {
+            "key_filename":"claude-hulaoban-202504.json",
+            "key_weight":1
+          }
         ]
     },
     {
@@ -21,7 +27,37 @@
             "key_weight":1
           }
         ]
-    }
+    },
+    {
+        "client_token": "azure-openai-key-bbbb",
+        "service_type": "azure",
+        "enable": false,
+        "key_filename_gemini":[
+          {
+            "key_filename":"company-vertex-1.json",
+            "key_weight":2
+          },
+          {
+            "key_filename":"company-vertex-2.json",
+            "key_weight":1
+          }
+        ]
+      },
+      {
+        "client_token": "claude-api-key-cccc",
+        "service_type": "anthropic",
+        "enable": true,
+        "key_filename_gemini":[
+          {
+            "key_filename":"company-vertex-1.json",
+            "key_weight":2
+          },
+          {
+            "key_filename":"company-vertex-2.json",
+            "key_weight":1
+          }
+        ]
+      }
   ],
 
   "key_filename_gemini":[
@@ -95,6 +131,22 @@
     }
   ],
   "key_filename_claude":[
-    
+    {
+      "key_filename":"claude-hulaoban-202504.json",
+      "models":[
+        {
+          "model":"claude-haiku-4-5-20251001",
+          "domain": "aaa.claude.com"
+        },
+        {
+          "model":"claude-opus-4-20250514-thinking",
+          "domain": "bbb.claude.com"
+        },
+        {
+          "model":"claude-opus-4-5-20251101",
+          "domain": "bbb.claude.com"
+        }
+      ]
+    }
   ]
 }
