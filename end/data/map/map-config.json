@@ -57,7 +57,7 @@
           "domain": "us-central1-aiplatform.googleapis.com"
         },
         {
-          "model":" veo-3.1-fast-generate-preview",
+          "model":"veo-3.1-fast-generate-preview",
           "domain": "us-central1-aiplatform.googleapis.com"
         }
       ]
