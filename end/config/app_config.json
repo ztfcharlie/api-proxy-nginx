@@ -1,6 +1,6 @@
 {
   "log_level": "info",
-  "debug_mode": true,
+  "debug_mode": false,
   "test_output": {
     "enabled": true,
     "request_headers": true,
