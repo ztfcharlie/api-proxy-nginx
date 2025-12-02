@@ -18,6 +18,17 @@
         ]
     },
     {
+      "client_token":"gemini-client-key-hulaoban",
+      "enable":true,
+      "service_type": "google",
+      "key_filename_gemini":[
+          {
+            "key_filename":"hulaoban-202504.json",
+            "key_weight":1
+          }
+        ]
+    },
+    {
         "client_token": "azure-openai-key-bbbb",
         "service_type": "azure",
         "enable": false,
