@@ -16,8 +16,11 @@ function _M.detect_streaming_request()
     local is_sse_param = uri and uri:match("alt=sse")
     local is_sse_accept = accept_header and accept_header:match("text/event%-stream")
     
+    -- [修改] 强制禁用 SSE 模式转换
+    -- 我们现在选择“透传”策略，即使客户端请求 SSE，我们也原样返回 Google 的 JSON
+    -- 这样可以避免 Lua 解析错误，但要求客户端能处理 application/json 类型的流
     if is_sse_param or is_sse_accept then
-        ngx.ctx.is_sse_mode = true
+        ngx.ctx.is_sse_mode = false -- 强制设为 false
     end
 
     -- 检查请求体中的 stream 参数
