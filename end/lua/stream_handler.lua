@@ -45,6 +45,16 @@ end
 
 -- 设置流式响应头部
 function _M.set_streaming_headers()
+    -- 检查上游是否返回了压缩数据
+    local content_encoding = ngx.header["Content-Encoding"]
+    if content_encoding and content_encoding ~= "" then
+        if config.should_log("warn") then
+            ngx.log(ngx.WARN, "[STREAM] Upstream returned compressed data (", content_encoding, "), disabling SSE conversion.")
+        end
+        -- 强制禁用 SSE 模式，因为我们无法处理压缩的 Body
+        ngx.ctx.is_sse_mode = false
+    end
+
     -- 移除可能导致问题的头部
     ngx.header["Content-Disposition"] = nil
 
