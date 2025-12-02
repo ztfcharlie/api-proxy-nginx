@@ -13,6 +13,9 @@ directories=(
     "data"
     "config"
     "redis"
+    "data/json"
+    "data/jwt"
+    "data/map"
 )
 
 # 创建目录
