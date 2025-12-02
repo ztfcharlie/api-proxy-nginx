@@ -46,8 +46,17 @@ function _M.handle_streaming_response()
 
     -- 如果是数据块，直接转发
     if chunk and #chunk > 0 then
+        -- 对于SSE格式，确保数据格式正确
+        local uri = ngx.var.request_uri
+        if uri and uri:match("alt=sse") then
+            chunk = _M.process_sse_data(chunk)
+        end
+
         -- 实时转发数据块，不进行缓冲
         ngx.arg[1] = chunk
+
+        -- 立即刷新输出缓冲区，确保客户端能立即收到数据
+        ngx.flush(true)
 
         if config.should_log("debug") then
             ngx.log(ngx.DEBUG, "[STREAM] Forwarding chunk of size: ", #chunk)
@@ -56,6 +65,9 @@ function _M.handle_streaming_response()
 
     -- 如果是流结束
     if eof then
+        -- 确保最后的数据也被刷新
+        ngx.flush(true)
+
         if config.should_log("info") then
             ngx.log(ngx.INFO, "[STREAM] Stream ended for request: ", ngx.var.request_id)
         end
@@ -65,20 +77,46 @@ end
 -- 设置流式响应头部
 function _M.set_streaming_headers()
     -- 设置流式响应相关头部
-    ngx.header["Cache-Control"] = "no-cache"
+    ngx.header["Cache-Control"] = "no-cache, no-store, must-revalidate"
+    ngx.header["Pragma"] = "no-cache"
+    ngx.header["Expires"] = "0"
     ngx.header["Connection"] = "keep-alive"
     ngx.header["X-Accel-Buffering"] = "no"
 
-    -- 如果是 SSE 格式
+    -- 检测是否为 SSE 格式请求
+    local uri = ngx.var.request_uri
     local accept_header = ngx.var.http_accept
-    if accept_header and accept_header:match("text/event%-stream") then
-        ngx.header["Content-Type"] = "text/event-stream"
-        ngx.header["Access-Control-Allow-Origin"] = "*"
-        ngx.header["Access-Control-Allow-Headers"] = "Cache-Control"
+    local is_sse = false
+
+    -- 检查URL中是否包含 alt=sse 参数
+    if uri and uri:match("alt=sse") then
+        is_sse = true
     end
 
-    if config.should_test_output("upstream_headers") then
-        ngx.log(ngx.INFO, "[TEST] Set streaming headers for request: ", ngx.var.request_id)
+    -- 检查Accept头部
+    if accept_header and accept_header:match("text/event%-stream") then
+        is_sse = true
+    end
+
+    -- 如果是 SSE 格式，设置相应头部
+    if is_sse then
+        ngx.header["Content-Type"] = "text/event-stream; charset=utf-8"
+        ngx.header["Access-Control-Allow-Origin"] = "*"
+        ngx.header["Access-Control-Allow-Headers"] = "Cache-Control, Content-Type, Authorization"
+        ngx.header["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+
+        if config.should_log("info") then
+            ngx.log(ngx.INFO, "[STREAM] Set SSE headers for request: ", ngx.var.request_id)
+        end
+    else
+        -- 对于非SSE的流式请求，设置适当的Content-Type
+        if not ngx.header["Content-Type"] then
+            ngx.header["Content-Type"] = "application/json; charset=utf-8"
+        end
+
+        if config.should_log("info") then
+            ngx.log(ngx.INFO, "[STREAM] Set streaming headers for request: ", ngx.var.request_id)
+        end
     end
 end
 
@@ -109,18 +147,12 @@ function _M.process_sse_data(chunk)
         return chunk
     end
 
-    -- 检查是否为 SSE 格式的数据
-    if chunk:match("^data:") or chunk:match("\ndata:") then
-        if config.should_log("debug") then
-            ngx.log(ngx.DEBUG, "[SSE] Processing SSE chunk: ", utils.truncate_string(chunk, 100))
-        end
-
-        -- 确保 SSE 格式正确（每个事件以 \n\n 结尾）
-        if not chunk:match("\n\n$") then
-            chunk = chunk .. "\n\n"
-        end
+    if config.should_log("debug") then
+        ngx.log(ngx.DEBUG, "[SSE] Processing chunk: ", utils.truncate_string(chunk, 200))
     end
 
+    -- 对于SSE格式，直接返回原始数据
+    -- Google API已经返回正确格式的SSE数据，不需要额外处理
     return chunk
 end
 
