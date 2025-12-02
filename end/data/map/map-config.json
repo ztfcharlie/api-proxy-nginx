@@ -70,7 +70,7 @@
           "domain": "aiplatform.googleapis.com"
         },
         {
-          "model":"text-bison",
+          "model":"veo-3.1-generate-preview",
           "domain": "us-central1-aiplatform.googleapis.com"
         }
       ]
