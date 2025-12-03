@@ -48,8 +48,13 @@ RUN npm ci --omit=dev && \
 # 复制应用代码
 COPY --chown=nodejs:nodejs . .
 
-# 创建必要的目录
-RUN mkdir -p /app/logs /app/tmp /app/client/google_server_account
+# 复制启动脚本并设置权限
+COPY --chown=nodejs:nodejs entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+
+# 创建必要的目录并设置权限
+RUN mkdir -p /app/logs /app/tmp /app/client/google_server_account && \
+    chown -R nodejs:nodejs /app
 
 # 切换到非root用户
 USER nodejs
@@ -65,5 +70,6 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
 ENV NODE_ENV=production
 ENV PORT=8889
 
-# 启动命令
+# 使用启动脚本
+ENTRYPOINT ["/app/entrypoint.sh"]
 CMD ["npm", "start"]

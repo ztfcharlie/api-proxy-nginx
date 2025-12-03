@@ -6,6 +6,7 @@ services:
       dockerfile: Dockerfile
     container_name: api-proxy-nodejs
     restart: unless-stopped
+    user: "1001:1001"  # 使用nodejs用户
     ports:
       - "8889:8889"   # OAuth2 服务端口
       - "9090:9090"   # 监控端口（如果启用）

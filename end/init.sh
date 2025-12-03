@@ -17,11 +17,15 @@ directories=(
     "data/jwt"
     "data/map"
     "data/client"
+    "data/client/google_server_account"
+    "data/client/aws_server_account"
+    "data/client/azure_server_account"
     "mysql-data"
     "mysql-files"
     "nodejs/logs"
     "nodejs/tmp"
     "database"
+    "client"
 )
 
 # 创建目录

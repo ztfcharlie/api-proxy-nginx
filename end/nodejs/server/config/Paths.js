@@ -98,9 +98,14 @@ class Paths {
         ];
 
         directories.forEach(dir => {
-            if (!fs.existsSync(dir)) {
-                fs.mkdirSync(dir, { recursive: true });
-                console.log(`创建目录: ${dir}`);
+            try {
+                if (!fs.existsSync(dir)) {
+                    fs.mkdirSync(dir, { recursive: true, mode: 0o755 });
+                    console.log(`创建目录: ${dir}`);
+                }
+            } catch (error) {
+                console.warn(`警告: 无法创建目录 ${dir}: ${error.message}`);
+                console.warn(`请检查目录权限或手动创建目录: ${dir}`);
             }
         });
     }
