@@ -223,6 +223,11 @@ class AuthMiddleware {
         };
     }
 
+    // 必需认证中间件
+    requireAuth() {
+        return this.verifyAccessToken({ required: true });
+    }
+
     // 可选认证中间件
     optionalAuth() {
         return this.verifyAccessToken({ required: false });
