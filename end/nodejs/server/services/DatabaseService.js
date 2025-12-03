@@ -12,11 +12,12 @@ class DatabaseService {
             database: process.env.DB_NAME || 'oauth2_mock',
             charset: process.env.DB_CHARSET || 'utf8mb4',
             timezone: process.env.DB_TIMEZONE || '+08:00',
-            acquireTimeout: 60000,
-            timeout: 60000,
-            reconnect: true,
             connectionLimit: parseInt(process.env.DB_CONNECTION_LIMIT) || 10,
-            queueLimit: 0
+            queueLimit: 0,
+            // Enable SSL for production
+            ssl: process.env.NODE_ENV === 'production' ? {
+                rejectUnauthorized: true
+            } : false
         };
     }
 
