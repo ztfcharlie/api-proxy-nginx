@@ -1,5 +1,4 @@
 const LoggerService = require('../services/LoggerService');
-const authMiddleware = require('./auth');
 
 const logger = LoggerService;
 

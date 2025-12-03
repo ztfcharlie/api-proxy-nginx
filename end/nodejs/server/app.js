@@ -7,11 +7,11 @@ const path = require('path');
 require('dotenv').config();
 
 // 导入服务和中间件
-const { DatabaseService } = require('./services/DatabaseService');
-const { RedisService } = require('./services/RedisService');
-const { LoggerService } = require('./services/LoggerService');
-const { OAuth2Service } = require('./services/OAuth2Service');
-const { TokenService } = require('./services/TokenService');
+const DatabaseService = require('./services/DatabaseService');
+const RedisService = require('./services/RedisService');
+const LoggerService = require('./services/LoggerService');
+const OAuth2Service = require('./services/OAuth2Service');
+const TokenService = require('./services/TokenService');
 const { CacheService } = require('./services/CacheService');
 
 const { errorHandler } = require('./middleware/errorHandler');
@@ -83,7 +83,7 @@ class OAuth2MockServer {
         // Swagger API 文档（开发环境）
         if (process.env.ENABLE_SWAGGER === 'true') {
             const swaggerUi = require('swagger-ui-express');
-            const swaggerSpec = require('../swagger');
+            const swaggerSpec = require('./swagger');
 
             this.app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
             LoggerService.info('Swagger API documentation available at /api-docs');
