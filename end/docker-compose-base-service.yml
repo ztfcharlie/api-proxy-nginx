@@ -28,6 +28,8 @@ services:
       --skip-name-resolve
       --explicit_defaults_for_timestamp
       --default-authentication-plugin=mysql_native_password
+      --skip-ssl
+      --disable-ssl
     networks:
       - api-proxy-network
     healthcheck:

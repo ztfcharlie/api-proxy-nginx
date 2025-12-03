@@ -14,10 +14,8 @@ class DatabaseService {
             timezone: process.env.DB_TIMEZONE || '+08:00',
             connectionLimit: parseInt(process.env.DB_CONNECTION_LIMIT) || 10,
             queueLimit: 0,
-            // Enable SSL for production
-            ssl: process.env.NODE_ENV === 'production' ? {
-                rejectUnauthorized: true
-            } : false
+            // SSL configuration - disable SSL verification for all environments
+            ssl: false // Force disable SSL for both development and production
         };
     }
 
