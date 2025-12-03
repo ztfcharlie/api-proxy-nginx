@@ -60,7 +60,7 @@ function generateClientSecret() {
 /**
  * 获取所有客户端（支持分页和搜索）
  */
-router.get('/', auth.optionalAuth, async (req, res) => {
+router.get('/', auth.optionalAuth(), async (req, res) => {
     try {
         const { page = 1, limit = 20, search = '', status = '', sort = 'created_at', order = 'desc' } = req.query;
         const offset = (page - 1) * limit;
@@ -145,7 +145,7 @@ router.get('/', auth.optionalAuth, async (req, res) => {
 /**
  * 获取单个客户端详情
  */
-router.get('/:clientId', auth.requireAuth, async (req, res) => {
+router.get('/:clientId', auth.requireAuth(), async (req, res) => {
     try {
         const { clientId } = req.params;
 
@@ -210,7 +210,7 @@ router.get('/:clientId', auth.requireAuth, async (req, res) => {
 /**
  * 创建新客户端
  */
-router.post('/', auth.requireAuth, async (req, res) => {
+router.post('/', auth.requireAuth(), async (req, res) => {
     try {
         const { client_name, description, redirect_uris } = req.body;
 
@@ -291,7 +291,7 @@ router.post('/', auth.requireAuth, async (req, res) => {
 /**
  * 更新客户端
  */
-router.put('/:clientId', auth.requireAuth, async (req, res) => {
+router.put('/:clientId', auth.requireAuth(), async (req, res) => {
     try {
         const { clientId } = req.params;
         const { client_name, description, redirect_uris, is_active } = req.body;
@@ -409,7 +409,7 @@ router.put('/:clientId', auth.requireAuth, async (req, res) => {
 /**
  * 删除客户端
  */
-router.delete('/:clientId', auth.requireAuth, async (req, res) => {
+router.delete('/:clientId', auth.requireAuth(), async (req, res) => {
     try {
         const { clientId } = req.params;
 
@@ -468,7 +468,7 @@ router.delete('/:clientId', auth.requireAuth, async (req, res) => {
 /**
  * 重新生成客户端密钥
  */
-router.post('/:clientId/rotate-secret', auth.requireAuth, async (req, res) => {
+router.post('/:clientId/rotate-secret', auth.requireAuth(), async (req, res) => {
     try {
         const { clientId } = req.params;
 
@@ -527,7 +527,7 @@ router.post('/:clientId/rotate-secret', auth.requireAuth, async (req, res) => {
 /**
  * 获取客户端的令牌列表
  */
-router.get('/:clientId/tokens', auth.requireAuth, async (req, res) => {
+router.get('/:clientId/tokens', auth.requireAuth(), async (req, res) => {
     try {
         const { clientId } = req.params;
         const { page = 1, limit = 20, status = '' } = req.query;

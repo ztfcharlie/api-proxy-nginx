@@ -70,7 +70,7 @@ ${crypto.randomBytes(32).toString('base64')}
 /**
  * 获取所有服务账号（支持分页和搜索）
  */
-router.get('/', auth.requireAuth, async (req, res) => {
+router.get('/', auth.requireAuth(), async (req, res) => {
     try {
         const { page = 1, limit = 20, search = '', status = '', projectId = '', sort = 'created_at', order = 'desc' } = req.query;
         const offset = (page - 1) * limit;
@@ -161,7 +161,7 @@ router.get('/', auth.requireAuth, async (req, res) => {
 /**
  * 获取单个服务账号详情
  */
-router.get('/:accountId', auth.requireAuth, async (req, res) => {
+router.get('/:accountId', auth.requireAuth(), async (req, res) => {
     try {
         const { accountId } = req.params;
 
@@ -226,7 +226,7 @@ router.get('/:accountId', auth.requireAuth, async (req, res) => {
 /**
  * 创建新服务账号
  */
-router.post('/', auth.requireAuth, async (req, res) => {
+router.post('/', auth.requireAuth(), async (req, res) => {
     try {
         const { display_name, project_id, key_algorithm = 'RSA_2048' } = req.body;
 
@@ -312,7 +312,7 @@ router.post('/', auth.requireAuth, async (req, res) => {
 /**
  * 更新服务账号
  */
-router.put('/:accountId', auth.requireAuth, async (req, res) => {
+router.put('/:accountId', auth.requireAuth(), async (req, res) => {
     try {
         const { accountId } = req.params;
         const { display_name, project_id, is_active } = req.body;
@@ -410,7 +410,7 @@ router.put('/:accountId', auth.requireAuth, async (req, res) => {
 /**
  * 删除服务账号
  */
-router.delete('/:accountId', auth.requireAuth, async (req, res) => {
+router.delete('/:accountId', auth.requireAuth(), async (req, res) => {
     try {
         const { accountId } = req.params;
 
@@ -469,7 +469,7 @@ router.delete('/:accountId', auth.requireAuth, async (req, res) => {
 /**
  * 生成新的私钥
  */
-router.post('/:accountId/keys', auth.requireAuth, async (req, res) => {
+router.post('/:accountId/keys', auth.requireAuth(), async (req, res) => {
     try {
         const { accountId } = req.params;
         const { key_algorithm = 'RSA_2048', private_key_type = 'TYPE_GOOGLE_CREDENTIALS_FILE' } = req.body;
@@ -535,7 +535,7 @@ router.post('/:accountId/keys', auth.requireAuth, async (req, res) => {
 /**
  * 获取服务账号的令牌列表
  */
-router.get('/:accountId/tokens', auth.requireAuth, async (req, res) => {
+router.get('/:accountId/tokens', auth.requireAuth(), async (req, res) => {
     try {
         const { accountId } = req.params;
         const { page = 1, limit = 20, status = '' } = req.query;
@@ -606,7 +606,7 @@ router.get('/:accountId/tokens', auth.requireAuth, async (req, res) => {
 /**
  * 获取服务账号使用统计
  */
-router.get('/:accountId/stats', auth.requireAuth, async (req, res) => {
+router.get('/:accountId/stats', auth.requireAuth(), async (req, res) => {
     try {
         const { accountId } = req.params;
         const { days = 30 } = req.query;
