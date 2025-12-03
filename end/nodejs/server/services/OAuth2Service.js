@@ -3,8 +3,10 @@ const LoggerService = require('./LoggerService');
 const DatabaseService = require('./DatabaseService');
 
 class OAuth2Service {
-    constructor() {
-        this.databaseService = new DatabaseService();
+    constructor(databaseService = null, tokenService = null, cacheService = null) {
+        this.databaseService = databaseService || new DatabaseService();
+        this.tokenService = tokenService;
+        this.cacheService = cacheService;
         this.logger = LoggerService;
         this.jwtSecret = process.env.JWT_SECRET || 'your-jwt-secret-key-change-this-in-production';
         this.tokenExpiration = parseInt(process.env.OAUTH2_ACCESS_TOKEN_EXPIRES) || 3600;

@@ -156,7 +156,8 @@ class OAuth2MockServer {
             LoggerService.info('Redis service initialized');
 
             // 初始化缓存服务
-            this.services.cache = new CacheService(this.services.redis);
+            this.services.cache = new CacheService();
+            await this.services.cache.initialize();
             LoggerService.info('Cache service initialized');
 
             // 初始化令牌服务
