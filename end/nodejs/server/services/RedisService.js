@@ -621,6 +621,58 @@ class RedisService {
     }
 
     /**
+     * 设置键值对并指定过期时间（秒）
+     * @param {string} key 键
+     * @param {string} value 值
+     * @param {number} ttl 过期时间（秒）
+     * @returns {Promise<boolean>} 是否设置成功
+     */
+    async setex(key, value, ttl) {
+        try {
+            if (!this.isConnected) {
+                await this.waitForConnection();
+            }
+
+            const fullKey = this.buildKey(key);
+            const result = await this.redis.setex(fullKey, ttl, value);
+
+            return result === 'OK' || result === true;
+        } catch (error) {
+            this.logger.error('Failed to set key with expiration:', {
+                key,
+                ttl,
+                error: error.message
+            });
+            throw error;
+        }
+    }
+
+    /**
+     * 根据模式删除键
+     * @param {string} pattern 键模式
+     * @returns {Promise<number>} 删除的键数量
+     */
+    async delPattern(pattern) {
+        try {
+            if (!this.isConnected) {
+                await this.waitForConnection();
+            }
+
+            const keys = await this.redis.keys(pattern);
+            if (keys.length === 0) {
+                return 0;
+            }
+
+            const deletedCount = await this.redis.del(...keys);
+            this.logger.debug(`Deleted ${deletedCount} keys matching pattern: ${pattern}`);
+            return deletedCount;
+        } catch (error) {
+            this.logger.error('Failed to delete keys by pattern:', { pattern, error: error.message });
+            throw error;
+        }
+    }
+
+    /**
      * 关闭连接
      */
     async close() {
