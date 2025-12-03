@@ -25,7 +25,6 @@ services:
       --innodb_buffer_pool_size=256M
       --pid-file=/var/run/mysqld/mysqld.pid
       --socket=/var/run/mysqld/mysqld.sock
-      --secure-file-priv=/var/lib/mysql/files
       --disable-log-bin
       --skip-name-resolve
       --explicit_defaults_for_timestamp
