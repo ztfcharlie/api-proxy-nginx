@@ -7,7 +7,7 @@ const RedisService = require('./RedisService');
  */
 class CacheService {
     constructor() {
-        this.logger = LoggerService.getInstance();
+        this.logger = LoggerService;
         this.redisService = new RedisService();
 
         // 内存缓存
