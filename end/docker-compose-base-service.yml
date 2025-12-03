@@ -9,7 +9,6 @@ services:
     volumes:
       - ./mysql-data:/var/lib/mysql
       - ./database:/docker-entrypoint-initdb.d:ro
-      - ./mysql-files:/var/lib/mysql/files
     environment:
       - MYSQL_ROOT_PASSWORD=root_password_123456
       - MYSQL_DATABASE=oauth2_mock
