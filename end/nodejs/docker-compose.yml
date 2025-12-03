@@ -92,7 +92,6 @@ services:
     volumes:
       - ../mysql-data:/var/lib/mysql
       - ../database:/docker-entrypoint-initdb.d:ro
-      - ../logs:/var/log/mysql
     environment:
       - MYSQL_ROOT_PASSWORD=root_password_123456
       - MYSQL_DATABASE=oauth2_mock
@@ -107,8 +106,6 @@ services:
       --default-authentication-plugin=mysql_native_password
       --max_connections=1000
       --innodb_buffer_pool_size=256M
-      --slow_query_log_file=/var/log/mysql/slow.log
-      --log-queries-not-using-indexes=1
     networks:
       - api-proxy-network
     healthcheck:
