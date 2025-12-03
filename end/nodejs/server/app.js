@@ -16,7 +16,7 @@ const { CacheService } = require('./services/CacheService');
 
 const errorHandler = require('./middleware/errorHandler');
 const authMiddleware = require('./middleware/auth');
-const loggingMiddleware = require('./middleware/logging');
+const { loggingMiddleware } = require('./middleware/logging');
 
 // 导入路由
 const oauth2Routes = require('./routes/oauth2');
