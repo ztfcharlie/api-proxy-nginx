@@ -5,7 +5,7 @@ const LoggerService = require('../services/LoggerService');
 const authMiddleware = require('../middleware/auth');
 
 const router = express.Router();
-const logger = LoggerService.getInstance();
+const logger = LoggerService;
 const auth = authMiddleware;
 
 // 模拟 Google OAuth2 令牌端点

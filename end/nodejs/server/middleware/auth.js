@@ -1,7 +1,7 @@
 const jwt = require('jsonwebtoken');
 const LoggerService = require('../services/LoggerService');
 
-const logger = LoggerService.getInstance();
+const logger = LoggerService;
 
 class AuthMiddleware {
     constructor() {

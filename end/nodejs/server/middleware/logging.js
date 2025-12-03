@@ -1,7 +1,7 @@
 const LoggerService = require('../services/LoggerService');
 const authMiddleware = require('./auth');
 
-const logger = LoggerService.getInstance();
+const logger = LoggerService;
 
 const loggingMiddleware = async (req, res, next) => {
     const startTime = Date.now();

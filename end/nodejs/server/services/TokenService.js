@@ -6,7 +6,7 @@ class TokenService {
     constructor(databaseService, cacheService) {
         this.db = databaseService;
         this.cache = cacheService;
-        this.logger = LoggerService.getInstance();
+        this.logger = LoggerService;
 
         // 令牌配置
         this.accessTokenTTL = parseInt(process.env.CACHE_TTL_ACCESS_TOKEN) || 3600;

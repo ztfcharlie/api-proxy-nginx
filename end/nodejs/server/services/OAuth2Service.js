@@ -5,7 +5,7 @@ const DatabaseService = require('./DatabaseService');
 class OAuth2Service {
     constructor() {
         this.databaseService = new DatabaseService();
-        this.logger = LoggerService.getInstance();
+        this.logger = LoggerService;
         this.jwtSecret = process.env.JWT_SECRET || 'your-jwt-secret-key-change-this-in-production';
         this.tokenExpiration = parseInt(process.env.OAUTH2_ACCESS_TOKEN_EXPIRES) || 3600;
         this.refreshTokenExpiration = parseInt(process.env.OAUTH2_REFRESH_TOKEN_EXPIRES) || 86400;

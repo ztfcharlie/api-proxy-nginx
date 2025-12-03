@@ -30,7 +30,7 @@ class RedisService {
             maxRetriesPerRequestOnClusterDown: 3
         };
 
-        this.logger = LoggerService.getInstance();
+        this.logger = LoggerService;
     }
 
     async initialize() {
