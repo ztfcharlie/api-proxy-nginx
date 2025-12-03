@@ -11,13 +11,13 @@ SET FOREIGN_KEY_CHECKS = 0;
 -- =====================================
 CREATE TABLE IF NOT EXISTS `clients` (
     `id` INT PRIMARY KEY AUTO_INCREMENT,
-    `client_id` VARCHAR(255) NOT NULL UNIQUE,
-    `client_secret` VARCHAR(255) NOT NULL,
-    `name` VARCHAR(255) NOT NULL,
+    `client_id` VARCHAR(191) NOT NULL UNIQUE,
+    `client_secret` VARCHAR(191) NOT NULL,
+    `name` VARCHAR(191) NOT NULL,
     `description` TEXT,
     `redirect_uris` JSON,
-    `grant_types` JSON DEFAULT '["client_credentials", "authorization_code", "refresh_token"]',
-    `scopes` JSON DEFAULT '["openid", "profile", "email"]',
+    `grant_types` JSON,
+    `scopes` JSON,
     `status` ENUM('active', 'inactive', 'suspended') DEFAULT 'active',
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -30,14 +30,14 @@ CREATE TABLE IF NOT EXISTS `clients` (
 -- =====================================
 CREATE TABLE IF NOT EXISTS `service_accounts` (
     `id` INT PRIMARY KEY AUTO_INCREMENT,
-    `client_id` VARCHAR(255) NOT NULL UNIQUE,
-    `email` VARCHAR(255) NOT NULL UNIQUE,
+    `client_id` VARCHAR(191) NOT NULL UNIQUE,
+    `email` VARCHAR(191) NOT NULL UNIQUE,
     `private_key` TEXT NOT NULL,
-    `private_key_id` VARCHAR(255) NOT NULL,
-    `project_id` VARCHAR(255) NOT NULL,
-    `name` VARCHAR(255) NOT NULL,
+    `private_key_id` VARCHAR(191) NOT NULL,
+    `project_id` VARCHAR(191) NOT NULL,
+    `name` VARCHAR(191) NOT NULL,
     `description` TEXT,
-    `scopes` JSON DEFAULT '["https://www.googleapis.com/auth/cloud-platform"]',
+    `scopes` JSON,
     `status` ENUM('active', 'inactive', 'suspended') DEFAULT 'active',
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     `updated_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -52,10 +52,11 @@ CREATE TABLE IF NOT EXISTS `service_accounts` (
 -- =====================================
 CREATE TABLE IF NOT EXISTS `access_tokens` (
     `id` INT PRIMARY KEY AUTO_INCREMENT,
-    `token` VARCHAR(2048) NOT NULL UNIQUE,
+    `token_hash` VARCHAR(64) NOT NULL UNIQUE,
+    `token` TEXT NOT NULL,
     `type` ENUM('Bearer') DEFAULT 'Bearer',
-    `client_id` VARCHAR(255) NOT NULL,
-    `user_id` VARCHAR(255),
+    `client_id` VARCHAR(191) NOT NULL,
+    `user_id` VARCHAR(191),
     `scopes` JSON,
     `expires_at` TIMESTAMP NOT NULL,
     `issued_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -63,7 +64,7 @@ CREATE TABLE IF NOT EXISTS `access_tokens` (
     `last_accessed` TIMESTAMP NULL,
     `access_count` INT DEFAULT 0,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    INDEX `idx_token` (`token`),
+    INDEX `idx_token_hash` (`token_hash`),
     INDEX `idx_client_id` (`client_id`),
     INDEX `idx_expires_at` (`expires_at`),
     INDEX `idx_status` (`status`)
@@ -74,10 +75,11 @@ CREATE TABLE IF NOT EXISTS `access_tokens` (
 -- =====================================
 CREATE TABLE IF NOT EXISTS `refresh_tokens` (
     `id` INT PRIMARY KEY AUTO_INCREMENT,
-    `token` VARCHAR(2048) NOT NULL UNIQUE,
+    `token_hash` VARCHAR(64) NOT NULL UNIQUE,
+    `token` TEXT NOT NULL,
     `access_token_id` INT NOT NULL,
-    `client_id` VARCHAR(255) NOT NULL,
-    `user_id` VARCHAR(255),
+    `client_id` VARCHAR(191) NOT NULL,
+    `user_id` VARCHAR(191),
     `scopes` JSON,
     `expires_at` TIMESTAMP NOT NULL,
     `issued_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -85,7 +87,7 @@ CREATE TABLE IF NOT EXISTS `refresh_tokens` (
     `last_used` TIMESTAMP NULL,
     `created_at` TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (`access_token_id`) REFERENCES `access_tokens`(`id`) ON DELETE CASCADE,
-    INDEX `idx_token` (`token`),
+    INDEX `idx_token_hash` (`token_hash`),
     INDEX `idx_client_id` (`client_id`),
     INDEX `idx_expires_at` (`expires_at`),
     INDEX `idx_status` (`status`)
@@ -96,13 +98,13 @@ CREATE TABLE IF NOT EXISTS `refresh_tokens` (
 -- =====================================
 CREATE TABLE IF NOT EXISTS `authorization_codes` (
     `id` INT PRIMARY KEY AUTO_INCREMENT,
-    `code` VARCHAR(255) NOT NULL UNIQUE,
-    `client_id` VARCHAR(255) NOT NULL,
-    `user_id` VARCHAR(255) NOT NULL,
-    `redirect_uri` VARCHAR(2048) NOT NULL,
+    `code` VARCHAR(191) NOT NULL UNIQUE,
+    `client_id` VARCHAR(191) NOT NULL,
+    `user_id` VARCHAR(191) NOT NULL,
+    `redirect_uri` TEXT NOT NULL,
     `scopes` JSON,
-    `state` VARCHAR(255),
-    `code_challenge` VARCHAR(255),
+    `state` VARCHAR(191),
+    `code_challenge` VARCHAR(191),
     `code_challenge_method` VARCHAR(10),
     `expires_at` TIMESTAMP NOT NULL,
     `used` BOOLEAN DEFAULT FALSE,
@@ -118,11 +120,11 @@ CREATE TABLE IF NOT EXISTS `authorization_codes` (
 -- =====================================
 CREATE TABLE IF NOT EXISTS `token_mappings` (
     `id` INT PRIMARY KEY AUTO_INCREMENT,
-    `client_token` VARCHAR(255) NOT NULL UNIQUE,
+    `client_token` VARCHAR(191) NOT NULL UNIQUE,
     `google_access_token` TEXT NOT NULL,
     `google_refresh_token` TEXT,
-    `client_id` VARCHAR(255) NOT NULL,
-    `user_id` VARCHAR(255),
+    `client_id` VARCHAR(191) NOT NULL,
+    `user_id` VARCHAR(191),
     `scopes` JSON,
     `expires_at` TIMESTAMP NOT NULL,
     `cache_version` BIGINT DEFAULT 1,
@@ -144,9 +146,9 @@ CREATE TABLE IF NOT EXISTS `token_mappings` (
 -- =====================================
 CREATE TABLE IF NOT EXISTS `user_sessions` (
     `id` INT PRIMARY KEY AUTO_INCREMENT,
-    `session_id` VARCHAR(255) NOT NULL UNIQUE,
-    `user_id` VARCHAR(255) NOT NULL,
-    `client_id` VARCHAR(255) NOT NULL,
+    `session_id` VARCHAR(191) NOT NULL UNIQUE,
+    `user_id` VARCHAR(191) NOT NULL,
+    `client_id` VARCHAR(191) NOT NULL,
     `ip_address` VARCHAR(45),
     `user_agent` TEXT,
     `scopes` JSON,
@@ -166,10 +168,10 @@ CREATE TABLE IF NOT EXISTS `user_sessions` (
 -- =====================================
 CREATE TABLE IF NOT EXISTS `api_logs` (
     `id` BIGINT PRIMARY KEY AUTO_INCREMENT,
-    `request_id` VARCHAR(255) NOT NULL UNIQUE,
-    `client_id` VARCHAR(255),
-    `user_id` VARCHAR(255),
-    `endpoint` VARCHAR(255) NOT NULL,
+    `request_id` VARCHAR(191) NOT NULL UNIQUE,
+    `client_id` VARCHAR(191),
+    `user_id` VARCHAR(191),
+    `endpoint` VARCHAR(191) NOT NULL,
     `method` VARCHAR(10) NOT NULL,
     `status_code` INT NOT NULL,
     `response_time` INT,
@@ -204,11 +206,66 @@ INSERT IGNORE INTO `service_accounts` (`client_id`, `email`, `private_key`, `pri
 -- =====================================
 -- 设置外键约束
 -- =====================================
-ALTER TABLE `access_tokens` ADD CONSTRAINT `fk_access_tokens_client` FOREIGN KEY (`client_id`) REFERENCES `clients`(`client_id`) ON DELETE CASCADE;
-ALTER TABLE `refresh_tokens` ADD CONSTRAINT `fk_refresh_tokens_client` FOREIGN KEY (`client_id`) REFERENCES `clients`(`client_id`) ON DELETE CASCADE;
-ALTER TABLE `authorization_codes` ADD CONSTRAINT `fk_auth_codes_client` FOREIGN KEY (`client_id`) REFERENCES `clients`(`client_id`) ON DELETE CASCADE;
-ALTER TABLE `token_mappings` ADD CONSTRAINT `fk_token_mappings_client` FOREIGN KEY (`client_id`) REFERENCES `clients`(`client_id`) ON DELETE CASCADE;
-ALTER TABLE `user_sessions` ADD CONSTRAINT `fk_user_sessions_client` FOREIGN KEY (`client_id`) REFERENCES `clients`(`client_id`) ON DELETE CASCADE;
+-- 使用 IF NOT EXISTS 逻辑的外键添加（通过检查约束是否存在）
+SET @sql = (SELECT IF(
+    (SELECT COUNT(*) FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+     WHERE TABLE_SCHEMA = DATABASE()
+     AND CONSTRAINT_NAME = 'fk_access_tokens_client'
+     AND TABLE_NAME = 'access_tokens') > 0,
+    'SELECT 1', -- 约束已存在，不执行
+    'ALTER TABLE `access_tokens` ADD CONSTRAINT `fk_access_tokens_client` FOREIGN KEY (`client_id`) REFERENCES `clients`(`client_id`) ON DELETE CASCADE'
+));
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql = (SELECT IF(
+    (SELECT COUNT(*) FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+     WHERE TABLE_SCHEMA = DATABASE()
+     AND CONSTRAINT_NAME = 'fk_refresh_tokens_client'
+     AND TABLE_NAME = 'refresh_tokens') > 0,
+    'SELECT 1', -- 约束已存在，不执行
+    'ALTER TABLE `refresh_tokens` ADD CONSTRAINT `fk_refresh_tokens_client` FOREIGN KEY (`client_id`) REFERENCES `clients`(`client_id`) ON DELETE CASCADE'
+));
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql = (SELECT IF(
+    (SELECT COUNT(*) FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+     WHERE TABLE_SCHEMA = DATABASE()
+     AND CONSTRAINT_NAME = 'fk_auth_codes_client'
+     AND TABLE_NAME = 'authorization_codes') > 0,
+    'SELECT 1', -- 约束已存在，不执行
+    'ALTER TABLE `authorization_codes` ADD CONSTRAINT `fk_auth_codes_client` FOREIGN KEY (`client_id`) REFERENCES `clients`(`client_id`) ON DELETE CASCADE'
+));
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql = (SELECT IF(
+    (SELECT COUNT(*) FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+     WHERE TABLE_SCHEMA = DATABASE()
+     AND CONSTRAINT_NAME = 'fk_token_mappings_client'
+     AND TABLE_NAME = 'token_mappings') > 0,
+    'SELECT 1', -- 约束已存在，不执行
+    'ALTER TABLE `token_mappings` ADD CONSTRAINT `fk_token_mappings_client` FOREIGN KEY (`client_id`) REFERENCES `clients`(`client_id`) ON DELETE CASCADE'
+));
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
+SET @sql = (SELECT IF(
+    (SELECT COUNT(*) FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+     WHERE TABLE_SCHEMA = DATABASE()
+     AND CONSTRAINT_NAME = 'fk_user_sessions_client'
+     AND TABLE_NAME = 'user_sessions') > 0,
+    'SELECT 1', -- 约束已存在，不执行
+    'ALTER TABLE `user_sessions` ADD CONSTRAINT `fk_user_sessions_client` FOREIGN KEY (`client_id`) REFERENCES `clients`(`client_id`) ON DELETE CASCADE'
+));
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
 
 -- =====================================
 -- 创建视图
@@ -246,9 +303,12 @@ ORDER BY date DESC, request_count DESC;
 -- 创建存储过程
 -- =====================================
 
+-- 删除已存在的存储过程
+DROP PROCEDURE IF EXISTS `CleanupExpiredTokens`;
+
 -- 清理过期Token的存储过程
 DELIMITER //
-CREATE PROCEDURE IF NOT EXISTS `CleanupExpiredTokens`()
+CREATE PROCEDURE `CleanupExpiredTokens`()
 BEGIN
     DECLARE cleaned_count INT DEFAULT 0;
 
@@ -284,9 +344,12 @@ DELIMITER ;
 -- 创建触发器
 -- =====================================
 
+-- 删除已存在的触发器
+DROP TRIGGER IF EXISTS `before_token_mapping_update`;
+
 -- Token映射更新时自动增加版本号
 DELIMITER //
-CREATE TRIGGER IF NOT EXISTS `before_token_mapping_update`
+CREATE TRIGGER `before_token_mapping_update`
 BEFORE UPDATE ON `token_mappings`
 FOR EACH ROW
 BEGIN
@@ -297,9 +360,12 @@ BEGIN
 END //
 DELIMITER ;
 
+-- 删除已存在的触发器
+DROP TRIGGER IF EXISTS `before_access_token_update`;
+
 -- 访问令牌访问计数更新
 DELIMITER //
-CREATE TRIGGER IF NOT EXISTS `before_access_token_update`
+CREATE TRIGGER `before_access_token_update`
 BEFORE UPDATE ON `access_tokens`
 FOR EACH ROW
 BEGIN
@@ -310,12 +376,30 @@ END //
 DELIMITER ;
 
 -- =====================================
+-- 8. 示例数据插入
+-- =====================================
+
+-- 插入示例客户端
+INSERT IGNORE INTO `clients` (`client_id`, `client_secret`, `name`, `description`, `redirect_uris`, `grant_types`, `scopes`) VALUES
+('test-client-1', 'test-secret-1', '测试客户端1', '用于测试的OAuth2客户端',
+ '["http://localhost:3000/callback", "http://localhost:8889/callback"]',
+ '["client_credentials", "authorization_code", "refresh_token"]',
+ '["openid", "profile", "email", "https://www.googleapis.com/auth/cloud-platform"]'),
+('test-client-2', 'test-secret-2', '测试客户端2', '另一个测试客户端',
+ '["http://localhost:3001/callback"]',
+ '["client_credentials"]',
+ '["https://www.googleapis.com/auth/cloud-platform"]');
+
+-- 插入示例服务账号
+INSERT IGNORE INTO `service_accounts` (`client_id`, `email`, `private_key`, `private_key_id`, `project_id`, `name`, `description`, `scopes`) VALUES
+('service-account-1', 'test-service-account-1@oauth2-mock.iam.gserviceaccount.com',
+ '-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQC...\n-----END PRIVATE KEY-----',
+ 'key-id-1', 'test-project-1', '测试服务账号1', '用于测试的服务账号',
+ '["https://www.googleapis.com/auth/cloud-platform", "https://www.googleapis.com/auth/pubsub"]');
+
+-- =====================================
 -- 完成初始化
 -- =====================================
 SET FOREIGN_KEY_CHECKS = 1;
-
--- 记录初始化完成
-INSERT IGNORE INTO `api_logs` (`request_id`, `client_id`, `endpoint`, `method`, `status_code`, `response_time`, `user_agent`)
-VALUES ('db_init_001', 'system', '/database/init', 'SYSTEM', 200, 0, 'Database Initialization Script');
 
 SELECT 'Database initialization completed successfully!' as message;
