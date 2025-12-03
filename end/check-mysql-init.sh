@@ -29,12 +29,12 @@ echo ""
 echo "🔧 检查Docker挂载配置..."
 cd nodejs
 
-if grep -q "../database:/docker-entrypoint-initdb.d" docker-compose.yml; then
+if grep -q "./database:/docker-entrypoint-initdb.d" docker-compose.yml; then
     echo "✅ 数据库初始化脚本挂载配置正确"
 else
     echo "❌ 数据库初始化脚本挂载配置缺失"
     echo "应该在docker-compose.yml中添加:"
-    echo "  - ../database:/docker-entrypoint-initdb.d:ro"
+    echo "  - ./database:/docker-entrypoint-initdb.d:ro"
 fi
 
 # 3. 检查MySQL容器状态

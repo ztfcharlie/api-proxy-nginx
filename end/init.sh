@@ -18,6 +18,7 @@ directories=(
     "data/map"
     "data/client"
     "mysql-data"
+    "mysql-files"
     "nodejs/logs"
     "nodejs/tmp"
 )
@@ -31,7 +32,7 @@ done
 
 # 授予权限
 echo "开始授予权限..."
-chmod -R 777 redis-data nginx lua logs html ssl data config redis mysql-data nodejs/logs tmp nodejs/tmp
+chmod -R 777 redis-data nginx lua logs html ssl data config redis mysql-data nodejs/logs tmp nodejs/tmp mysql-files
 echo "已授予所有目录777权限"
 
 echo "完成！所有目录已创建并授权"

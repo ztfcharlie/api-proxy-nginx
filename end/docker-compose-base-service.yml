@@ -9,6 +9,7 @@ services:
     volumes:
       - ./mysql-data:/var/lib/mysql
       - ./database:/docker-entrypoint-initdb.d:ro
+      - ./mysql-files:/var/lib/mysql/files
     environment:
       - MYSQL_ROOT_PASSWORD=root_password_123456
       - MYSQL_DATABASE=oauth2_mock
@@ -22,18 +23,21 @@ services:
       --collation-server=utf8mb4_unicode_ci
       --max_connections=1000
       --innodb_buffer_pool_size=256M
-      --pid-file=/var/lib/mysql/mysqld.pid
-      --socket=/var/lib/mysql/mysql.sock
-      --secure-file-priv=''
+      --pid-file=/var/run/mysqld/mysqld.pid
+      --socket=/var/run/mysqld/mysqld.sock
+      --secure-file-priv=/var/lib/mysql/files
       --disable-log-bin
+      --skip-name-resolve
+      --explicit_defaults_for_timestamp
+      --default-authentication-plugin=mysql_native_password
     networks:
       - api-proxy-network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "oauth2_user", "-poauth2_password_123456"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot_password_123456"]
       interval: 30s
       timeout: 10s
-      retries: 5
-      start_period: 30s
+      retries: 10
+      start_period: 60s
     labels:
       - "com.api-proxy.service=mysql"
       - "com.api-proxy.version=8.0"
