@@ -2,6 +2,7 @@ const winston = require('winston');
 const DailyRotateFile = require('winston-daily-rotate-file');
 const path = require('path');
 const fs = require('fs');
+const Paths = require('../config/Paths');
 
 class LoggerService {
     constructor() {
@@ -10,11 +11,9 @@ class LoggerService {
     }
 
     initialize() {
-        // 确保日志目录存在
-        const logDir = process.env.LOG_DIR || '../logs/oauth2';
-        if (!fs.existsSync(logDir)) {
-            fs.mkdirSync(logDir, { recursive: true });
-        }
+        // 使用Paths配置管理
+        const logDir = Paths.getLogDir();
+        Paths.ensureDirectories();
 
         // 创建 Winston 日志器
         this.logger = winston.createLogger({

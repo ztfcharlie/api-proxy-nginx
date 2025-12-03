@@ -11,12 +11,13 @@ services:
       - "8889:8889"   # OAuth2 服务端口
       - "9090:9090"   # 监控端口（如果启用）
     volumes:
-      # 日志挂载
+      # Node.js服务专用数据目录
       - ./logs:/app/logs
-      # 服务账号文件挂载
-      - ../client/google_server_account:/app/client/google_server_account:ro
-      # 临时文件挂载
-      - ../tmp/oauth2:/app/tmp
+      - ./tmp:/app/tmp
+      # 全局共享的服务账号文件（可读写）
+      - ../data/client:/app/client
+      # 全局共享的客户id和渠道模型配置映射文件（可读写）
+      - ../data/map:/app/map
     environment:
       # 服务配置
       - NODE_ENV=production
@@ -67,6 +68,11 @@ services:
 
       # 时区设置
       - TZ=Asia/Shanghai
+
+      # 目录路径配置
+      - LOG_DIR=/app/logs
+      - TMP_DIR=/app/tmp
+      - CLIENT_DIR=/app/client
     networks:
       - api-proxy-network
     healthcheck:
@@ -91,7 +97,7 @@ services:
       - "3306:3306"   # MySQL 端口（开发时访问）
     volumes:
       - ../mysql-data:/var/lib/mysql
-      - ../database:/docker-entrypoint-initdb.d:ro
+      - ./database:/docker-entrypoint-initdb.d:ro
     environment:
       - MYSQL_ROOT_PASSWORD=root_password_123456
       - MYSQL_DATABASE=oauth2_mock
