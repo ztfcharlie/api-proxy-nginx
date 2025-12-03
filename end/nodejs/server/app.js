@@ -14,8 +14,8 @@ const { OAuth2Service } = require('./services/OAuth2Service');
 const { TokenService } = require('./services/TokenService');
 const { CacheService } = require('./services/CacheService');
 
-const errorHandler = require('./middleware/errorHandler');
-const authMiddleware = require('./middleware/auth');
+const { errorHandler } = require('./middleware/errorHandler');
+const { authMiddleware } = require('./middleware/auth');
 const { loggingMiddleware } = require('./middleware/logging');
 
 // 导入路由
