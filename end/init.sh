@@ -16,6 +16,7 @@ directories=(
     "data/json"
     "data/jwt"
     "data/map"
+    "data/client"
     "mysql-data"
     "nodejs/logs"
     "nodejs/tmp"

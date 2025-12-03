@@ -14,6 +14,7 @@ class Paths {
         this.logDir = process.env.LOG_DIR || path.join(this.baseDir, 'logs');
         this.tmpDir = process.env.TMP_DIR || path.join(this.baseDir, 'tmp');
         this.clientDir = process.env.CLIENT_DIR || path.join(this.baseDir, 'client');
+        this.mapDir = process.env.MAP_DIR || path.join(this.baseDir, 'map');
 
         // 子目录路径
         this.googleServerAccountDir = path.join(this.clientDir, 'google_server_account');
@@ -48,6 +49,13 @@ class Paths {
     }
 
     /**
+     * 获取映射配置目录路径
+     */
+    getMapDir() {
+        return this.mapDir;
+    }
+
+    /**
      * 获取日志文件路径
      */
     getLogFile(filename) {
@@ -69,6 +77,13 @@ class Paths {
     }
 
     /**
+     * 获取映射配置文件路径
+     */
+    getMapFile(filename) {
+        return path.join(this.mapDir, filename);
+    }
+
+    /**
      * 创建必要的目录
      */
     ensureDirectories() {
@@ -78,7 +93,8 @@ class Paths {
             this.logDir,
             this.tmpDir,
             this.clientDir,
-            this.googleServerAccountDir
+            this.googleServerAccountDir,
+            this.mapDir
         ];
 
         directories.forEach(dir => {
@@ -98,6 +114,7 @@ class Paths {
             tmpDir: this.tmpDir,
             clientDir: this.clientDir,
             googleServerAccountDir: this.googleServerAccountDir,
+            mapDir: this.mapDir,
             baseDir: this.baseDir
         };
     }
