@@ -24,6 +24,8 @@ services:
       --innodb_buffer_pool_size=256M
       --pid-file=/var/lib/mysql/mysqld.pid
       --socket=/var/lib/mysql/mysql.sock
+      --secure-file-priv=''
+      --disable-log-bin
     networks:
       - api-proxy-network
     healthcheck:
