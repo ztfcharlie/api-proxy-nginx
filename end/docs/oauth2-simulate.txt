@@ -1,0 +1,269 @@
+# OAuth2 认证模拟系统需求文档
+
+## 1. 项目概述
+
+开发一个模拟 Google OAuth2 认证系统的 Node.js 服务，用于模拟 Vertex AI 的授权流程。该系统将允许客户端使用类似 Google 服务账号的 JSON 密钥文件进行认证，并获取访问令牌，从而实现与 Vertex AI API 接口方式一致的授权流程。
+
+## 2. 业务需求
+
+### 2.1 核心功能
+- 模拟 Google OAuth2 授权流程，特别是服务账号认证方式
+- 提供与 Google API 一致的 URL 路径和响应格式
+- 验证客户端提供的服务账号凭据并颁发访问令牌
+- 支持令牌验证和资源访问控制
+
+### 2.2 用户场景
+客户端应用程序需要访问 Vertex AI 服务，但希望在测试或开发环境中使用模拟系统，而不是实际连接到 Google Cloud。客户端将使用提供的服务账号 JSON 文件向模拟服务器请求授权，获取访问令牌后用于后续 API 调用。
+
+## 3. 技术需求
+
+### 3.1 API 端点
+
+系统需要模拟以下 Google OAuth2 API 端点：
+
+1. **授权端点**
+   - URL: `https://accounts.google.com/o/oauth2/auth`
+   - 方法: GET
+   - 功能: OAuth2 授权流程入口点
+
+2. **令牌端点**
+   - URL: `https://oauth2.googleapis.com/token`
+   - 方法: POST
+   - 功能: 处理授权码交换、刷新令牌和服务账号 JWT 认证
+
+3. **证书端点**
+   - URL: `https://www.googleapis.com/oauth2/v1/certs`
+   - 方法: GET
+   - 功能: 提供用于验证令牌的公钥证书
+
+4. **服务账号证书端点**
+   - URL: `https://www.googleapis.com/robot/v1/metadata/x509/{service-account}`
+   - 方法: GET
+   - 功能: 提供特定服务账号的 X.509 证书
+
+### 3.2 服务账号 JSON 格式
+
+系统需要支持以下格式的服务账号 JSON 文件：
+
+```json
+{
+    "type": "service_account",
+    "project_id": "backup-project-123456",
+    "private_key_id": "aaa",
+    "private_key": "-----BEGIN PRIVATE KEY-----\nYour backup private key content here\n-----END PRIVATE KEY-----\n",
+    "client_email": "emergency-backup@backup-project-123456.iam.qqq.com",
+    "client_id": "117257028676873589277",
+    "auth_uri": "http://74.249.29.91:8888/oauth2/auth",
+    "token_uri": "http://74.249.29.91:8888/token",
+    "auth_provider_x509_cert_url": "http://74.249.29.91:8888/oauth2/v1/certs",
+    "client_x509_cert_url": "http://74.249.29.91:8888"
+}
+```
+
+### 3.3 认证流程
+
+1. **服务账号认证流程**:
+   - 客户端使用服务账号私钥创建 JWT
+   - 客户端将 JWT 作为 assertion 参数发送到令牌端点
+   - 服务器验证 JWT 并返回访问令牌
+
+2. **令牌验证流程**:
+   - 客户端在 API 请求中包含访问令牌
+   - 服务器验证令牌签名、过期时间和权限
+   - 服务器确定令牌对应的用户/服务账号
+   - 服务器根据用户权限允许或拒绝请求
+
+### 3.4 技术栈
+
+- **后端**: Node.js 与 Express.js
+- **认证**: JWT (jsonwebtoken 库)
+- **代理服务器**: Nginx (用于路由和 URL 路径匹配)
+
+## 4. 功能规格
+
+### 4.1 OAuth2 授权端点
+
+- 接受标准 OAuth2 授权请求参数
+- 支持授权码授权流程
+- 生成并存储授权码
+- 重定向到客户端指定的回调 URL
+
+### 4.2 令牌端点
+
+- 支持以下授权类型:
+  - `authorization_code`: 使用授权码交换令牌
+  - `refresh_token`: 使用刷新令牌获取新的访问令牌
+  - `urn:ietf:params:oauth:grant-type:jwt-bearer`: 服务账号 JWT 认证
+
+- 返回标准 OAuth2 令牌响应:
+  ```json
+  {
+    "access_token": "ya29.a0AfH6SMBx-...",
+    "expires_in": 3600,
+    "token_type": "Bearer"
+  }
+  ```
+
+### 4.3 证书端点
+
+- 提供用于验证 JWT 令牌的公钥
+- 返回 JWK 格式的密钥集:
+  ```json
+  {
+    "keys": [
+      {
+        "kty": "RSA",
+        "alg": "RS256",
+        "use": "sig",
+        "kid": "key-id-1",
+        "n": "base64-encoded-modulus",
+        "e": "AQAB"
+      }
+    ]
+  }
+  ```
+
+### 4.4 服务账号证书端点
+
+- 根据请求的服务账号提供 X.509 证书
+- 返回证书 ID 到 PEM 格式证书的映射:
+  ```json
+  {
+    "cert-id-1": "-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----\n"
+  }
+  ```
+
+### 4.5 访问令牌验证
+
+- 验证令牌签名
+- 检查令牌是否过期
+- 提取用户/服务账号信息
+- 验证用户权限
+
+## 5. 非功能需求
+
+### 5.1 安全性
+- 使用安全的密钥签署 JWT
+- 实现令牌过期机制
+- 支持令牌撤销
+- 验证客户端凭据
+
+### 5.2 性能
+- 处理并发请求
+- 最小化令牌验证延迟
+
+### 5.3 可扩展性
+- 支持多个服务账号
+- 允许添加自定义权限和角色
+
+## 6. 部署架构
+
+### 6.1 Nginx 配置
+
+使用 Nginx 作为反向代理，将请求路由到 Node.js 服务:
+
+```nginx
+server {
+    listen 80;
+    server_name api.yourdomain.com;
+
+    # 授权端点
+    location /accounts.google.com/o/oauth2/auth {
+        proxy_pass http://localhost:8888/o/oauth2/auth;
+    }
+
+    # 令牌端点
+    location /oauth2.googleapis.com/token {
+        proxy_pass http://localhost:8888/oauth2/token;
+    }
+
+    # 证书端点
+    location /www.googleapis.com/oauth2/v1/certs {
+        proxy_pass http://localhost:8888/oauth2/v1/certs;
+    }
+
+    # 服务账号证书端点
+    location ~ ^/www.googleapis.com/robot/v1/metadata/x509/(.*)$ {
+        proxy_pass http://localhost:8888/robot/v1/metadata/x509/$1;
+    }
+}
+```
+
+### 6.2 Node.js 服务
+
+使用 PM2 或类似工具管理 Node.js 服务:
+
+```bash
+npm install -g pm2
+pm2 start app.js --name "oauth2-mock"
+pm2 save
+```
+
+## 7. 测试计划
+
+### 7.1 单元测试
+- 测试各个 API 端点的功能
+- 测试令牌生成和验证
+- 测试错误处理
+
+### 7.2 集成测试
+- 测试完整的授权流程
+- 测试使用获取的令牌访问受保护资源
+
+### 7.3 客户端测试示例
+
+```javascript
+const axios = require('axios');
+const fs = require('fs');
+
+async function getAccessToken() {
+  // 读取服务账号JSON文件
+  const serviceAccount = JSON.parse(fs.readFileSync('service-account.json'));
+  
+  try {
+    // 请求token
+    const response = await axios.post('http://74.249.29.91:8888/token', serviceAccount);
+    return response.data.access_token;
+  } catch (error) {
+    console.error('Error getting access token:', error.response?.data || error.message);
+    throw error;
+  }
+}
+
+async function callAPI() {
+  const accessToken = await getAccessToken();
+  
+  try {
+    // 使用token调用API
+    const response = await axios.post(
+      'http://74.249.29.91:8888/v1/models/text-bison/completions',
+      {
+        prompt: "Hello, API!"
+      },
+      {
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        }
+      }
+    );
+    
+    console.log('API Response:', response.data);
+  } catch (error) {
+    console.error('API call failed:', error.response?.data || error.message);
+  }
+}
+
+callAPI();
+```
+
+## 8. 交付物
+
+1. Node.js 服务源代码
+2. Nginx 配置文件
+3. 安装和部署文档
+4. API 文档
+5. 示例客户端代码
+
+
+这个需求文档概述了创建 OAuth2 认证模拟系统的关键要求和功能。该系统将模拟 Google 的 OAuth2 服务，特别是 Vertex AI 使用的服务账号认证流程，允许客户端使用类似的 JSON 密钥文件进行认证并获取访问令牌。

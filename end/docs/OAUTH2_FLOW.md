@@ -236,7 +236,7 @@ function create_jwt_assertion(service_account)
     -- 5.2 创建JWT Payload
     local now = ngx.time()
     local payload = {
-        iss = service_account.client_email,           -- "service@project.iam.gserviceaccount.com"
+        iss = service_account.client_email,         
         scope = "https://www.googleapis.com/auth/cloud-platform",
         aud = "https://oauth2.googleapis.com/token",
         exp = now + 3600,
@@ -332,7 +332,7 @@ proxy_pass https://$api_host;
   "project_id": "carbide-team-478005-f8",
   "private_key_id": "xxx",
   "private_key": "-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n",
-  "client_email": "service@carbide-team-478005-f8.iam.gserviceaccount.com",
+  "client_email": "service@carbide-team-478005-f8.iam.qqq.com",
   "client_id": "xxx",
   "auth_uri": "https://accounts.google.com/o/oauth2/auth",
   "token_uri": "https://oauth2.googleapis.com/token"

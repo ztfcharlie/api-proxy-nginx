@@ -1,0 +1,165 @@
+version: '3.8'
+
+services:
+  # OAuth2 模拟服务 (Node.js)
+  api-proxy-nodejs:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: api-proxy-nodejs
+    restart: unless-stopped
+    ports:
+      - "8889:8889"   # OAuth2 服务端口
+      - "9090:9090"   # 监控端口（如果启用）
+    volumes:
+      # 日志挂载
+      - ./logs:/app/logs
+      # 服务账号文件挂载
+      - ../client/google_server_account:/app/client/google_server_account:ro
+      # 临时文件挂载
+      - ../tmp/oauth2:/app/tmp
+    environment:
+      # 服务配置
+      - NODE_ENV=production
+      - PORT=8889
+      - LOG_LEVEL=info
+
+      # 数据库配置
+      - DB_HOST=api-proxy-mysql
+      - DB_PORT=3306
+      - DB_NAME=oauth2_mock
+      - DB_USER=oauth2_user
+      - DB_PASSWORD=oauth2_password_123456
+      - DB_CHARSET=utf8mb4
+      - DB_TIMEZONE=+08:00
+
+      # Redis 配置
+      - REDIS_HOST=api-proxy-redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=123456
+      - REDIS_DB=0
+
+      # JWT 配置
+      - JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
+      - JWT_EXPIRES_IN=1h
+      - JWT_REFRESH_EXPIRES_IN=24h
+      - JWT_ALGORITHM=RS256
+
+      # OAuth2 模拟配置
+      - OAUTH2_ACCESS_TOKEN_EXPIRES=3600
+      - OAUTH2_REFRESH_TOKEN_EXPIRES=86400
+      - OAUTH2_CODE_EXPIRES=600
+      - OAUTH2_ISSUER=http://api-proxy-nodejs:8889
+      - OAUTH2_AUDIENCE=api.yourdomain.com
+
+      # 缓存配置
+      - CACHE_TTL_ACCESS_TOKEN=3600
+      - CACHE_TTL_REFRESH_TOKEN=86400
+      - CACHE_TTL_CLIENT_TOKEN=1800
+      - CACHE_CLEANUP_INTERVAL=300
+
+      # 安全配置
+      - RATE_LIMIT_WINDOW=900000
+      - RATE_LIMIT_MAX_REQUESTS=1000
+
+      # API 配置
+      - API_PREFIX=/api
+      - ADMIN_PATH=/admin
+
+      # 时区设置
+      - TZ=Asia/Shanghai
+    networks:
+      - api-proxy-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8889/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    depends_on:
+      - api-proxy-mysql
+      - api-proxy-redis
+    labels:
+      - "com.api-proxy.service=oauth2-mock"
+      - "com.api-proxy.version=1.0.0"
+
+  # MySQL 数据库
+  api-proxy-mysql:
+    image: mysql:8.0
+    container_name: api-proxy-mysql
+    restart: unless-stopped
+    ports:
+      - "3306:3306"   # MySQL 端口（开发时访问）
+    volumes:
+      - ../mysql-data:/var/lib/mysql
+      - ../database:/docker-entrypoint-initdb.d:ro
+    environment:
+      - MYSQL_ROOT_PASSWORD=root_password_123456
+      - MYSQL_DATABASE=oauth2_mock
+      - MYSQL_USER=oauth2_user
+      - MYSQL_PASSWORD=oauth2_password_123456
+      - MYSQL_CHARACTER_SET_SERVER=utf8mb4
+      - MYSQL_COLLATION_SERVER=utf8mb4_unicode_ci
+      - TZ=Asia/Shanghai
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --default-authentication-plugin=mysql_native_password
+      --max_connections=1000
+      --innodb_buffer_pool_size=256M
+      --query_cache_size=32M
+      --query_cache_type=1
+      --slow_query_log=1
+      --long_query_time=2
+      --slow_query_log_file=/var/log/mysql/slow.log
+      --log-queries-not-using-indexes=1
+    networks:
+      - api-proxy-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "oauth2_user", "-poauth2_password_123456"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    labels:
+      - "com.api-proxy.service=mysql"
+      - "com.api-proxy.version=8.0"
+
+  # Redis 缓存服务
+  api-proxy-redis:
+    image: redis:7-alpine
+    container_name: api-proxy-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"   # Redis 端口（开发时访问）
+    volumes:
+      - ../redis-data:/data
+    command: >
+      redis-server
+      --appendonly yes
+      --maxmemory 512mb
+      --maxmemory-policy allkeys-lru
+      --requirepass 123456
+      --save 900 1
+      --save 300 10
+      --save 60 10000
+      --slowlog-log-slower-than 10000
+      --slowlog-max-len 256
+    networks:
+      - api-proxy-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "123456", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    labels:
+      - "com.api-proxy.service=redis"
+      - "com.api-proxy.version=7-alpine"
+
+# 网络配置
+networks:
+  api-proxy-network:
+    driver: bridge
+    name: api-proxy-network
+    

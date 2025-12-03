@@ -3,9 +3,9 @@
 # 定义要创建的目录列表
 directories=(
     "redis-data"
-    "nginx-logs"
     "nginx"
     "nginx/conf.d"
+    "nginx/oauth2_certs"
     "lua"
     "logs"
     "html"
@@ -16,6 +16,9 @@ directories=(
     "data/json"
     "data/jwt"
     "data/map"
+    "mysql-data"
+    "nodejs/logs"
+    "tmp/oauth2"
 )
 
 # 创建目录
@@ -27,7 +30,7 @@ done
 
 # 授予权限
 echo "开始授予权限..."
-chmod -R 777 redis-data nginx lua logs html ssl data config
+chmod -R 777 redis-data nginx lua logs html ssl data config redis mysql-data nodejs/logs tmp
 echo "已授予所有目录777权限"
 
 echo "完成！所有目录已创建并授权"

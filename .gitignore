@@ -1,3 +1,6 @@
+###########################################################
+# 通用部分
+
 # 日志文件
 logs/*.log
 logs/processed/*
@@ -43,21 +46,21 @@ backups/
 *~
 .projectile
 
-# Node.js (如果使用)
+# Node.js 通用
 node_modules/
 .npm/
 .yarn/
+yarn-debug.log*
+.yarn-integrity
 
 # Docker相关
 docker-compose.override.yaml
 
 # 操作系统文件
-.DS_Store
 ._*
 .Spotlight-V100
 .Trashes
 ehthumbs.db
-Thumbs.db
 
 # 测试文件
 test/
@@ -71,8 +74,67 @@ secrets.lua
 # Windows
 *.lnk
 *.url
+NUL
+CON
+PRN
+AUX
+COM[1-9]
+LPT[1-9]
 
+# 项目特定文件
 end/data/map/*.json
 end/data/json/*.json
 end/data/jwt/*.json
+**.orig
+*.old
 
+###########################################################
+# NodeJs 部分
+
+# Bundler 配置
+./end/nodejs/.bundle
+
+# 数据库文件
+./end/nodejs/db/*.sqlite3
+./end/nodejs/db/*.sqlite3-journal
+
+# 日志和临时文件
+./end/nodejs/log/*
+./end/nodejs/tmp/*
+!./end/nodejs/log/.keep
+!./end/nodejs/tmp/.keep
+
+# 存储和上传文件
+./end/nodejs/storage/*
+!./end/nodejs/storage/.keep
+./end/nodejs/public/uploads/*
+./end/nodejs/public/dev-assets/*
+./end/nodejs/public/assets/*
+./end/nodejs/public/packs
+./end/nodejs/public/packs-test
+
+# 构建文件
+./end/nodejs/app/assets/builds/*
+!./end/nodejs/app/assets/builds/.keep
+
+# 配置和密钥
+./end/nodejs/config/master.key
+./end/nodejs/config/application.yml
+./end/nodejs/config/database.yml
+
+# Node.js 特定
+./end/nodejs/node_modules
+./end/nodejs/yarn-error.log
+./end/nodejs/core
+./end/nodejs/tags
+
+# Clacky 特定文件
+./end/nodejs/.1024*
+./end/nodejs/!.1024
+./end/nodejs/.breakpoints
+./end/nodejs/*rules
+./end/nodejs/!.clackyrules
+
+# Docker 数据目录
+./end/nodejs/postgres_data/
+./end/nodejs/redis_data/

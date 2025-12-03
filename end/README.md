@@ -30,7 +30,7 @@ D:\www\nginxzhuanfa\end\                    # 项目根目录
 ├── docker-compose.yml                      # Docker Compose 服务编排
 ├── Dockerfile                              # Docker 镜像构建文件
 ├── init.sh                                 # 项目初始化脚本
-├── start.sh                                # 容器启动脚本
+├── DEPLOYMENT.md                          # 部署指南
 │
 ├── nginx/                                  # Nginx 配置
 │   ├── nginx.conf                         # OpenResty 主配置
@@ -44,6 +44,30 @@ D:\www\nginxzhuanfa\end\                    # 项目根目录
 │   ├── utils.lua                          # 通用工具函数
 │   ├── oauth2_client.lua                 # OAuth2 客户端实现
 │   └── oauth2_providers.lua              # OAuth2 提供商配置
+│
+├── nodejs/                                 # Node.js OAuth2 模拟服务
+│   ├── Dockerfile                         # Node.js 服务镜像
+│   ├── docker-compose.yml                # Node.js 服务编排
+│   ├── package.json                       # 项目依赖配置
+│   ├── README.md                          # Node.js 服务文档
+│   ├── .env.example                       # 环境变量模板
+│   ├── pm2.config.js                     # PM2 进程管理
+│   ├── server/                            # Node.js 后端服务
+│   │   ├── app.js                        # Express 应用入口
+│   │   ├── config/                       # 配置文件
+│   │   ├── services/                     # 业务逻辑服务
+│   │   ├── middleware/                   # Express 中间件
+│   │   ├── routes/                       # API 路由
+│   │   └── utils/                        # 工具函数
+│   ├── client/                           # React 前端应用（可选）
+│   ├── database/                         # 数据库相关文件
+│   │   └── schema.sql                   # MySQL 数据库结构
+│   └── scripts/                          # 部署脚本
+│       └── start.sh                      # 服务启动脚本
+│
+├── database/                              # 数据库相关文件
+│   ├── schema.sql                        # MySQL 数据库结构
+│   └── data/                             # 数据库备份文件
 │
 ├── config/                                # 应用配置文件
 │   └── app_config.json                   # 应用运行时配置
@@ -59,10 +83,19 @@ D:\www\nginxzhuanfa\end\                    # 项目根目录
 │
 ├── logs/                                  # 日志文件目录
 │   ├── access.log                       # 访问日志
-│   └── error.log                        # 错误日志
+│   ├── error.log                        # 错误日志
+│   └── oauth2/                          # OAuth2 服务日志
 │
 ├── redis/                                 # Redis 配置
 │   └── redis.conf                       # Redis 配置文件
+│
+├── mysql-data/                            # MySQL 数据存储
+│
+├── tmp/                                   # 临时文件目录
+│   └── oauth2/                           # OAuth2 临时文件
+│
+├── client/                                # 客户端文件目录
+│   └── google_server_account/            # 服务账号文件存储
 │
 ├── html/                                  # 静态文件目录
 │   ├── index.html                       # 默认首页
@@ -114,21 +147,52 @@ D:\www\nginxzhuanfa\end\                    # 项目根目录
 
 - Docker 和 Docker Compose
 - Linux/macOS 环境 (Windows 需要 WSL2)
-- 至少 2GB 可用内存
+- 至少 4GB 可用内存
 - 网络连接到 Google AI 服务
 
-### 1. 项目初始化
+### 1. 一键部署（推荐）
 
 ```bash
-# 克隆或下载项目
+# 进入项目目录
 cd D:\www\nginxzhuanfa\end
 
+# 创建 Docker 网络
+docker network create api-proxy-network
+
+# 启动 OAuth2 模拟服务
+cd nodejs
+docker-compose up -d
+
+# 启动主代理服务
+cd ..
+docker-compose up -d
+
+# 检查服务状态
+docker-compose ps
+```
+
+### 2. 项目初始化
+
+```bash
 # 运行初始化脚本，创建必要目录
 chmod +x init.sh
 ./init.sh
 
 # 设置权限
-chmod -R 777 data logs config redis-data
+chmod -R 755 data logs config redis-data mysql-data tmp/oauth2 client/google_server_account
+```
+
+### 3. 验证部署
+
+```bash
+# 健康检查
+curl http://localhost:8888/health      # 主代理服务
+curl http://localhost:8889/health      # OAuth2 模拟服务
+
+# 测试 OAuth2 认证
+curl -X POST http://localhost:8889/accounts.google.com/oauth2/token \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=client_credentials&client_id=test&client_secret=test"
 ```
 
 ### 2. 配置 AI 服务账号

@@ -1,0 +1,17 @@
+#!/bin/bash
+
+# 脚本名称: gitk
+# 用途: 使用特定的 SSH 密钥执行 Git 命令
+# 用法: gitk [git命令及参数]
+
+# 指定要使用的 SSH 密钥
+SSH_KEY="$HOME/.ssh/github"
+
+# 检查密钥是否存在
+if [ ! -f "$SSH_KEY" ]; then
+    echo "错误: SSH 密钥 $SSH_KEY 不存在!"
+    exit 1
+fi
+
+# 设置 Git SSH 命令并执行 Git 命令
+GIT_SSH_COMMAND="ssh -i $SSH_KEY" git "$@"
