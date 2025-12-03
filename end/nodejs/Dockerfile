@@ -1,5 +1,16 @@
-# 使用官方Node.js运行时作为基础镜像
-FROM node:18-alpine
+# 构建阶段
+FROM node:18-alpine AS builder
+
+WORKDIR /app
+
+# 复制package.json
+COPY package.json ./
+
+# 安装所有依赖（包括开发依赖）
+RUN npm install
+
+# 生产阶段
+FROM node:18-alpine AS production
 
 # 设置维护者信息
 LABEL maintainer="API Proxy Team"
@@ -26,11 +37,12 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 RUN addgroup -g 1001 -S nodejs && \
     adduser -S -u 1001 -G nodejs nodejs
 
-# 复制package.json和package-lock.json（如果存在）
-COPY package*.json ./
+# 从构建阶段复制package.json和package-lock.json
+COPY --from=builder --chown=nodejs:nodejs /app/package.json ./
+COPY --from=builder --chown=nodejs:nodejs /app/package-lock.json ./
 
-# 安装依赖
-RUN npm ci --only=production && \
+# 只安装生产依赖
+RUN npm ci --omit=dev && \
     npm cache clean --force
 
 # 复制应用代码

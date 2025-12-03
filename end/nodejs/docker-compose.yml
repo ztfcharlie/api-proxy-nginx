@@ -1,4 +1,3 @@
-version: '3.8'
 
 services:
   # OAuth2 模拟服务 (Node.js)
