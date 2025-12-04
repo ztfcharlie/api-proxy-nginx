@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  # 临时调试容器
+  nodejs-debug:
+    image: node:18-alpine
+    container_name: nodejs-debug
+    working_dir: /app
+    command: ["sh", "-c", "node check-env-in-container.js && sleep 3600"]
+    volumes:
+      # 挂载当前目录和.env文件
+      - .:/app
+      - ./.env:/app/.env:ro
+    networks:
+      api-proxy-network:
+        external: true
+    restart: "no"
+
+# 网络配置 - 连接到外部创建的基础服务网络
+networks:
+  api-proxy-network:
+    external: true
