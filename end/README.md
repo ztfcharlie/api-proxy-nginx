@@ -375,6 +375,19 @@ data: [DONE]
 
 ## 🔧 管理与监控
 
+### Web 管理控制台
+
+Gemini Proxy 提供了一个内置的 Web 管理控制台，用于管理系统配置、密钥和缓存。
+
+**访问地址**: http://localhost:8889/admin/
+
+**主要功能**:
+- **Dashboard**: 系统概览
+- **Service Accounts**: 管理服务账号凭证 (查看/添加/编辑/删除/重新生成密钥)
+- **Map Config**: 可视化编辑客户端和服务路由配置 (`map-config.json`)
+- **Service Keys**: 管理 Google Cloud 服务账号 JSON 文件 (上传/查看/重命名/删除)
+- **JWT Cache**: 查看和管理 OAuth2 Token 缓存
+
 ### 服务管理命令
 
 ```bash
