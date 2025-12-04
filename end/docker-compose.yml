@@ -56,8 +56,6 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
-    depends_on:
-      - api-proxy-nodejs
     networks:
       - api-proxy-network
     labels:
