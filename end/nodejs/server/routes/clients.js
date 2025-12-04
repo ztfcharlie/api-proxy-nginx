@@ -60,7 +60,7 @@ function generateClientSecret() {
 /**
  * 获取所有客户端（支持分页和搜索）
  */
-router.get('/', auth.optionalAuth(), async (req, res) => {
+router.get('/', async (req, res) => {
     try {
         const { page = 1, limit = 20, search = '', status = '', sort = 'created_at', order = 'desc' } = req.query;
         const offset = (page - 1) * limit;
@@ -85,34 +85,62 @@ router.get('/', auth.optionalAuth(), async (req, res) => {
         const sortField = allowedSortFields.includes(sort) ? sort : 'created_at';
         const sortOrder = order.toLowerCase() === 'asc' ? 'ASC' : 'DESC';
 
-        // 获取客户端列表
-        const [clients] = await databaseService.query(`
-            SELECT
-                client_id,
-                client_name,
-                description,
-                redirect_uris,
-                is_active,
-                created_at,
-                updated_at
-            FROM clients
-            ${whereClause}
-            ORDER BY ${sortField} ${sortOrder}
-            LIMIT ? OFFSET ?
-        `, [...params, parseInt(limit), offset]);
+        let clients = [];
 
-        // 获取总数
-        const [countResult] = await databaseService.query(`
-            SELECT COUNT(*) as total FROM clients ${whereClause}
-        `, params);
+        try {
+            // 从配置文件读取客户端数据
+            const fs = require('fs');
+            const path = require('path');
+            const mapConfigPath = path.join(process.cwd(), '../data/map/map-config.json');
 
-        const response = {
-            success: true,
-            data: {
-                clients: clients.map(client => ({
-                    ...client,
-                    redirect_uris: JSON.parse(client.redirect_uris || '[]')
-                })),
+            const mapConfig = JSON.parse(fs.readFileSync(mapConfigPath, 'utf8'));
+
+            clients = mapConfig.clients.map((client, index) => ({
+                id: index + 1,
+                client_id: client.client_token,
+                client_name: client.client_token,
+                description: `${client.service_type || 'google'} service client`,
+                service_type: client.service_type || 'google',
+                is_active: client.enable !== false,
+                rate_limit: client.rate_limit || 1000,
+                last_used: new Date().toISOString(),
+                created_at: client.created_at || new Date().toISOString(),
+                updated_at: client.updated_at || new Date().toISOString(),
+                key_filename_gemini: client.key_filename_gemini || []
+            }));
+
+            // 应用搜索过滤
+            if (search) {
+                clients = clients.filter(client =>
+                    client.client_name.toLowerCase().includes(search.toLowerCase()) ||
+                    client.client_id.toLowerCase().includes(search.toLowerCase()) ||
+                    client.description.toLowerCase().includes(search.toLowerCase())
+                );
+            }
+
+            // 应用状态过滤
+            if (status) {
+                const isActive = status === 'active';
+                clients = clients.filter(client => client.is_active === isActive);
+            }
+
+            // 排序
+            const allowedSortFields = ['created_at', 'updated_at', 'client_name', 'client_id'];
+            const sortField = allowedSortFields.includes(sort) ? sort : 'created_at';
+            const sortOrder = order.toLowerCase() === 'asc' ? 1 : -1;
+
+            clients.sort((a, b) => {
+                if (a[sortField] < b[sortField]) return -sortOrder;
+                if (a[sortField] > b[sortField]) return sortOrder;
+                return 0;
+            });
+
+            // 分页
+            const paginatedClients = clients.slice(offset, offset + parseInt(limit));
+
+            const response = {
+                success: true,
+                data: paginatedClients,
                 pagination: {
                     page: parseInt(page),
                     limit: parseInt(limit),

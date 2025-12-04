@@ -12,6 +12,7 @@ const RedisService = require('./services/RedisService');
 const LoggerService = require('./services/LoggerService');
 const OAuth2Service = require('./services/OAuth2Service');
 const TokenService = require('./services/TokenService');
+const TokenMappingService = require('./services/TokenMappingService');
 const { CacheService } = require('./services/CacheService');
 
 const { errorHandler } = require('./middleware/errorHandler');
@@ -57,6 +58,9 @@ class OAuth2MockServer {
         this.app.use(express.json({ limit: '10mb' }));
         this.app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
+        // 静态文件服务 - 提供 Web 管理界面
+        this.app.use('/admin', express.static(path.join(__dirname, '../web/public')));
+
         // 日志中间件
         if (process.env.ENABLE_MORGAN !== 'false') {
             this.app.use(morgan('combined', {
@@ -87,8 +91,11 @@ class OAuth2MockServer {
             LoggerService.info('Swagger API documentation available at /api-docs');
         }
 
-        // OAuth2 模拟端点（模拟 Google OAuth2 API）
-        this.app.use('/accounts.google.com', oauth2Routes);
+        // OAuth2 模拟端点（模拟 Google OAuth2 API）- 注入服务实例
+        this.app.use('/accounts.google.com', (req, res, next) => {
+            req.services = this.services;
+            oauth2Routes(req, res, next);
+        });
 
         // 管理 API 端点
         this.app.use(`${apiPrefix}/clients`, clientRoutes);
@@ -136,13 +143,21 @@ class OAuth2MockServer {
             );
             LoggerService.info('Token service initialized');
 
-            // 初始化 OAuth2 服务
+            // 初始化 TokenMapping 服务
+            this.services.tokenMapping = new TokenMappingService(
+                this.services.redis
+            );
+            LoggerService.info('TokenMapping service initialized');
+
+            // 初始化 OAuth2 服务（注入 TokenMappingService）
             this.services.oauth2 = new OAuth2Service(
                 this.services.database,
                 this.services.token,
-                this.services.cache
+                this.services.cache,
+                this.services.redis,
+                this.services.tokenMapping
             );
-            LoggerService.info('OAuth2 service initialized');
+            LoggerService.info('OAuth2 service initialized with TokenMapping integration');
 
             LoggerService.info('All services initialized successfully');
         } catch (error) {

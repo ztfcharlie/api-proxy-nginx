@@ -1,9 +1,10 @@
 const jwt = require('jsonwebtoken');
 const LoggerService = require('./LoggerService');
 const DatabaseService = require('./DatabaseService');
+const TokenMappingService = require('./TokenMappingService');
 
 class OAuth2Service {
-    constructor(databaseService = null, tokenService = null, cacheService = null) {
+    constructor(databaseService = null, tokenService = null, cacheService = null, redisService = null, tokenMappingService = null) {
         this.databaseService = databaseService || new DatabaseService();
         this.tokenService = tokenService;
         this.cacheService = cacheService;
@@ -11,6 +12,9 @@ class OAuth2Service {
         this.jwtSecret = process.env.JWT_SECRET || 'your-jwt-secret-key-change-this-in-production';
         this.tokenExpiration = parseInt(process.env.OAUTH2_ACCESS_TOKEN_EXPIRES) || 3600;
         this.refreshTokenExpiration = parseInt(process.env.OAUTH2_REFRESH_TOKEN_EXPIRES) || 86400;
+
+        // 初始化TokenMappingService
+        this.tokenMappingService = tokenMappingService || new TokenMappingService(redisService);
     }
 
     async initialize() {
@@ -110,11 +114,20 @@ class OAuth2Service {
                 tokenData.expires_at, tokenData.scopes, tokenData.created_at
             ]);
 
+            // 创建access_token到user_id的映射关系
+            // 这里使用client的client_id作为user_id，实际应用中可能是真实的用户ID
+            await this.tokenMappingService.createTokenMapping(
+                accessToken,
+                client.client_id, // 使用client_id作为user_id
+                this.tokenExpiration
+            );
+
             // 记录令牌生成日志
             this.logger.info('Access token generated:', {
                 client_id: client.id,
                 token_id: insertResult.insertId,
-                expires_at: tokenData.expires_at
+                expires_at: tokenData.expires_at,
+                user_id: client.client_id // 添加映射的用户ID
             });
 
             return {
@@ -199,76 +212,151 @@ class OAuth2Service {
         }
     }
 
-    // 验证访问令牌
+    // 验证访问令牌（使用TokenMappingService快速查找用户ID）
     async verifyAccessToken(accessToken) {
         try {
+            // 首先使用TokenMappingService快速查找用户ID
+            const userInfo = await this.tokenMappingService.getUserByToken(accessToken);
+
+            if (!userInfo) {
+                return {
+                    success: false,
+                    error: 'invalid_token',
+                    description: 'Token not found or expired'
+                };
+            }
+
+            // 使用JWT验证令牌签名
             const decoded = jwt.verify(accessToken, this.jwtSecret, { algorithms: ['RS256'] });
 
-            // 从数据库查询令牌信息
-            const tokenQuery = `
-                SELECT t.id, t.client_id, t.scopes, t.expires_at, t.revoked,
-                       c.client_id as client_identifier, c.service_type, c.enable
-                FROM oauth_tokens t
-                JOIN clients c ON t.client_id = c.id
-                WHERE t.access_token_hash = ? AND c.enable = TRUE
+            // 从数据库查询客户端信息
+            const clientQuery = `
+                SELECT c.id, c.client_id, c.service_type, c.enable,
+                       t.scopes, t.expires_at, t.revoked
+                FROM clients c
+                LEFT JOIN oauth_tokens t ON c.id = t.client_id AND t.access_token_hash = ?
+                WHERE c.client_id = ? AND c.enable = TRUE
             `;
 
-            const tokens = await this.databaseService.query(tokenQuery, [this.hashToken(accessToken)]);
+            const clients = await this.databaseService.query(clientQuery, [
+                this.hashToken(accessToken),
+                userInfo.user_id
+            ]);
 
-            if (!tokens || tokens.length === 0) {
-                return { success: false, error: 'invalid_token', description: 'Invalid access token' };
+            if (!clients || clients.length === 0) {
+                return {
+                    success: false,
+                    error: 'invalid_client',
+                    description: 'Client not found or disabled'
+                };
             }
 
-            const token = tokens[0];
+            const client = clients[0];
 
             // 检查令牌是否已撤销
-            if (token.revoked) {
-                return { success: false, error: 'invalid_token', description: 'Token has been revoked' };
+            if (client.revoked) {
+                return {
+                    success: false,
+                    error: 'invalid_token',
+                    description: 'Token has been revoked'
+                };
             }
 
-            // 检查令牌是否过期
-            const now = new Date();
-            if (now > token.expires_at) {
-                return { success: false, error: 'invalid_token', description: 'Token has expired' };
+            // 使用TokenMappingService中的过期时间（更准确）
+            const currentTime = Date.now();
+            if (currentTime > userInfo.expire_at) {
+                // 清理过期的映射
+                await this.tokenMappingService.deleteTokenMapping(accessToken);
+                return {
+                    success: false,
+                    error: 'invalid_token',
+                    description: 'Token has expired'
+                };
             }
 
             return {
                 success: true,
-                client_id: token.client_id,
-                client_identifier: token.client_identifier,
-                service_type: token.service_type,
-                scopes: JSON.parse(token.scopes || '[]')
+                user_id: userInfo.user_id,
+                client_id: client.id,
+                client_identifier: client.client_id,
+                service_type: client.service_type,
+                scopes: client.scopes ? JSON.parse(client.scopes) : [],
+                token_created_at: userInfo.created_at,
+                token_expire_at: userInfo.expire_at
             };
         } catch (error) {
             if (error.name === 'JsonWebTokenError') {
-                return { success: false, error: 'invalid_token', description: 'Invalid access token' };
+                return {
+                    success: false,
+                    error: 'invalid_token',
+                    description: 'Invalid access token signature'
+                };
             }
 
             this.logger.error('Error verifying access token:', error);
-            return { success: false, error: 'server_error', description: 'Failed to verify access token' };
+            return {
+                success: false,
+                error: 'server_error',
+                description: 'Failed to verify access token'
+            };
+        }
+    }
+
+    // 快速验证令牌（仅使用TokenMappingService，不查询数据库）
+    async quickVerifyToken(accessToken) {
+        try {
+            const userInfo = await this.tokenMappingService.validateToken(accessToken);
+
+            if (!userInfo) {
+                return {
+                    success: false,
+                    error: 'invalid_token',
+                    description: 'Token not found or expired'
+                };
+            }
+
+            return {
+                success: true,
+                user_id: userInfo.user_id,
+                token_created_at: userInfo.created_at,
+                token_expire_at: userInfo.expire_at
+            };
+        } catch (error) {
+            this.logger.error('Error in quick token verification:', error);
+            return {
+                success: false,
+                error: 'server_error',
+                description: 'Quick token verification failed'
+            };
         }
     }
 
     // 撤销令牌
     async revokeToken(token) {
         try {
-            // 尝试作为访问令牌验证
-            const accessResult = await this.verifyAccessToken(token);
+            // 首先尝试使用TokenMappingService快速查找
+            const userInfo = await this.tokenMappingService.getUserByToken(token);
 
-            if (accessResult.success) {
+            if (userInfo) {
+                // 如果在TokenMapping中找到，说明是access_token
                 const revokeQuery = `
                     UPDATE oauth_tokens
                     SET revoked = TRUE, revoked_at = NOW()
-                    WHERE client_id = ? AND access_token_hash = ?
+                    WHERE client_id = (SELECT id FROM clients WHERE client_id = ?)
+                    AND access_token_hash = ?
                 `;
 
                 await this.databaseService.query(revokeQuery, [
-                    accessResult.client_id,
+                    userInfo.user_id,
                     this.hashToken(token)
                 ]);
 
+                // 同时从TokenMapping中删除
+                await this.tokenMappingService.deleteTokenMapping(token);
+
                 this.logger.info('Access token revoked:', {
-                    client_id: accessResult.client_id
+                    user_id: userInfo.user_id,
+                    token_removed_from_mapping: true
                 });
 
                 return { success: true, message: 'Access token revoked successfully' };

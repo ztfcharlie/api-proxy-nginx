@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OAuth2 Service Account 管理系统</title>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        .fade-in {
+            animation: fadeIn 0.3s ease-in;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .modal-backdrop {
+            background-color: rgba(0, 0, 0, 0.5);
+        }
+    </style>
+</head>
+<body class="bg-gray-100">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        // API 服务配置
+        const API_BASE_URL = window.location.origin;
+
+        // API 服务类
+        class ApiService {
+            static async request(method, endpoint, data = null) {
+                try {
+                    const config = {
+                        method,
+                        url: `${API_BASE_URL}${endpoint}`,
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                    };
+
+                    if (data) {
+                        config.data = data;
+                    }
+
+                    const response = await axios(config);
+                    return response.data;
+                } catch (error) {
+                    console.error('API请求失败:', error);
+                    throw error.response?.data || { error: '网络请求失败' };
+                }
+            }
+
+            // 用户管理
+            static async getUsers() {
+                return this.request('GET', '/api/clients');
+            }
+
+            static async createUser(userData) {
+                return this.request('POST', '/api/clients', userData);
+            }
+
+            static async updateUser(clientId, userData) {
+                return this.request('PUT', `/api/clients/${clientId}`, userData);
+            }
+
+            static async deleteUser(clientId) {
+                return this.request('DELETE', `/api/clients/${clientId}`);
+            }
+
+            // 服务账号管理
+            static async getServerAccounts(clientToken) {
+                return this.request('GET', `/api/server-accounts?client_token=${clientToken}`);
+            }
+
+            static async createServerAccount(accountData) {
+                return this.request('POST', '/api/server-accounts', accountData);
+            }
+
+            static async updateServerAccount(accountId, accountData) {
+                return this.request('PUT', `/api/server-accounts/${accountId}`, accountData);
+            }
+
+            static async deleteServerAccount(accountId) {
+                return this.request('DELETE', `/api/server-accounts/${accountId}`);
+            }
+
+            static async regenerateKey(accountId) {
+                return this.request('POST', `/api/server-accounts/${accountId}/regenerate-key`);
+            }
+
+            // 系统状态
+            static async getSystemStats() {
+                return this.request('GET', '/health');
+            }
+        }
+
+        // 加载组件
+        function LoadingSpinner() {
+            return (
+                <div className="flex items-center justify-center min-h-screen">
+                    <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+                </div>
+            );
+        }
+
+        // 通知组件
+        function Notification({ message, type, onClose }) {
+            useEffect(() => {
+                if (message) {
+                    const timer = setTimeout(onClose, 3000);
+                    return () => clearTimeout(timer);
+                }
+            }, [message, onClose]);
+
+            if (!message) return null;
+
+            const bgColor = type === 'success' ? 'bg-green-500' : type === 'error' ? 'bg-red-500' : 'bg-blue-500';
+
+            return (
+                <div className={`fixed top-4 right-4 ${bgColor} text-white px-6 py-3 rounded-lg shadow-lg z-50 fade-in`}>
+                    <div className="flex items-center justify-between">
+                        <span>{message}</span>
+                        <button
+                            onClick={onClose}
+                            className="ml-4 text-white hover:text-gray-200"
+                        >
+                            <i className="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+
+        // 确认对话框
+        function ConfirmDialog({ isOpen, title, message, onConfirm, onCancel }) {
+            if (!isOpen) return null;
+
+            return (
+                <div className="fixed inset-0 modal-backdrop flex items-center justify-center z-50">
+                    <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4 fade-in">
+                        <h3 className="text-lg font-semibold mb-4">{title}</h3>
+                        <p className="text-gray-600 mb-6">{message}</p>
+                        <div className="flex justify-end space-x-3">
+                            <button
+                                onClick={onCancel}
+                                className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                            >
+                                取消
+                            </button>
+                            <button
+                                onClick={onConfirm}
+                                className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+                            >
+                                确认删除
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // 服务账号卡片
+        function ServiceAccountCard({ account, onEdit, onDelete, onRegenerateKey }) {
+            return (
+                <div className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow">
+                    <div className="flex justify-between items-start mb-4">
+                        <div>
+                            <h3 className="text-lg font-semibold text-gray-800">{account.display_name}</h3>
+                            <p className="text-sm text-gray-500">{account.service_account_id}</p>
+                        </div>
+                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                            account.enabled ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                        }`}>
+                            {account.enabled ? '启用' : '禁用'}
+                        </span>
+                    </div>
+
+                    <div className="space-y-2 mb-4">
+                        <div className="flex items-center text-sm">
+                            <i className="fas fa-envelope w-4 text-gray-400"></i>
+                            <span className="ml-2 text-gray-600 truncate">{account.service_account_email}</span>
+                        </div>
+                        <div className="flex items-center text-sm">
+                            <i className="fas fa-key w-4 text-gray-400"></i>
+                            <span className="ml-2 text-gray-600">{account.key_filename}</span>
+                        </div>
+                        <div className="flex items-center text-sm">
+                            <i className="fas fa-server w-4 text-gray-400"></i>
+                            <span className="ml-2 text-gray-600">{account.service_type}</span>
+                        </div>
+                        <div className="flex items-center text-sm">
+                            <i className="fas fa-calendar w-4 text-gray-400"></i>
+                            <span className="ml-2 text-gray-600">
+                                创建于 {new Date(account.created_at).toLocaleDateString()}
+                            </span>
+                        </div>
+                    </div>
+
+                    <div className="flex justify-end space-x-2">
+                        <button
+                            onClick={() => onEdit(account)}
+                            className="px-3 py-1 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200"
+                        >
+                            <i className="fas fa-edit mr-1"></i>编辑
+                        </button>
+                        <button
+                            onClick={() => onRegenerateKey(account)}
+                            className="px-3 py-1 text-sm bg-yellow-100 text-yellow-700 rounded hover:bg-yellow-200"
+                        >
+                            <i className="fas fa-sync mr-1"></i>重新生成密钥
+                        </button>
+                        <button
+                            onClick={() => onDelete(account)}
+                            className="px-3 py-1 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200"
+                        >
+                            <i className="fas fa-trash mr-1"></i>删除
+                        </button>
+                    </div>
+                </div>
+            );
+        }
+
+        // 服务账号编辑表单
+        function ServiceAccountForm({ account, isOpen, onClose, onSubmit }) {
+            const [formData, setFormData] = useState({
+                display_name: '',
+                service_account_email: '',
+                key_filename: '',
+                service_type: 'google',
+                enabled: true,
+                client_token: ''
+            });
+
+            const [isSubmitting, setIsSubmitting] = useState(false);
+
+            useEffect(() => {
+                if (account) {
+                    setFormData(account);
+                } else {
+                    setFormData({
+                        display_name: '',
+                        service_account_email: '',
+                        key_filename: '',
+                        service_type: 'google',
+                        enabled: true,
+                        client_token: ''
+                    });
+                }
+            }, [account, isOpen]);
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                setIsSubmitting(true);
+
+                try {
+                    await onSubmit(formData);
+                    onClose();
+                } catch (error) {
+                    console.error('提交失败:', error);
+                } finally {
+                    setIsSubmitting(false);
+                }
+            };
+
+            const handleInputChange = (e) => {
+                const { name, value, type, checked } = e.target;
+                setFormData(prev => ({
+                    ...prev,
+                    [name]: type === 'checkbox' ? checked : value
+                }));
+            };
+
+            if (!isOpen) return null;
+
+            return (
+                <div className="fixed inset-0 modal-backdrop flex items-center justify-center z-50">
+                    <div className="bg-white rounded-lg shadow-xl p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto fade-in">
+                        <h2 className="text-xl font-semibold mb-6">
+                            {account ? '编辑服务账号' : '创建服务账号'}
+                        </h2>
+
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        显示名称
+                                    </label>
+                                    <input
+                                        type="text"
+                                        name="display_name"
+                                        value={formData.display_name}
+                                        onChange={handleInputChange}
+                                        required
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        客户端 Token
+                                    </label>
+                                    <input
+                                        type="text"
+                                        name="client_token"
+                                        value={formData.client_token}
+                                        onChange={handleInputChange}
+                                        required
+                                        placeholder="例如: gemini-client-key-aaaa"
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        服务账号邮箱
+                                    </label>
+                                    <input
+                                        type="email"
+                                        name="service_account_email"
+                                        value={formData.service_account_email}
+                                        onChange={handleInputChange}
+                                        required
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        密钥文件名
+                                    </label>
+                                    <input
+                                        type="text"
+                                        name="key_filename"
+                                        value={formData.key_filename}
+                                        onChange={handleInputChange}
+                                        required
+                                        placeholder="例如: service-account.json"
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        服务类型
+                                    </label>
+                                    <select
+                                        name="service_type"
+                                        value={formData.service_type}
+                                        onChange={handleInputChange}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                    >
+                                        <option value="google">Google</option>
+                                        <option value="azure">Azure</option>
+                                        <option value="aws">AWS</option>
+                                    </select>
+                                </div>
+
+                                <div className="flex items-center">
+                                    <input
+                                        type="checkbox"
+                                        name="enabled"
+                                        checked={formData.enabled}
+                                        onChange={handleInputChange}
+                                        className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                                    />
+                                    <label className="ml-2 block text-sm font-medium text-gray-700">
+                                        启用此服务账号
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div className="flex justify-end space-x-3 pt-4">
+                                <button
+                                    type="button"
+                                    onClick={onClose}
+                                    className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
+                                >
+                                    取消
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={isSubmitting}
+                                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                                >
+                                    {isSubmitting ? '提交中...' : (account ? '更新' : '创建')}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            );
+        }
+
+        // 主应用组件
+        function App() {
+            const [users, setUsers] = useState([]);
+            const [serverAccounts, setServerAccounts] = useState({});
+            const [selectedUser, setSelectedUser] = useState('');
+            const [loading, setLoading] = useState(true);
+            const [notification, setNotification] = useState({ message: '', type: '' });
+            const [showAccountForm, setShowAccountForm] = useState(false);
+            const [editingAccount, setEditingAccount] = useState(null);
+            const [deleteConfirm, setDeleteConfirm] = useState({ isOpen: false, account: null });
+
+            // 加载用户列表
+            const loadUsers = async () => {
+                try {
+                    const userData = await ApiService.getUsers();
+                    setUsers(userData.data || []);
+                    if (userData.data && userData.data.length > 0 && !selectedUser) {
+                        setSelectedUser(userData.data[0].client_token);
+                    }
+                } catch (error) {
+                    showNotification('加载用户列表失败: ' + (error.error || '未知错误'), 'error');
+                }
+            };
+
+            // 加载指定用户的服务账号
+            const loadServerAccounts = async (clientToken) => {
+                if (!clientToken) return;
+
+                try {
+                    const accountData = await ApiService.getServerAccounts(clientToken);
+                    setServerAccounts(prev => ({
+                        ...prev,
+                        [clientToken]: accountData.data || []
+                    }));
+                } catch (error) {
+                    showNotification('加载服务账号失败: ' + (error.error || '未知错误'), 'error');
+                }
+            };
+
+            // 初始化数据
+            useEffect(() => {
+                const initData = async () => {
+                    setLoading(true);
+                    await loadUsers();
+                    setLoading(false);
+                };
+                initData();
+            }, []);
+
+            // 当选择的用户改变时，加载对应的服务账号
+            useEffect(() => {
+                if (selectedUser) {
+                    loadServerAccounts(selectedUser);
+                }
+            }, [selectedUser]);
+
+            const showNotification = (message, type = 'success') => {
+                setNotification({ message, type });
+            };
+
+            const hideNotification = () => {
+                setNotification({ message: '', type: '' });
+            };
+
+            // 创建/更新服务账号
+            const handleAccountSubmit = async (accountData) => {
+                try {
+                    if (editingAccount) {
+                        await ApiService.updateServerAccount(editingAccount.id, accountData);
+                        showNotification('服务账号更新成功', 'success');
+                    } else {
+                        // 创建新账号时，自动生成密钥文件
+                        const fullAccountData = {
+                            ...accountData,
+                            service_account_id: `sa-${Date.now()}`,
+                            private_key_id: `key_${Date.now()}`,
+                            project_id: 'oauth2-mock-project'
+                        };
+                        await ApiService.createServerAccount(fullAccountData);
+                        showNotification('服务账号创建成功', 'success');
+                    }
+
+                    // 重新加载数据
+                    await loadServerAccounts(selectedUser);
+                    setEditingAccount(null);
+                } catch (error) {
+                    showNotification('操作失败: ' + (error.error || '未知错误'), 'error');
+                }
+            };
+
+            // 编辑服务账号
+            const handleEditAccount = (account) => {
+                setEditingAccount(account);
+                setShowAccountForm(true);
+            };
+
+            // 删除服务账号
+            const handleDeleteAccount = async (account) => {
+                try {
+                    await ApiService.deleteServerAccount(account.id);
+                    showNotification('服务账号删除成功', 'success');
+                    await loadServerAccounts(selectedUser);
+                    setDeleteConfirm({ isOpen: false, account: null });
+                } catch (error) {
+                    showNotification('删除失败: ' + (error.error || '未知错误'), 'error');
+                }
+            };
+
+            // 重新生成密钥
+            const handleRegenerateKey = async (account) => {
+                try {
+                    await ApiService.regenerateKey(account.id);
+                    showNotification('密钥重新生成成功', 'success');
+                    await loadServerAccounts(selectedUser);
+                } catch (error) {
+                    showNotification('密钥重新生成失败: ' + (error.error || '未知错误'), 'error');
+                }
+            };
+
+            const currentUserAccounts = selectedUser ? (serverAccounts[selectedUser] || []) : [];
+
+            if (loading) {
+                return <LoadingSpinner />;
+            }
+
+            return (
+                <div className="min-h-screen bg-gray-100">
+                    {/* 通知 */}
+                    <Notification
+                        message={notification.message}
+                        type={notification.type}
+                        onClose={hideNotification}
+                    />
+
+                    {/* 删除确认对话框 */}
+                    <ConfirmDialog
+                        isOpen={deleteConfirm.isOpen}
+                        title="确认删除"
+                        message={`确定要删除服务账号 "${deleteConfirm.account?.display_name}" 吗？此操作不可恢复。`}
+                        onConfirm={() => handleDeleteAccount(deleteConfirm.account)}
+                        onCancel={() => setDeleteConfirm({ isOpen: false, account: null })}
+                    />
+
+                    {/* 头部导航 */}
+                    <nav className="bg-white shadow-sm border-b">
+                        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                            <div className="flex justify-between h-16 items-center">
+                                <div className="flex items-center">
+                                    <i className="fas fa-key text-blue-600 text-2xl mr-3"></i>
+                                    <h1 className="text-xl font-semibold text-gray-900">
+                                        OAuth2 Service Account 管理系统
+                                    </h1>
+                                </div>
+                                <div className="flex items-center space-x-4">
+                                    <button
+                                        onClick={() => setShowAccountForm(true)}
+                                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                                    >
+                                        <i className="fas fa-plus mr-2"></i>
+                                        创建服务账号
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </nav>
+
+                    {/* 主内容区域 */}
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                        {/* 用户选择器 */}
+                        {users.length > 0 && (
+                            <div className="mb-8">
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    选择用户
+                                </label>
+                                <select
+                                    value={selectedUser}
+                                    onChange={(e) => setSelectedUser(e.target.value)}
+                                    className="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                >
+                                    {users.map(user => (
+                                        <option key={user.id} value={user.client_token}>
+                                            {user.client_token} ({user.service_type})
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+
+                        {/* 服务账号列表 */}
+                        <div className="mb-6">
+                            <div className="flex justify-between items-center mb-4">
+                                <h2 className="text-lg font-semibold text-gray-900">
+                                    服务账号列表
+                                    {selectedUser && (
+                                        <span className="ml-2 text-sm font-normal text-gray-500">
+                                            ({currentUserAccounts.length} 个账号)
+                                        </span>
+                                    )}
+                                </h2>
+                            </div>
+
+                            {!selectedUser ? (
+                                <div className="text-center py-12 text-gray-500">
+                                    <i className="fas fa-users text-4xl mb-4"></i>
+                                    <p>请选择一个用户来查看其服务账号</p>
+                                </div>
+                            ) : currentUserAccounts.length === 0 ? (
+                                <div className="text-center py-12 text-gray-500">
+                                    <i className="fas fa-inbox text-4xl mb-4"></i>
+                                    <p>该用户暂无服务账号</p>
+                                    <button
+                                        onClick={() => setShowAccountForm(true)}
+                                        className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+                                    >
+                                        创建第一个服务账号
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    {currentUserAccounts.map(account => (
+                                        <ServiceAccountCard
+                                            key={account.id}
+                                            account={account}
+                                            onEdit={handleEditAccount}
+                                            onDelete={(account) => setDeleteConfirm({ isOpen: true, account })}
+                                            onRegenerateKey={handleRegenerateKey}
+                                        />
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* 服务账号表单模态框 */}
+                    <ServiceAccountForm
+                        account={editingAccount}
+                        isOpen={showAccountForm}
+                        onClose={() => {
+                            setShowAccountForm(false);
+                            setEditingAccount(null);
+                        }}
+                        onSubmit={handleAccountSubmit}
+                    />
+                </div>
+            );
+        }
+
+        // 渲染应用
+        ReactDOM.render(<App />, document.getElementById('root'));
+    </script>
+</body>
+</html>

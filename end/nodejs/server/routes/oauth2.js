@@ -590,27 +590,69 @@ async function handleClientCredentialsGrant(req, requestId) {
             };
         }
 
-        // 验证客户端凭证
-        const client = await getClientByCredentials(client_id, client_secret);
-        if (!client) {
+        // 使用 OAuth2Service 验证客户端凭证
+        const oauth2Service = req.services?.oauth2;
+        if (!oauth2Service) {
             return {
                 success: false,
-                error: 'invalid_client',
-                error_description: 'Invalid client credentials',
+                error: 'server_error',
+                error_description: 'OAuth2 service not available',
+                statusCode: 500
+            };
+        }
+
+        // 验证客户端凭证
+        const authResult = await oauth2Service.authenticateClient(client_id, client_secret);
+        if (!authResult.success) {
+            return {
+                success: false,
+                error: authResult.error,
+                error_description: authResult.description,
                 statusCode: 401
             };
         }
 
-        // 生成访问令牌（需要关联一个服务账号）
-        const serverAccount = await getDefaultServerAccount(client.id);
-        if (!serverAccount) {
+        // 解析作用域
+        const scopes = scope ? scope.split(' ') : ['https://www.googleapis.com/auth/cloud-platform'];
+
+        // 生成访问令牌（包含 TokenMapping）
+        const tokenResult = await oauth2Service.generateAccessToken(authResult.client, scopes);
+        if (!tokenResult.success) {
             return {
                 success: false,
-                error: 'invalid_client',
-                error_description: 'No service account associated with this client',
-                statusCode: 401
+                error: tokenResult.error,
+                error_description: tokenResult.description,
+                statusCode: 500
             };
         }
+
+        logger.oauth2(`[OAUTH2] Client credentials grant successful`, {
+            requestId,
+            client_id: authResult.client.client_id,
+            scopes,
+            token_created: true,
+            user_mapped: true // 表示已创建 token -> user 映射
+        });
+
+        return {
+            success: true,
+            response: tokenResult,
+            statusCode: 200
+        };
+    } catch (error) {
+        logger.oauth2(`[OAUTH2] Client credentials grant error`, {
+            requestId,
+            error: error.message,
+            stack: error.stack
+        });
+
+        return {
+            success: false,
+            error: 'server_error',
+            error_description: 'Internal server error',
+            statusCode: 500
+        };
+    }
 
         // 生成访问令牌
         const tokenService = require('../services/TokenService');

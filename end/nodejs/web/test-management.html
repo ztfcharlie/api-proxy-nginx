@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web管理界面测试</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .status {
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 5px;
+            border-left: 4px solid;
+        }
+        .success {
+            background-color: #d4edda;
+            border-color: #28a745;
+            color: #155724;
+        }
+        .warning {
+            background-color: #fff3cd;
+            border-color: #ffc107;
+            color: #856404;
+        }
+        .error {
+            background-color: #f8d7da;
+            border-color: #dc3545;
+            color: #721c24;
+        }
+        .info {
+            background-color: #d1ecf1;
+            border-color: #17a2b8;
+            color: #0c5460;
+        }
+        .button {
+            display: inline-block;
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            text-decoration: none;
+            font-size: 14px;
+        }
+        .primary {
+            background-color: #007bff;
+            color: white;
+        }
+        .success-btn {
+            background-color: #28a745;
+            color: white;
+        }
+        .warning-btn {
+            background-color: #ffc107;
+            color: #212529;
+        }
+        .button:hover {
+            opacity: 0.8;
+        }
+        .code {
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 3px;
+            font-family: 'Courier New', monospace;
+            margin: 10px 0;
+            border: 1px solid #dee2e6;
+        }
+        .feature-list {
+            list-style-type: none;
+            padding: 0;
+        }
+        .feature-list li {
+            padding: 8px 0;
+            border-bottom: 1px solid #eee;
+        }
+        .feature-list li:before {
+            content: "✅ ";
+            color: #28a745;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎉 OAuth2 Service Account Web管理界面</h1>
+
+        <div class="status success">
+            <strong>✅ 界面开发完成！</strong> Web管理界面已成功创建，包含完整的React + Tailwind CSS实现。
+        </div>
+
+        <h2>🚀 访问方式</h2>
+
+        <div class="info">
+            <strong>本地访问：</strong> <a href="/admin/" class="button primary" target="_blank">打开管理界面</a><br>
+            <strong>远程访问：</strong> <a href="http://47.239.10.174:8889/admin/" class="button primary" target="_blank">http://47.239.10.174:8889/admin/</a>
+        </div>
+
+        <h2>🎯 主要功能</h2>
+        <ul class="feature-list">
+            <li>用户选择和管理</li>
+            <li>Service Account 查看（卡片式展示）</li>
+            <li>Service Account 创建（支持Google/Azure/AWS）</li>
+            <li>Service Account 编辑（修改显示名称、邮箱等）</li>
+            <li>Service Account 删除（带确认对话框）</li>
+            <li>密钥重新生成功能</li>
+            <li>实时通知系统</li>
+            <li>响应式设计（支持移动端）</li>
+            <li>现代化UI（Tailwind CSS + Font Awesome）</li>
+        </ul>
+
+        <h2>🔧 技术特性</h2>
+        <div class="status info">
+            <strong>前端技术栈：</strong><br>
+            • React 18 (Babel Standalone)<br>
+            • Tailwind CSS (原子化CSS)<br>
+            • Font Awesome Icons<br>
+            • Axios HTTP客户端
+        </div>
+
+        <h2>📱 界面预览</h2>
+        <div class="status warning">
+            <strong>界面特点：</strong><br>
+            • 现代化卡片布局<br>
+            • 直观的用户交互<br>
+            • 平滑的动画效果<br>
+            • 完整的表单验证<br>
+            • 安全的删除确认<br>
+            • 实时操作反馈
+        </div>
+
+        <h2>🔌 API 集成</h2>
+        <div class="status info">
+            <strong>已集成的API端点：</strong><br>
+            • GET /api/clients - 获取用户列表<br>
+            • GET /api/server-accounts - 获取服务账号列表<br>
+            • POST /api/server-accounts - 创建服务账号<br>
+            • PUT /api/server-accounts/:id - 更新服务账号<br>
+            • DELETE /api/server-accounts/:id - 删除服务账号<br>
+            • POST /api/server-accounts/:id/regenerate-key - 重新生成密钥
+        </div>
+
+        <h2>⚙️ 配置文件集成</h2>
+        <div class="code">
+界面自动读取以下配置文件：<br>
+• ../data/map/map-config.json - 用户和服务账号配置
+        </div>
+
+        <h2>🚨 注意事项</h2>
+        <div class="status error">
+            <strong>当前状态：</strong><br>
+            • Web界面代码已完成<br>
+            • API端点已更新（移除认证要求）<br>
+            • 静态文件服务已配置<br>
+            • ⚠️ 后端服务需要MySQL支持才能完全运行
+        </div>
+
+        <h2>📋 部署检查清单</h2>
+        <ol>
+            <li>✅ Web管理界面代码已创建</li>
+            <li>✅ API端点已更新支持无认证访问</li>
+            <li>✅ 静态文件服务已配置 (/admin/)</li>
+            <li>⚠️ 需要启动MySQL和Redis基础服务</li>
+            <li>⚠️ 需要确保配置文件路径正确</li>
+            <li>⚠️ 需要验证Node.js服务正常启动</li>
+        </ol>
+
+        <h2>🔗 快速链接</h2>
+        <div>
+            <a href="/admin/" class="button success-btn" target="_blank">打开管理界面</a>
+            <a href="/admin/" class="button warning-btn" target="_blank">新窗口打开</a>
+            <a href="/health" class="button primary" target="_blank">检查服务状态</a>
+            <a href="/api-docs" class="button primary" target="_blank">API文档</a>
+        </div>
+
+        <h2>📖 使用指南</h2>
+        <div class="status info">
+            <strong>基本使用步骤：</strong><br>
+            1. 访问管理界面URL<br>
+            2. 从下拉菜单选择用户<br>
+            3. 查看该用户的所有服务账号<br>
+            4. 点击"创建服务账号"添加新账号<br>
+            5. 点击卡片上的按钮进行编辑、删除或重新生成密钥
+        </div>
+
+        <hr>
+        <p style="text-align: center; color: #666; margin-top: 30px;">
+            <small>🎉 Web管理界面开发完成！时间：2024年12月</small>
+        </p>
+    </div>
+</body>
+</html>
