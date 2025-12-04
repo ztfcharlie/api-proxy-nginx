@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini Proxy Admin Console</title>
+    <!-- Dependencies -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        /* Custom Styles */
+        .fade-in { animation: fadeIn 0.3s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        .modal-backdrop { background-color: rgba(0, 0, 0, 0.5); }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* Sidebar Active State */
+        .nav-item.active { background-color: #1e293b; border-right: 4px solid #3b82f6; }
+        .nav-item { transition: all 0.2s; border-right: 4px solid transparent; }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans text-gray-900 h-screen overflow-hidden">
+    <div id="root" class="h-full"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // --- SHARED UTILS & API ---
+        const api = {
+            map: {
+                get: async () => (await axios.get('/api/map-config')).data,
+                save: async (data) => (await axios.post('/api/map-config', data)).data
+            },
+            keys: {
+                list: async () => (await axios.get('/api/service-keys')).data,
+                upload: async (formData) => (await axios.post('/api/service-keys', formData, { headers: { 'Content-Type': 'multipart/form-data' } })).data,
+                getContent: async (filename) => (await axios.get(`/api/service-keys/${filename}`)).data,
+                rename: async (filename, newName) => (await axios.put(`/api/service-keys/${filename}`, { new_name: newName })).data,
+                delete: async (filename) => (await axios.delete(`/api/service-keys/${filename}`)).data
+            },
+            jwt: {
+                list: async () => (await axios.get('/api/jwt-files')).data,
+                getContent: async (filename) => (await axios.get(`/api/jwt-files/${filename}`)).data,
+                delete: async (filename) => (await axios.delete(`/api/jwt-files/${filename}`)).data
+            }
+        };
+
+        const formatSize = (bytes) => {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        };
+
+        const formatDate = (dateString) => {
+            return new Date(dateString).toLocaleString();
+        };
+
+        // --- SHARED COMPONENTS ---
+        const Notification = ({ message, type, onClose }) => {
+            useEffect(() => {
+                if (message) {
+                    const timer = setTimeout(onClose, 3000);
+                    return () => clearTimeout(timer);
+                }
+            }, [message, onClose]);
+            if (!message) return null;
+            const bgColor = type === 'success' ? 'bg-green-500' : 'bg-red-500';
+            return (
+                <div className={`fixed top-4 right-4 ${bgColor} text-white px-6 py-3 rounded-lg shadow-lg z-50 fade-in flex items-center shadow-xl`}>
+                    <span className="font-medium">{message}</span>
+                    <button onClick={onClose} className="ml-4 text-white opacity-80 hover:opacity-100"><i className="fas fa-times"></i></button>
+                </div>
+            );
+        };
+
+        const Modal = ({ title, onClose, children, footer, size = 'max-w-2xl' }) => (
+            <div className="fixed inset-0 modal-backdrop flex items-center justify-center z-40 fade-in p-4">
+                <div className={`bg-white rounded-xl shadow-2xl ${size} w-full overflow-hidden flex flex-col max-h-[90vh]`}>
+                    <div className="px-6 py-4 border-b flex justify-between items-center bg-gray-50">
+                        <h3 className="text-lg font-bold text-gray-800">{title}</h3>
+                        <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors"><i className="fas fa-times text-xl"></i></button>
+                    </div>
+                    <div className="p-6 overflow-y-auto">
+                        {children}
+                    </div>
+                    {footer && <div className="px-6 py-4 bg-gray-50 border-t flex justify-end gap-3">{footer}</div>}
+                </div>
+            </div>
+        );
+
+        const JsonViewer = ({ data }) => (
+            <div className="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-xs overflow-auto max-h-[60vh] border border-gray-700">
+                <pre>{JSON.stringify(data, null, 2)}</pre>
+            </div>
+        );
+
+        // --- MODULE: DASHBOARD ---
+        const Dashboard = ({ setView }) => (
+            <div className="space-y-6 fade-in">
+                <div className="bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl p-8 text-white shadow-lg">
+                    <h2 className="text-3xl font-bold mb-2">Welcome back, Admin</h2>
+                    <p className="opacity-90">Manage your map configurations, service keys, and authentication tokens from one place.</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div onClick={() => setView('map')} className="bg-white p-6 rounded-xl shadow-sm border hover:shadow-md transition-shadow cursor-pointer group">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="p-3 bg-blue-100 text-blue-600 rounded-lg group-hover:bg-blue-600 group-hover:text-white transition-colors">
+                                <i className="fas fa-sitemap text-xl"></i>
+                            </div>
+                            <i className="fas fa-chevron-right text-gray-300"></i>
+                        </div>
+                        <h3 className="text-lg font-bold text-gray-800">Map Config</h3>
+                        <p className="text-gray-500 text-sm mt-1">Manage Clients & Routing</p>
+                    </div>
+
+                    <div onClick={() => setView('keys')} className="bg-white p-6 rounded-xl shadow-sm border hover:shadow-md transition-shadow cursor-pointer group">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="p-3 bg-amber-100 text-amber-600 rounded-lg group-hover:bg-amber-600 group-hover:text-white transition-colors">
+                                <i className="fas fa-key text-xl"></i>
+                            </div>
+                            <i className="fas fa-chevron-right text-gray-300"></i>
+                        </div>
+                        <h3 className="text-lg font-bold text-gray-800">Service Keys</h3>
+                        <p className="text-gray-500 text-sm mt-1">Upload & Manage JSON Keys</p>
+                    </div>
+
+                    <div onClick={() => setView('jwt')} className="bg-white p-6 rounded-xl shadow-sm border hover:shadow-md transition-shadow cursor-pointer group">
+                        <div className="flex items-center justify-between mb-4">
+                            <div className="p-3 bg-purple-100 text-purple-600 rounded-lg group-hover:bg-purple-600 group-hover:text-white transition-colors">
+                                <i className="fas fa-shield-alt text-xl"></i>
+                            </div>
+                            <i className="fas fa-chevron-right text-gray-300"></i>
+                        </div>
+                        <h3 className="text-lg font-bold text-gray-800">JWT Cache</h3>
+                        <p className="text-gray-500 text-sm mt-1">View & Clear Auth Tokens</p>
+                    </div>
+                </div>
+            </div>
+        );
+
+        // --- MODULE: MAP CONFIG EDITOR ---
+        const MapConfigEditor = ({ setNotify }) => {
+            const [config, setConfig] = useState({ clients: [], key_filename_gemini: [] });
+            const [loading, setLoading] = useState(true);
+            const [saving, setSaving] = useState(false);
+            const [activeTab, setActiveTab] = useState('clients');
+
+            const load = async () => {
+                try {
+                    const data = await api.map.get();
+                    setConfig(data);
+                } catch (e) {
+                    setNotify({ msg: 'Failed to load map config', type: 'error' });
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            useEffect(() => { load(); }, []);
+
+            const handleSave = async () => {
+                setSaving(true);
+                try {
+                    await api.map.save(config);
+                    setNotify({ msg: 'Configuration saved successfully!', type: 'success' });
+                } catch (e) {
+                    setNotify({ msg: 'Failed to save configuration', type: 'error' });
+                } finally {
+                    setSaving(false);
+                }
+            };
+
+            // Sub-components for Map Editor
+            const ClientItem = ({ client, onChange, onRemove }) => (
+                <div className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow mb-4">
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 mb-4">
+                        <div className="md:col-span-5">
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Client Token</label>
+                            <input type="text" className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                value={client.client_token} onChange={(e) => onChange('client_token', e.target.value)} />
+                        </div>
+                        <div className="md:col-span-3">
+                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Service</label>
+                            <select className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
+                                value={client.service_type} onChange={(e) => onChange('service_type', e.target.value)}>
+                                <option value="google">Google</option>
+                                <option value="azure">Azure</option>
+                                <option value="aws">AWS</option>
+                            </select>
+                        </div>
+                        <div className="md:col-span-4 flex items-end justify-between">
+                            <label className="flex items-center space-x-2 cursor-pointer pb-2">
+                                <input type="checkbox" className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                                    checked={client.enable} onChange={(e) => onChange('enable', e.target.checked)} />
+                                <span className="text-sm font-medium text-gray-700">Enable</span>
+                            </label>
+                            <button onClick={onRemove} className="text-red-500 hover:text-red-700 bg-red-50 hover:bg-red-100 p-2 rounded transition-colors">
+                                <i className="fas fa-trash-alt"></i>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div className="bg-gray-50 p-4 rounded-md border border-gray-100">
+                        <div className="flex justify-between items-center mb-3">
+                            <h4 className="text-xs font-bold text-gray-500 uppercase">Key Filename Mappings</h4>
+                            <button onClick={() => {
+                                const newKeys = [...(client.key_filename_gemini || [])];
+                                newKeys.push({ key_filename: '', key_weight: 1 });
+                                onChange('key_filename_gemini', newKeys);
+                            }} className="text-xs bg-blue-100 text-blue-600 px-2 py-1 rounded hover:bg-blue-200 transition-colors font-medium">
+                                <i className="fas fa-plus mr-1"></i>Add Key
+                            </button>
+                        </div>
+                        {(client.key_filename_gemini || []).map((k, ki) => (
+                            <div key={ki} className="flex gap-3 mb-2 items-center">
+                                <div className="flex-1">
+                                    <input placeholder="Filename (e.g., key.json)" className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:border-blue-500 outline-none"
+                                        value={k.key_filename}
+                                        onChange={(e) => {
+                                            const newKeys = [...client.key_filename_gemini];
+                                            newKeys[ki] = { ...newKeys[ki], key_filename: e.target.value };
+                                            onChange('key_filename_gemini', newKeys);
+                                        }} />
+                                </div>
+                                <div className="w-24">
+                                    <input type="number" placeholder="Weight" className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:border-blue-500 outline-none"
+                                        value={k.key_weight}
+                                        onChange={(e) => {
+                                            const newKeys = [...client.key_filename_gemini];
+                                            newKeys[ki] = { ...newKeys[ki], key_weight: parseInt(e.target.value) || 0 };
+                                            onChange('key_filename_gemini', newKeys);
+                                        }} />
+                                </div>
+                                <button onClick={() => {
+                                    const newKeys = [...client.key_filename_gemini];
+                                    newKeys.splice(ki, 1);
+                                    onChange('key_filename_gemini', newKeys);
+                                }} className="text-gray-400 hover:text-red-500 transition-colors">
+                                    <i className="fas fa-times"></i>
+                                </button>
+                            </div>
+                        ))}
+                        {(client.key_filename_gemini || []).length === 0 && (
+                            <p className="text-xs text-gray-400 italic text-center py-2">No keys mapped yet.</p>
+                        )}
+                    </div>
+                </div>
+            );
+
+            if (loading) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div></div>;
+
+            return (
+                <div className="fade-in h-full flex flex-col">
+                    <div className="flex justify-between items-center mb-6">
+                        <div>
+                            <h1 className="text-2xl font-bold text-gray-800">Map Configuration</h1>
+                            <p className="text-gray-500 text-sm">Edit map-config.json</p>
+                        </div>
+                        <div className="flex space-x-3">
+                            <button onClick={load} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 transition-colors">
+                                <i className="fas fa-sync-alt mr-2"></i>Reload
+                            </button>
+                            <button onClick={handleSave} disabled={saving} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-sm disabled:opacity-50 flex items-center">
+                                {saving ? <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div> : <i className="fas fa-save mr-2"></i>}
+                                {saving ? 'Saving...' : 'Save Changes'}
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="flex border-b border-gray-200 mb-6">
+                        {['clients', 'gemini', 'raw'].map(tab => (
+                            <button key={tab} 
+                                onClick={() => setActiveTab(tab)}
+                                className={`px-6 py-3 font-medium text-sm capitalize border-b-2 transition-colors ${activeTab === tab ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
+                                {tab === 'gemini' ? 'Gemini Keys' : tab}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto pb-10">
+                        {activeTab === 'clients' && (
+                            <div className="space-y-4">
+                                <button onClick={() => setConfig({...config, clients: [...(config.clients || []), { client_token: 'new-client-'+Date.now(), enable: true, service_type: 'google', key_filename_gemini: [] }]})} 
+                                    className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-blue-500 hover:text-blue-600 transition-colors mb-4">
+                                    <i className="fas fa-plus mr-2"></i>Add New Client
+                                </button>
+                                {(config.clients || []).map((client, i) => (
+                                    <ClientItem key={i} client={client} 
+                                        onChange={(field, val) => {
+                                            const newClients = [...config.clients];
+                                            if (field === 'key_filename_gemini') newClients[i].key_filename_gemini = val;
+                                            else newClients[i] = { ...newClients[i], [field]: val };
+                                            setConfig({...config, clients: newClients});
+                                        }}
+                                        onRemove={() => {
+                                            if(confirm('Delete this client?')) {
+                                                const newClients = [...config.clients];
+                                                newClients.splice(i, 1);
+                                                setConfig({...config, clients: newClients});
+                                            }
+                                        }}
+                                    />
+                                ))}
+                            </div>
+                        )}
+
+                        {activeTab === 'gemini' && (
+                             <div className="space-y-4">
+                                 <button onClick={() => setConfig({...config, key_filename_gemini: [...(config.key_filename_gemini || []), { key_filename: 'new-key.json', models: [] }]})}
+                                    className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-green-500 hover:text-green-600 transition-colors mb-4">
+                                    <i className="fas fa-plus mr-2"></i>Add Key Configuration
+                                </button>
+                                {(config.key_filename_gemini || []).map((k, i) => (
+                                    <div key={i} className="bg-white p-5 rounded-lg border border-gray-200 shadow-sm">
+                                        <div className="flex justify-between mb-4">
+                                            <div className="flex-1 mr-4">
+                                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Key Filename</label>
+                                                <input className="w-full border border-gray-300 rounded px-3 py-2 text-sm font-mono"
+                                                    value={k.key_filename}
+                                                    onChange={(e) => {
+                                                        const newKeys = [...config.key_filename_gemini];
+                                                        newKeys[i] = { ...newKeys[i], key_filename: e.target.value };
+                                                        setConfig({...config, key_filename_gemini: newKeys});
+                                                    }} />
+                                            </div>
+                                            <button onClick={() => {
+                                                if(confirm('Delete this key config?')) {
+                                                    const newKeys = [...config.key_filename_gemini];
+                                                    newKeys.splice(i, 1);
+                                                    setConfig({...config, key_filename_gemini: newKeys});
+                                                }
+                                            }} className="self-end mb-2 text-red-500 hover:text-red-700"><i className="fas fa-trash-alt"></i></button>
+                                        </div>
+                                        {/* Models logic here similar to map-edit.html but simplified for length */}
+                                        <div className="bg-gray-50 p-3 rounded border border-gray-100">
+                                            <div className="flex justify-between items-center mb-2">
+                                                <h5 className="text-xs font-bold text-gray-500">Models</h5>
+                                                <button onClick={() => {
+                                                    const newKeys = [...config.key_filename_gemini];
+                                                    const newModels = [...(newKeys[i].models || [])];
+                                                    newModels.push({ model: 'gemini-pro', domain: 'us-central1-aiplatform.googleapis.com' });
+                                                    newKeys[i].models = newModels;
+                                                    setConfig({...config, key_filename_gemini: newKeys});
+                                                }} className="text-xs text-blue-600 hover:underline">+ Add Model</button>
+                                            </div>
+                                            {(k.models || []).map((m, mi) => (
+                                                <div key={mi} className="grid grid-cols-12 gap-2 mb-2 items-center">
+                                                    <div className="col-span-4">
+                                                        <input className="w-full border rounded px-2 py-1 text-xs" value={m.model} 
+                                                            onChange={(e) => {
+                                                                const newKeys = [...config.key_filename_gemini];
+                                                                newKeys[i].models[mi].model = e.target.value;
+                                                                setConfig({...config, key_filename_gemini: newKeys});
+                                                            }} />
+                                                    </div>
+                                                    <div className="col-span-7">
+                                                        <input className="w-full border rounded px-2 py-1 text-xs" value={m.domain}
+                                                            onChange={(e) => {
+                                                                const newKeys = [...config.key_filename_gemini];
+                                                                newKeys[i].models[mi].domain = e.target.value;
+                                                                setConfig({...config, key_filename_gemini: newKeys});
+                                                            }} />
+                                                    </div>
+                                                    <button onClick={() => {
+                                                         const newKeys = [...config.key_filename_gemini];
+                                                         newKeys[i].models.splice(mi, 1);
+                                                         setConfig({...config, key_filename_gemini: newKeys});
+                                                    }} className="col-span-1 text-center text-gray-400 hover:text-red-500"><i className="fas fa-times"></i></button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ))}
+                             </div>
+                        )}
+
+                        {activeTab === 'raw' && (
+                            <textarea className="w-full h-[600px] p-4 font-mono text-xs border rounded-lg bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                                value={JSON.stringify(config, null, 2)}
+                                onChange={(e) => {
+                                    try {
+                                        setConfig(JSON.parse(e.target.value));
+                                    } catch(err) {}
+                                }}
+                            ></textarea>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        // --- MODULE: KEY MANAGER ---
+        const KeyManager = ({ setNotify }) => {
+            const [files, setFiles] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [viewFile, setViewFile] = useState(null);
+            const [renameFile, setRenameFile] = useState(null);
+            const [showUpload, setShowUpload] = useState(false);
+            const fileInputRef = useRef();
+
+            const load = async () => {
+                setLoading(true);
+                try {
+                    const data = await api.keys.list();
+                    setFiles(data.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at)));
+                } catch (e) { setNotify({ msg: 'Error loading keys', type: 'error' }); }
+                finally { setLoading(false); }
+            };
+
+            useEffect(() => { load(); }, []);
+
+            const handleUpload = async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const formData = new FormData();
+                formData.append('file', file);
+                try {
+                    await api.keys.upload(formData);
+                    setNotify({ msg: 'File uploaded', type: 'success' });
+                    setShowUpload(false);
+                    load();
+                } catch (e) { setNotify({ msg: 'Upload failed: ' + e.response?.data?.error, type: 'error' }); }
+            };
+
+            const handleRename = async () => {
+                try {
+                    await api.keys.rename(renameFile.oldName, renameFile.newName);
+                    setNotify({ msg: 'Renamed successfully', type: 'success' });
+                    setRenameFile(null);
+                    load();
+                } catch (e) { setNotify({ msg: 'Rename failed: ' + e.response?.data?.error, type: 'error' }); }
+            };
+
+            const handleDelete = async (name) => {
+                if(!confirm(`Delete ${name}?`)) return;
+                try {
+                    await api.keys.delete(name);
+                    setNotify({ msg: 'Deleted successfully', type: 'success' });
+                    load();
+                } catch (e) { setNotify({ msg: 'Delete failed', type: 'error' }); }
+            };
+
+            const openView = async (name) => {
+                try {
+                    const content = await api.keys.getContent(name);
+                    setViewFile({ name, content });
+                } catch (e) { setNotify({ msg: 'Failed to load content', type: 'error' }); }
+            };
+
+            return (
+                <div className="fade-in h-full flex flex-col">
+                    <div className="flex justify-between items-center mb-6">
+                        <div>
+                            <h1 className="text-2xl font-bold text-gray-800">Service Keys</h1>
+                            <p className="text-gray-500 text-sm">Manage JSON keys in data/json/</p>
+                        </div>
+                        <div className="flex space-x-3">
+                            <button onClick={load} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50"><i className="fas fa-sync-alt mr-2"></i>Refresh</button>
+                            <button onClick={() => setShowUpload(true)} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-sm"><i className="fas fa-upload mr-2"></i>Upload Key</button>
+                        </div>
+                    </div>
+
+                    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex-1 overflow-y-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Filename</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Size</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Modified</th>
+                                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                                {files.map((file) => (
+                                    <tr key={file.name} className="hover:bg-gray-50">
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-blue-600 font-mono">{file.name}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatSize(file.size)}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatDate(file.updated_at)}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-3">
+                                            <button onClick={() => openView(file.name)} className="text-gray-400 hover:text-blue-600"><i className="fas fa-eye"></i></button>
+                                            <button onClick={() => setRenameFile({ oldName: file.name, newName: file.name })} className="text-gray-400 hover:text-orange-600"><i className="fas fa-edit"></i></button>
+                                            <button onClick={() => handleDelete(file.name)} className="text-gray-400 hover:text-red-600"><i className="fas fa-trash-alt"></i></button>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {files.length === 0 && !loading && (
+                                    <tr><td colSpan="4" className="px-6 py-10 text-center text-gray-500">No files found. Upload one to get started.</td></tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {showUpload && (
+                        <Modal title="Upload JSON Key" onClose={() => setShowUpload(false)}>
+                            <div className="border-2 border-dashed border-gray-300 rounded-xl p-8 text-center hover:bg-gray-50 transition-colors cursor-pointer"
+                                onClick={() => document.getElementById('fileUpload').click()}>
+                                <i className="fas fa-cloud-upload-alt text-4xl text-blue-500 mb-3"></i>
+                                <p className="text-gray-600 font-medium">Click to select a JSON file</p>
+                                <p className="text-xs text-gray-400 mt-1">.json files only</p>
+                                <input id="fileUpload" type="file" accept=".json" className="hidden" onChange={handleUpload} />
+                            </div>
+                        </Modal>
+                    )}
+
+                    {renameFile && (
+                        <Modal title="Rename File" onClose={() => setRenameFile(null)} 
+                            footer={<button onClick={handleRename} className="bg-blue-600 text-white px-4 py-2 rounded-lg">Rename</button>}>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">New Filename</label>
+                            <input type="text" className="w-full border rounded-lg px-3 py-2" autoFocus
+                                value={renameFile.newName} onChange={e => setRenameFile({...renameFile, newName: e.target.value})} />
+                        </Modal>
+                    )}
+
+                    {viewFile && (
+                        <Modal title={viewFile.name} onClose={() => setViewFile(null)} size="max-w-4xl">
+                            <JsonViewer data={viewFile.content} />
+                        </Modal>
+                    )}
+                </div>
+            );
+        };
+
+        // --- MODULE: JWT VIEWER ---
+        const JwtViewer = ({ setNotify }) => {
+            const [files, setFiles] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [viewFile, setViewFile] = useState(null);
+
+            const load = async () => {
+                setLoading(true);
+                try {
+                    const data = await api.jwt.list();
+                    setFiles(data.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at)));
+                } catch (e) { setNotify({ msg: 'Error loading JWTs', type: 'error' }); }
+                finally { setLoading(false); }
+            };
+
+            useEffect(() => { load(); }, []);
+
+            const handleDelete = async (name) => {
+                if(!confirm(`Delete cached token ${name}?`)) return;
+                try {
+                    await api.jwt.delete(name);
+                    setNotify({ msg: 'Deleted successfully', type: 'success' });
+                    load();
+                } catch (e) { setNotify({ msg: 'Delete failed', type: 'error' }); }
+            };
+
+            const openView = async (name) => {
+                try {
+                    const content = await api.jwt.getContent(name);
+                    setViewFile({ name, content });
+                } catch (e) { setNotify({ msg: 'Failed to load content', type: 'error' }); }
+            };
+
+            return (
+                <div className="fade-in h-full flex flex-col">
+                    <div className="flex justify-between items-center mb-6">
+                        <div>
+                            <h1 className="text-2xl font-bold text-gray-800">JWT Cache</h1>
+                            <p className="text-gray-500 text-sm">View and manage cached OAuth2 tokens</p>
+                        </div>
+                        <button onClick={load} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50"><i className="fas fa-sync-alt mr-2"></i>Refresh</button>
+                    </div>
+
+                    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex-1 overflow-y-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Token File</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Size</th>
+                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cached At</th>
+                                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="bg-white divide-y divide-gray-200">
+                                {files.map((file) => (
+                                    <tr key={file.name} className="hover:bg-gray-50">
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-purple-600 font-mono">{file.name}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatSize(file.size)}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{formatDate(file.updated_at)}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-3">
+                                            <button onClick={() => openView(file.name)} className="text-gray-400 hover:text-blue-600"><i className="fas fa-eye"></i></button>
+                                            <button onClick={() => handleDelete(file.name)} className="text-gray-400 hover:text-red-600"><i className="fas fa-trash-alt"></i></button>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {files.length === 0 && !loading && (
+                                    <tr><td colSpan="4" className="px-6 py-10 text-center text-gray-500">No cached tokens found.</td></tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {viewFile && (
+                        <Modal title={viewFile.name} onClose={() => setViewFile(null)} size="max-w-4xl">
+                            <JsonViewer data={viewFile.content} />
+                        </Modal>
+                    )}
+                </div>
+            );
+        };
+
+        // --- MAIN LAYOUT & APP ---
+        const App = () => {
+            const [activeView, setActiveView] = useState('dashboard');
+            const [notify, setNotify] = useState({ msg: '', type: '' });
+
+            const menuItems = [
+                { id: 'dashboard', label: 'Dashboard', icon: 'fas fa-home' },
+                { id: 'map', label: 'Map Config', icon: 'fas fa-sitemap' },
+                { id: 'keys', label: 'Service Keys', icon: 'fas fa-key' },
+                { id: 'jwt', label: 'JWT Cache', icon: 'fas fa-shield-alt' }
+            ];
+
+            return (
+                <div className="flex h-screen bg-gray-100">
+                    {/* Sidebar */}
+                    <aside className="w-64 bg-gray-900 text-gray-300 flex flex-col shadow-xl z-20">
+                        <div className="h-16 flex items-center px-6 bg-gray-800 border-b border-gray-700">
+                            <i className="fas fa-network-wired text-blue-500 text-xl mr-3"></i>
+                            <span className="text-white font-bold text-lg tracking-wide">Gemini Proxy</span>
+                        </div>
+                        
+                        <nav className="flex-1 py-6 space-y-1 px-3">
+                            {menuItems.map(item => (
+                                <button key={item.id}
+                                    onClick={() => setActiveView(item.id)}
+                                    className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-all nav-item ${activeView === item.id ? 'active text-white bg-gray-800' : 'hover:bg-gray-800 hover:text-white'}`}>
+                                    <i className={`${item.icon} w-6 text-center mr-3 ${activeView === item.id ? 'text-blue-400' : 'text-gray-500'}`}></i>
+                                    {item.label}
+                                </button>
+                            ))}
+                        </nav>
+
+                        <div className="p-4 border-t border-gray-800 text-xs text-gray-500 text-center">
+                            v1.0.0 Admin Console
+                        </div>
+                    </aside>
+
+                    {/* Main Content */}
+                    <main className="flex-1 flex flex-col overflow-hidden relative">
+                        {/* Header (Optional, can act as breadcrumb) */}
+                        <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-8 shadow-sm z-10">
+                            <h2 className="text-lg font-semibold text-gray-700 capitalize">{menuItems.find(i => i.id === activeView)?.label}</h2>
+                            <div className="flex items-center space-x-4">
+                                <div className="flex items-center text-sm text-gray-500">
+                                    <div className="w-2 h-2 rounded-full bg-green-500 mr-2"></div>
+                                    System Online
+                                </div>
+                            </div>
+                        </header>
+
+                        {/* Content Body */}
+                        <div className="flex-1 overflow-hidden p-8 relative bg-gray-100">
+                            <Notification message={notify.msg} type={notify.type} onClose={() => setNotify({ msg: '', type: '' })} />
+                            
+                            {activeView === 'dashboard' && <Dashboard setView={setActiveView} />}
+                            {activeView === 'map' && <MapConfigEditor setNotify={setNotify} />}
+                            {activeView === 'keys' && <KeyManager setNotify={setNotify} />}
+                            {activeView === 'jwt' && <JwtViewer setNotify={setNotify} />}
+                        </div>
+                    </main>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
