@@ -14,17 +14,17 @@ class RedisService {
             password: process.env.REDIS_PASSWORD || null,
             db: parseInt(process.env.REDIS_DB) || 0,
             retryDelayOnFailover: 100,
-            enableReadyCheck: true,
-            maxRetriesPerRequest: 3,
-            lazyConnect: true,
+            enableReadyCheck: false, // 禁用就绪检查，避免启动时失败
+            maxRetriesPerRequest: 3, // 限制重试次数，避免长时间阻塞
+            lazyConnect: false, // 立即连接，确保连接可用
             keepAlive: 30000,
             connectTimeout: 10000,
             commandTimeout: 5000,
             family: 4,
             // 缓存配置
             keyPrefix: process.env.REDIS_KEY_PREFIX || 'oauth2:',
-            // 集群配置（如果需要）
-            enableOfflineQueue: false,
+            // 启用离线队列，允许在连接不可用时排队命令
+            enableOfflineQueue: true,
             // 重连配置
             retryDelayOnClusterDown: 300,
             maxRetriesPerRequestOnClusterDown: 3
@@ -69,27 +69,41 @@ class RedisService {
                 this.logger.info(`Redis reconnecting in ${delay}ms`);
             });
 
-            // 测试连接
-            await this.redis.ping();
+            // 尝试连接，但不阻塞启动
+            try {
+                await this.redis.ping();
+                this.isConnected = true;
 
-            // 设置连接状态
-            this.isConnected = true;
+                // 设置一些基本配置（异步，不阻塞）
+                this.setupRedisConfig().catch(err => {
+                    this.logger.warn('Failed to setup Redis config:', err);
+                });
 
-            // 设置一些基本配置
-            await this.setupRedisConfig();
-
-            this.logger.info('Redis service initialized successfully', {
-                host: this.config.host,
-                port: this.config.port,
-                db: this.config.db,
-                keyPrefix: this.config.keyPrefix
-            });
+                this.logger.info('Redis service initialized successfully', {
+                    host: this.config.host,
+                    port: this.config.port,
+                    db: this.config.db,
+                    keyPrefix: this.config.keyPrefix
+                });
+            } catch (pingError) {
+                this.logger.warn('Redis ping failed, service will continue without Redis:', {
+                    error: pingError.message,
+                    host: this.config.host,
+                    port: this.config.port
+                });
+                // 不抛出错误，允许服务继续运行
+            }
 
             return true;
         } catch (error) {
             this.isConnected = false;
-            this.logger.error('Failed to initialize Redis service:', error);
-            throw error;
+            this.logger.warn('Redis service initialization failed, continuing without cache:', {
+                error: error.message,
+                host: this.config.host,
+                port: this.config.port
+            });
+            // 不抛出错误，允许服务继续运行
+            return true;
         }
     }
 
