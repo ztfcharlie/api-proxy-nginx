@@ -26,6 +26,8 @@ const adminRoutes = require('./routes/admin');
 const clientRoutes = require('./routes/clients');
 const serverAccountRoutes = require('./routes/serverAccounts');
 const mapConfigRoutes = require('./routes/mapConfig');
+const serviceKeyRoutes = require('./routes/serviceKeys');
+const jwtFileRoutes = require('./routes/jwtFiles');
 const healthRoutes = require('./routes/health');
 
 class OAuth2MockServer {
@@ -106,6 +108,8 @@ class OAuth2MockServer {
         this.app.use(`${apiPrefix}/clients`, clientRoutes);
         this.app.use(`${apiPrefix}/server-accounts`, serverAccountRoutes);
         this.app.use(`${apiPrefix}/map-config`, mapConfigRoutes);
+        this.app.use(`${apiPrefix}/service-keys`, serviceKeyRoutes);
+        this.app.use(`${apiPrefix}/jwt-files`, jwtFileRoutes);
         this.app.use(`${adminPath}`, adminRoutes);
     }
 
