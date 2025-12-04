@@ -48,10 +48,9 @@ RUN npm ci --omit=dev && \
 # 复制应用代码
 COPY --chown=nodejs:nodejs . .
 
-# 复制启动脚本和调试脚本并设置权限
+# 复制启动脚本并设置权限
 COPY --chown=nodejs:nodejs entrypoint.sh /app/entrypoint.sh
-COPY --chown=nodejs:nodejs debug-env.js /app/debug-env.js
-RUN chmod +x /app/entrypoint.sh && chmod +x /app/debug-env.js
+RUN chmod +x /app/entrypoint.sh
 
 # 创建必要的目录并设置权限
 RUN mkdir -p /app/logs /app/tmp /app/client/google_server_account && \
