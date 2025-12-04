@@ -3,7 +3,7 @@ const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const LoggerService = require('../services/LoggerService');
 const authMiddleware = require('../middleware/auth');
-const { DatabaseService } = require('../services/DatabaseService');
+const DatabaseService = require('../services/DatabaseService');
 const { CacheService } = require('../services/CacheService');
 
 const router = express.Router();
