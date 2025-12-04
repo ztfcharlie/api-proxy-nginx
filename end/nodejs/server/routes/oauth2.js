@@ -653,46 +653,6 @@ async function handleClientCredentialsGrant(req, requestId) {
             statusCode: 500
         };
     }
-
-        // 生成访问令牌
-        const tokenService = require('../services/TokenService');
-        const tokens = await tokenService.createTokenMapping(
-            client.client_token,
-            serverAccount.id,
-            {
-                scopes: scope ? scope.split(' ') : ['https://www.googleapis.com/auth/cloud-platform'],
-                requestIp: getClientIP(req),
-                userAgent: req.headers['user-agent'],
-                grantType: 'client_credentials'
-            }
-        );
-
-        if (!tokens.success) {
-            return {
-                success: false,
-                error: 'server_error',
-                error_description: 'Failed to generate tokens',
-                statusCode: 500
-            };
-        }
-
-        return {
-            success: true,
-            access_token: tokens.access_token,
-            token_type: 'Bearer',
-            expires_in: tokens.expires_in,
-            scope: tokens.scope
-        };
-
-    } catch (error) {
-        logger.error(`[OAUTH2] Client credentials grant failed:`, error);
-        return {
-            success: false,
-            error: 'server_error',
-            error_description: 'Client credentials flow failed',
-            statusCode: 500
-        };
-    }
 }
 
 // 辅助函数

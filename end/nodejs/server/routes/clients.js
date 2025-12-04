@@ -87,74 +87,80 @@ router.get('/', async (req, res) => {
 
         let clients = [];
 
-        try {
-            // 从配置文件读取客户端数据
-            const fs = require('fs');
-            const path = require('path');
-            const mapConfigPath = path.join(process.cwd(), '../data/map/map-config.json');
+        // 从配置文件读取客户端数据
+        const fs = require('fs');
+        const path = require('path');
+        const mapConfigPath = path.join(process.cwd(), '../data/map/map-config.json');
 
-            const mapConfig = JSON.parse(fs.readFileSync(mapConfigPath, 'utf8'));
-
-            clients = mapConfig.clients.map((client, index) => ({
-                id: index + 1,
-                client_id: client.client_token,
-                client_name: client.client_token,
-                description: `${client.service_type || 'google'} service client`,
-                service_type: client.service_type || 'google',
-                is_active: client.enable !== false,
-                rate_limit: client.rate_limit || 1000,
-                last_used: new Date().toISOString(),
-                created_at: client.created_at || new Date().toISOString(),
-                updated_at: client.updated_at || new Date().toISOString(),
-                key_filename_gemini: client.key_filename_gemini || []
-            }));
-
-            // 应用搜索过滤
-            if (search) {
-                clients = clients.filter(client =>
-                    client.client_name.toLowerCase().includes(search.toLowerCase()) ||
-                    client.client_id.toLowerCase().includes(search.toLowerCase()) ||
-                    client.description.toLowerCase().includes(search.toLowerCase())
-                );
-            }
-
-            // 应用状态过滤
-            if (status) {
-                const isActive = status === 'active';
-                clients = clients.filter(client => client.is_active === isActive);
-            }
-
-            // 排序
-            const allowedSortFields = ['created_at', 'updated_at', 'client_name', 'client_id'];
-            const sortField = allowedSortFields.includes(sort) ? sort : 'created_at';
-            const sortOrder = order.toLowerCase() === 'asc' ? 1 : -1;
-
-            clients.sort((a, b) => {
-                if (a[sortField] < b[sortField]) return -sortOrder;
-                if (a[sortField] > b[sortField]) return sortOrder;
-                return 0;
+        if (!fs.existsSync(mapConfigPath)) {
+            return res.status(500).json({
+                success: false,
+                error: {
+                    code: 'CONFIG_FILE_NOT_FOUND',
+                    message: 'map-config.json file not found'
+                }
             });
+        }
 
-            // 分页
-            const paginatedClients = clients.slice(offset, offset + parseInt(limit));
+        const mapConfig = JSON.parse(fs.readFileSync(mapConfigPath, 'utf8'));
 
-            const response = {
-                success: true,
-                data: paginatedClients,
-                pagination: {
-                    page: parseInt(page),
-                    limit: parseInt(limit),
-                    total: countResult[0].total,
-                    pages: Math.ceil(countResult[0].total / limit)
-                },
-                filters: {
-                    search,
-                    status,
-                    sort: sortField,
-                    order: sortOrder
-                },
-                timestamp: new Date().toISOString()
-            }
+        clients = mapConfig.clients.map((client, index) => ({
+            id: index + 1,
+            client_id: client.client_token,
+            client_name: client.client_token,
+            description: `${client.service_type || 'google'} service client`,
+            service_type: client.service_type || 'google',
+            is_active: client.enable !== false,
+            rate_limit: client.rate_limit || 1000,
+            last_used: new Date().toISOString(),
+            created_at: client.created_at || new Date().toISOString(),
+            updated_at: client.updated_at || new Date().toISOString(),
+            key_filename_gemini: client.key_filename_gemini || []
+        }));
+
+        // 应用搜索过滤
+        if (search) {
+            clients = clients.filter(client =>
+                client.client_name.toLowerCase().includes(search.toLowerCase()) ||
+                client.client_id.toLowerCase().includes(search.toLowerCase()) ||
+                client.description.toLowerCase().includes(search.toLowerCase())
+            );
+        }
+
+        // 应用状态过滤
+        if (status) {
+            const isActive = status === 'active';
+            clients = clients.filter(client => client.is_active === isActive);
+        }
+
+        // 排序
+        const finalSortOrder = order.toLowerCase() === 'asc' ? 1 : -1;
+
+        clients.sort((a, b) => {
+            if (a[sortField] < b[sortField]) return -finalSortOrder;
+            if (a[sortField] > b[sortField]) return finalSortOrder;
+            return 0;
+        });
+
+        // 分页
+        const paginatedClients = clients.slice(offset, offset + parseInt(limit));
+
+        const response = {
+            success: true,
+            data: paginatedClients,
+            pagination: {
+                page: parseInt(page),
+                limit: parseInt(limit),
+                total: clients.length,
+                pages: Math.ceil(clients.length / limit)
+            },
+            filters: {
+                search,
+                status,
+                sort: sortField,
+                order: sortOrder
+            },
+            timestamp: new Date().toISOString()
         };
 
         res.json(response);
