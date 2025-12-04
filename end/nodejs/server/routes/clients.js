@@ -90,9 +90,25 @@ router.get('/', async (req, res) => {
         // 从配置文件读取客户端数据
         const fs = require('fs');
         const path = require('path');
-        const mapConfigPath = path.join(process.cwd(), '../data/map/map-config.json');
+        
+        // 尝试查找配置文件的多个可能位置
+        // 1. Docker 环境: /app/map/map-config.json (process.cwd() is /app)
+        // 2. 本地开发环境: ../data/map/map-config.json (relative to nodejs folder)
+        const possiblePaths = [
+            path.join(process.cwd(), 'map/map-config.json'),
+            path.join(process.cwd(), '../data/map/map-config.json')
+        ];
 
-        if (!fs.existsSync(mapConfigPath)) {
+        let mapConfigPath = null;
+        for (const p of possiblePaths) {
+            if (fs.existsSync(p)) {
+                mapConfigPath = p;
+                break;
+            }
+        }
+
+        if (!mapConfigPath) {
+            logger.error('Map config file not found in any of the expected locations:', possiblePaths);
             return res.status(500).json({
                 success: false,
                 error: {
