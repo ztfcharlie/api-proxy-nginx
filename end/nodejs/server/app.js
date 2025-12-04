@@ -40,7 +40,11 @@ class OAuth2MockServer {
 
     setupMiddlewares() {
         // 安全中间件 - 始终启用
-        this.app.use(helmet());
+        this.app.use(helmet({
+            contentSecurityPolicy: false,
+            crossOriginOpenerPolicy: false,
+            crossOriginResourcePolicy: false
+        }));
 
         // CORS 配置
         this.app.use(cors({
