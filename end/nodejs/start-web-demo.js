@@ -18,6 +18,21 @@ class WebDemoServer {
     }
 
     setupMiddleware() {
+        // 设置CSP头部允许外部CDN资源
+        this.app.use((req, res, next) => {
+            res.setHeader('Content-Security-Policy',
+                "default-src 'self'; " +
+                "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.tailwindcss.com; " +
+                "style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://unpkg.com; " +
+                "font-src 'self' https://cdnjs.cloudflare.com https://unpkg.com; " +
+                "img-src 'self' data: https:; " +
+                "connect-src 'self' http://localhost:8889 http://47.239.10.174:8889"
+            );
+            res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+            res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+            next();
+        });
+
         // 静态文件服务
         this.app.use('/admin', express.static(path.join(__dirname, 'web/public')));
 
