@@ -186,7 +186,7 @@ router.get('/', async (req, res) => {
             success: false,
             error: {
                 code: 'GET_CLIENTS_ERROR',
-                message: 'Failed to get clients list'
+                message: 'Failed to get clients list: ' + error.message
             }
         });
     }
