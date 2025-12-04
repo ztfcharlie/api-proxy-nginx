@@ -414,7 +414,7 @@
                     const userData = await ApiService.getUsers();
                     setUsers(userData.data || []);
                     if (userData.data && userData.data.length > 0 && !selectedUser) {
-                        setSelectedUser(userData.data[0].client_token);
+                        setSelectedUser(userData.data[0].client_id);
                     }
                 } catch (error) {
                     showNotification('加载用户列表失败: ' + (error.error || '未知错误'), 'error');
@@ -577,8 +577,8 @@
                                     className="w-full max-w-xs px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                 >
                                     {users.map(user => (
-                                        <option key={user.id} value={user.client_token}>
-                                            {user.client_token} ({user.service_type})
+                                        <option key={user.id} value={user.client_id}>
+                                            {user.client_id} ({user.service_type})
                                         </option>
                                     ))}
                                 </select>
@@ -645,7 +645,8 @@
         }
 
         // 渲染应用
-        ReactDOM.render(<App />, document.getElementById('root'));
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
     </script>
 </body>
 </html>

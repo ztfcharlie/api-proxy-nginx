@@ -25,6 +25,7 @@ const oauth2Routes = require('./routes/oauth2');
 const adminRoutes = require('./routes/admin');
 const clientRoutes = require('./routes/clients');
 const serverAccountRoutes = require('./routes/serverAccounts');
+const mapConfigRoutes = require('./routes/mapConfig');
 const healthRoutes = require('./routes/health');
 
 class OAuth2MockServer {
@@ -104,6 +105,7 @@ class OAuth2MockServer {
         // 管理 API 端点
         this.app.use(`${apiPrefix}/clients`, clientRoutes);
         this.app.use(`${apiPrefix}/server-accounts`, serverAccountRoutes);
+        this.app.use(`${apiPrefix}/map-config`, mapConfigRoutes);
         this.app.use(`${adminPath}`, adminRoutes);
     }
 
