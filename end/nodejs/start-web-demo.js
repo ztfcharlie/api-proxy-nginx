@@ -18,27 +18,25 @@ class WebDemoServer {
     }
 
     setupMiddleware() {
-        // 设置CSP头部允许外部CDN资源
+        // 基本路由
+        this.app.use(express.json());
+        this.app.use(express.urlencoded({ extended: true }));
+
+        // 设置宽松的安全策略以允许CDN资源加载
         this.app.use((req, res, next) => {
-            res.setHeader('Content-Security-Policy',
-                "default-src 'self'; " +
-                "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.tailwindcss.com; " +
-                "style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://unpkg.com; " +
-                "font-src 'self' https://cdnjs.cloudflare.com https://unpkg.com; " +
-                "img-src 'self' data: https:; " +
-                "connect-src 'self' http://localhost:8889 http://47.239.10.174:8889"
-            );
-            res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
-            res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+            // 完全移除CSP限制，允许所有资源加载
+            // res.setHeader('Content-Security-Policy', "script-src * 'unsafe-inline' 'unsafe-eval'; style-src * 'unsafe-inline'; font-src *; img-src * data:; connect-src *;");
+
+            // 设置允许跨域访问的头部
+            res.setHeader('Access-Control-Allow-Origin', '*');
+            res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+            res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+
             next();
         });
 
         // 静态文件服务
         this.app.use('/admin', express.static(path.join(__dirname, 'web/public')));
-
-        // 基本路由
-        this.app.use(express.json());
-        this.app.use(express.urlencoded({ extended: true }));
     }
 
     setupRoutes() {
