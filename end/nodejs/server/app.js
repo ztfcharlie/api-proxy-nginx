@@ -19,6 +19,7 @@ const { authMiddleware } = require('./middleware/auth');
 const { loggingMiddleware } = require('./middleware/logging');
 
 // 导入路由
+const indexRoutes = require('./routes/index');
 const oauth2Routes = require('./routes/oauth2');
 const adminRoutes = require('./routes/admin');
 const clientRoutes = require('./routes/clients');
@@ -29,7 +30,7 @@ class OAuth2MockServer {
     constructor() {
         this.app = express();
         this.port = process.env.PORT || 8889;
-        this.nodeEnv = process.env.NODE_ENV || 'development';
+        this.nodeEnv = process.env.NODE_ENV || 'production';
         this.services = {};
         this.setupMiddlewares();
         this.setupRoutes();
@@ -37,10 +38,8 @@ class OAuth2MockServer {
     }
 
     setupMiddlewares() {
-        // 安全中间件
-        if (this.nodeEnv === 'production') {
-            this.app.use(helmet());
-        }
+        // 安全中间件 - 始终启用
+        this.app.use(helmet());
 
         // CORS 配置
         this.app.use(cors({
@@ -54,45 +53,39 @@ class OAuth2MockServer {
             this.app.use(compression());
         }
 
-        // 请求解析
+        // 解析 JSON 和 URL 编码数据
         this.app.use(express.json({ limit: '10mb' }));
         this.app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
         // 日志中间件
-        if (this.nodeEnv !== 'test') {
+        if (process.env.ENABLE_MORGAN !== 'false') {
             this.app.use(morgan('combined', {
                 stream: {
-                    write: (message) => {
-                        LoggerService.info(message.trim(), { component: 'HTTP_REQUEST' });
-                    }
+                    write: (message) => LoggerService.info(message.trim())
                 }
             }));
         }
 
-        // 应用日志中间件
         this.app.use(loggingMiddleware);
-
-        // 静态文件服务（React 构建后的文件）
-        if (this.nodeEnv === 'production') {
-            this.app.use(express.static(path.join(__dirname, '../../client/build')));
-        }
-
-        // 健康检查
-        this.app.use('/health', healthRoutes);
-
-        // Swagger API 文档（开发环境）
-        if (process.env.ENABLE_SWAGGER === 'true') {
-            const swaggerUi = require('swagger-ui-express');
-            const swaggerSpec = require('./swagger');
-
-            this.app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
-            LoggerService.info('Swagger API documentation available at /api-docs');
-        }
     }
 
     setupRoutes() {
         const apiPrefix = process.env.API_PREFIX || '/api';
         const adminPath = process.env.ADMIN_PATH || '/admin';
+
+        // 根路径首页 - 添加在最前面
+        this.app.use('/', indexRoutes);
+
+        // 健康检查
+        this.app.use('/health', healthRoutes);
+
+        // Swagger API 文档
+        if (process.env.ENABLE_SWAGGER === 'true') {
+            const swaggerUi = require('swagger-ui-express');
+            const swaggerSpec = require('./swagger');
+            this.app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+            LoggerService.info('Swagger API documentation available at /api-docs');
+        }
 
         // OAuth2 模拟端点（模拟 Google OAuth2 API）
         this.app.use('/accounts.google.com', oauth2Routes);
@@ -101,30 +94,6 @@ class OAuth2MockServer {
         this.app.use(`${apiPrefix}/clients`, clientRoutes);
         this.app.use(`${apiPrefix}/server-accounts`, serverAccountRoutes);
         this.app.use(`${adminPath}`, adminRoutes);
-
-        // 根路径（React 应用）
-        if (this.nodeEnv === 'production') {
-            this.app.get('*', (req, res) => {
-                res.sendFile(path.join(__dirname, '../../client/build/index.html'));
-            });
-        } else {
-            this.app.get('/', (req, res) => {
-                res.json({
-                    message: 'OAuth2 Mock Service',
-                    version: '1.0.0',
-                    status: 'running',
-                    timestamp: new Date().toISOString(),
-                    endpoints: {
-                        oauth2: '/accounts.google.com/oauth2/token',
-                        certs: '/accounts.google.com/oauth2/v1/certs',
-                        admin: `${adminPath}`,
-                        api: `${apiPrefix}`,
-                        health: '/health',
-                        docs: process.env.ENABLE_SWAGGER === 'true' ? '/api-docs' : null
-                    }
-                });
-            });
-        }
     }
 
     setupErrorHandling() {
@@ -207,58 +176,47 @@ class OAuth2MockServer {
 
     setupGracefulShutdown() {
         const shutdown = async (signal) => {
-            LoggerService.info(`Received ${signal}, starting graceful shutdown...`);
+            LoggerService.info(`Received ${signal}, shutting down gracefully...`);
 
-            this.server.close(async () => {
-                LoggerService.info('HTTP server closed');
+            if (this.server) {
+                this.server.close(() => {
+                    LoggerService.info('HTTP server closed');
+                });
+            }
 
-                try {
-                    // 关闭所有服务
-                    if (this.services.database) {
-                        await this.services.database.close();
-                        LoggerService.info('Database connection closed');
-                    }
-
-                    if (this.services.redis) {
-                        await this.services.redis.close();
-                        LoggerService.info('Redis connection closed');
-                    }
-
-                    LoggerService.info('Graceful shutdown completed');
-                    process.exit(0);
-                } catch (error) {
-                    LoggerService.error('Error during shutdown:', error);
-                    process.exit(1);
+            // 关闭服务连接
+            try {
+                if (this.services.database) {
+                    await this.services.database.close();
                 }
-            });
+                if (this.services.redis) {
+                    await this.services.redis.close();
+                }
+            } catch (error) {
+                LoggerService.error('Error during shutdown:', error);
+            }
 
-            // 强制关闭超时
-            setTimeout(() => {
-                LoggerService.error('Graceful shutdown timeout, forcing exit');
-                process.exit(1);
-            }, 30000);
+            process.exit(0);
         };
 
-        // 注册信号处理器
         process.on('SIGTERM', () => shutdown('SIGTERM'));
         process.on('SIGINT', () => shutdown('SIGINT'));
-        process.on('SIGUSR2', () => shutdown('SIGUSR2')); // nodemon 重启
     }
 
-    getServices() {
-        return this.services;
+    async stop() {
+        if (this.server) {
+            return new Promise((resolve) => {
+                this.server.close(resolve);
+            });
+        }
     }
 }
-
-// 创建服务器实例
-const server = new OAuth2MockServer();
 
 // 启动服务器
-if (require.main === module) {
-    server.start().catch((error) => {
-        LoggerService.error('Failed to start server:', error);
-        process.exit(1);
-    });
-}
+const server = new OAuth2MockServer();
+server.start().catch((error) => {
+    LoggerService.error('Failed to start server:', error);
+    process.exit(1);
+});
 
 module.exports = OAuth2MockServer;
