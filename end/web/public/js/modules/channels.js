@@ -242,8 +242,8 @@ window.Modules.Channels = () => {
                 <Input label="凭证 (Credentials)" value={form.credentials} onChange={v => setForm({...form, credentials: v})} multiline rows={6} placeholder="JSON or Key" />
                 {form.type === 'azure' && (
                     <div className="p-4 bg-blue-50 rounded mb-4">
-                        <Input label="Endpoint" value={form.extra_config?.endpoint} onChange={v => setForm({...form, extra_config: {...form.extra_config, endpoint: v}})} />
-                        <Input label="API Version" value={form.extra_config?.api_version} onChange={v => setForm({...form, extra_config: {...form.extra_config, api_version: v}})} />
+                        <Input label="Endpoint" value={form.extra_config && form.extra_config.endpoint} onChange={v => setForm({...form, extra_config: {...form.extra_config, endpoint: v}})} />
+                        <Input label="API Version" value={form.extra_config && form.extra_config.api_version} onChange={v => setForm({...form, extra_config: {...form.extra_config, api_version: v}})} />
                     </div>
                 )}
                 <Button onClick={testConnection} variant="secondary" className="w-full justify-center border-dashed">测试连接</Button>
@@ -280,7 +280,7 @@ window.Modules.Channels = () => {
                                 <thead>
                                     <tr className="text-left text-xs text-gray-500 uppercase">
                                         <th className="pb-2">Name</th>
-                                        {bindingModal.channel?.type === 'vertex' && <th className="pb-2">Region</th>}
+                                        {bindingModal.channel && bindingModal.channel.type === 'vertex' && <th className="pb-2">Region</th>}
                                         <th className="pb-2 w-24">RPM</th>
                                         <th className="pb-2 w-24">Pricing</th>
                                         <th className="pb-2 w-8"></th>
@@ -290,7 +290,7 @@ window.Modules.Channels = () => {
                                     {bindingModal.list.map((item, idx) => (
                                         <tr key={idx} className="border-b last:border-0">
                                             <td className="py-2 pr-2">{item.name}</td>
-                                            {bindingModal.channel?.type === 'vertex' && (
+                                            {bindingModal.channel && bindingModal.channel.type === 'vertex' && (
                                                 <td className="py-2 pr-2"><input className="w-full border rounded px-2 py-1" value={item.region} onChange={e => updateBindingConfig(idx, 'region', e.target.value)} /></td>
                                             )}
                                             <td className="py-2 pr-2"><input type="number" className="w-full border rounded px-2 py-1" value={item.rpm} onChange={e => updateBindingConfig(idx, 'rpm', e.target.value)} /></td>
