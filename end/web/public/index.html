@@ -453,8 +453,11 @@
             }
         });
 
+        // 注册 Element Plus
+        app.use(ElementPlus);
+
         // 注册图标
-        for (const [key, component] of Object.entries(icons)) {
+        for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
             app.component(key, component);
         }
 
