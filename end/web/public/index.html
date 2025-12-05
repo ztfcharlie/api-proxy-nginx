@@ -3,465 +3,573 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gemini Proxy 管理后台</title>
-    
-    <!-- 样式库 -->
-    <link rel="stylesheet" href="https://unpkg.com/element-plus/dist/index.css" />
+    <title>Gemini Proxy Console</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    
-    <!-- 核心库 -->
-    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-    <script src="https://unpkg.com/element-plus"></script>
-    <script src="https://unpkg.com/@element-plus/icons-vue"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
     <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
-
+    <!-- Heroicons -->
+    <script src="https://unpkg.com/@heroicons/react@2.0.18/24/outline/index.js"></script>
+    
     <style>
-        [v-cloak] { display: none; }
-        .el-menu-vertical { height: 100vh; border-right: none; }
-        .main-container { height: 100vh; display: flex; }
-        .content-area { flex: 1; padding: 20px; background: #f3f4f6; overflow-y: auto; }
+        /* 自定义滚动条 */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .modal-enter { opacity: 0; transform: scale(0.95); }
+        .modal-enter-active { opacity: 1; transform: scale(1); transition: all 0.2s ease-out; }
+        .modal-exit { opacity: 1; transform: scale(1); }
+        .modal-exit-active { opacity: 0; transform: scale(0.95); transition: all 0.2s ease-in; }
     </style>
 </head>
-<body>
-    <div id="app" v-cloak>
-        <div class="main-container">
-            <!-- 左侧菜单 -->
-            <div class="w-64 bg-slate-800 text-white flex-shrink-0">
-                <div class="h-16 flex items-center justify-center text-xl font-bold border-b border-slate-700">
-                    Gemini Proxy
-                </div>
-                <el-menu
-                    active-text-color="#ffd04b"
-                    background-color="#1e293b"
-                    class="el-menu-vertical"
-                    default-active="channels"
-                    text-color="#fff"
-                    @select="handleSelect"
-                >
-                    <el-menu-item index="channels">
-                        <el-icon><icon-connection /></el-icon>
-                        <span>渠道管理 (Channels)</span>
-                    </el-menu-item>
-                    <el-menu-item index="tokens">
-                        <el-icon><icon-key /></el-icon>
-                        <span>令牌管理 (Tokens)</span>
-                    </el-menu-item>
-                    <el-menu-item index="users">
-                        <el-icon><icon-user /></el-icon>
-                        <span>用户管理 (Users)</span>
-                    </el-menu-item>
-                </el-menu>
-            </div>
+<body class="bg-gray-50 text-gray-900 h-screen overflow-hidden">
+    <div id="root"></div>
 
-            <!-- 右侧内容区 -->
-            <div class="content-area">
-                
-                <!-- 1. 渠道管理页面 -->
-                <div v-if="currentTab === 'channels'">
-                    <div class="flex justify-between items-center mb-6">
-                        <h2 class="text-2xl font-bold text-gray-800">渠道列表</h2>
-                        <el-button type="primary" @click="openChannelDialog()">新增渠道</el-button>
-                    </div>
-                    
-                    <el-card shadow="never">
-                        <el-table :data="channels" style="width: 100%" v-loading="loading">
-                            <el-table-column prop="id" label="ID" width="80"></el-table-column>
-                            <el-table-column prop="name" label="名称"></el-table-column>
-                            <el-table-column prop="type" label="类型">
-                                <template #default="scope">
-                                    <el-tag>{{ scope.row ? scope.row.type : '-' }}</el-tag>
-                                </template>
-                            </el-table-column>
-                            <el-table-column prop="status" label="状态">
-                                <template #default="scope">
-                                    <el-tag :type="scope.row && scope.row.status ? 'success' : 'danger'">
-                                        {{ scope.row && scope.row.status ? '启用' : '禁用' }}
-                                    </el-tag>
-                                </template>
-                            </el-table-column>
-                            <el-table-column label="操作" width="200">
-                                <template #default="scope">
-                                    <div v-if="scope.row">
-                                        <el-button size="small" @click="openChannelDialog(scope.row)">编辑</el-button>
-                                        <el-button size="small" type="danger" @click="deleteChannel(scope.row.id)">删除</el-button>
-                                    </div>
-                                </template>
-                            </el-table-column>
-                        </el-table>
-                    </el-card>
-                </div>
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
 
-                <!-- 2. 令牌管理页面 -->
-                <div v-if="currentTab === 'tokens'">
-                    <div class="flex justify-between items-center mb-6">
-                        <h2 class="text-2xl font-bold text-gray-800">虚拟令牌 (Virtual Tokens)</h2>
-                        <el-button type="primary" @click="openTokenDialog()">创建新令牌</el-button>
-                    </div>
+        // --- Components ---
 
-                    <el-card shadow="never">
-                        <el-table :data="tokens" style="width: 100%" v-loading="loading">
-                            <el-table-column prop="id" label="ID" width="80"></el-table-column>
-                            <el-table-column prop="name" label="名称"></el-table-column>
-                            <el-table-column prop="username" label="所属用户"></el-table-column>
-                            <el-table-column prop="type" label="协议类型"></el-table-column>
-                            <el-table-column label="路由规则">
-                                <template #default="scope">
-                                    <div v-if="scope.row && scope.row.routes">
-                                        <div v-for="route in scope.row.routes" :key="route.channel_id" class="text-sm text-gray-600">
-                                            {{ route.channel_name }} (权重: {{ route.weight }})
-                                        </div>
-                                    </div>
-                                </template>
-                            </el-table-column>
-                            <el-table-column label="操作" width="120">
-                                <template #default="scope">
-                                    <!-- 删除暂未实现 -->
-                                    <el-button size="small" disabled>管理</el-button>
-                                </template>
-                            </el-table-column>
-                        </el-table>
-                    </el-card>
-                </div>
-                
-                <!-- 3. 用户管理页面 -->
-                <div v-if="currentTab === 'users'">
-                    <div class="flex justify-between items-center mb-6">
-                        <h2 class="text-2xl font-bold text-gray-800">用户管理</h2>
-                        <el-button type="primary" @click="openUserDialog()">新增用户</el-button>
-                    </div>
-                    <el-card shadow="never">
-                        <el-table :data="users" style="width: 100%" v-loading="loading">
-                            <el-table-column prop="id" label="ID" width="80"></el-table-column>
-                            <el-table-column prop="username" label="用户名"></el-table-column>
-                            <el-table-column prop="status" label="状态">
-                                <template #default="scope">
-                                    <div v-if="scope.row">
-                                        <el-switch v-model="scope.row.status" :active-value="1" :inactive-value="0" disabled></el-switch>
-                                    </div>
-                                </template>
-                            </el-table-column>
-                        </el-table>
-                    </el-card>
-                </div>
-
-            </div>
-        </div>
-
-        <!-- 渠道编辑弹窗 -->
-        <el-dialog v-model="channelDialog.visible" :title="channelDialog.isEdit ? '编辑渠道' : '新增渠道'" width="600px">
-            <el-form :model="channelForm" label-width="100px">
-                <el-form-item label="名称">
-                    <el-input v-model="channelForm.name" placeholder="如: Vertex US-Central"></el-input>
-                </el-form-item>
-                <el-form-item label="类型">
-                    <el-select v-model="channelForm.type" placeholder="选择类型" class="w-full">
-                        <el-option label="Google Vertex AI" value="vertex"></el-option>
-                        <el-option label="Azure OpenAI" value="azure"></el-option>
-                        <el-option label="OpenAI" value="openai"></el-option>
-                        <el-option label="Anthropic Claude" value="anthropic"></el-option>
-                    </el-select>
-                </el-form-item>
-                
-                <el-form-item label="凭证" :label-width="100">
-                    <el-input 
-                        type="textarea" 
-                        v-model="channelForm.credentials" 
-                        :rows="6" 
-                        :placeholder="channelForm.type === 'vertex' ? '粘贴 Service Account JSON' : '粘贴 API Key (sk-...)'">
-                    </el-input>
-                    <div class="text-xs text-gray-400 mt-1" v-if="channelForm.type === 'vertex'">必须是完整的 JSON 内容</div>
-                </el-form-item>
-
-                <!-- Azure 特有配置 -->
-                <div v-if="channelForm.type === 'azure'" class="p-4 bg-gray-50 rounded mb-4">
-                    <h4 class="text-sm font-bold mb-2 text-blue-600">Azure 配置</h4>
-                    <el-form-item label="Endpoint" label-width="80px">
-                        <el-input v-model="channelForm.extra_config.endpoint" placeholder="https://xxx.openai.azure.com"></el-input>
-                    </el-form-item>
-                    <el-form-item label="API Ver" label-width="80px">
-                        <el-input v-model="channelForm.extra_config.api_version" placeholder="2023-05-15"></el-input>
-                    </el-form-item>
-                </div>
-
-                <el-form-item>
-                    <el-button type="success" @click="testConnection" :loading="testing">测试连接</el-button>
-                </el-form-item>
-            </el-form>
-            <template #footer>
-                <el-button @click="channelDialog.visible = false">取消</el-button>
-                <el-button type="primary" @click="saveChannel" :loading="saving">保存</el-button>
-            </template>
-        </el-dialog>
-
-        <!-- 令牌创建弹窗 -->
-        <el-dialog v-model="tokenDialog.visible" title="创建虚拟令牌" width="700px">
-            <el-form :model="tokenForm" label-width="120px">
-                <el-form-item label="归属用户">
-                    <el-select v-model="tokenForm.user_id" placeholder="选择用户" class="w-full">
-                        <el-option v-for="u in users" :key="u.id" :label="u.username" :value="u.id"></el-option>
-                    </el-select>
-                </el-form-item>
-                <el-form-item label="名称备注">
-                    <el-input v-model="tokenForm.name" placeholder="如: 生产环境Key"></el-input>
-                </el-form-item>
-                <el-form-item label="协议类型">
-                    <el-select v-model="tokenForm.type" placeholder="选择协议" class="w-full" @change="handleTokenTypeChange">
-                        <el-option label="Google Vertex (OAuth2)" value="vertex"></el-option>
-                        <el-option label="OpenAI / Azure (Key)" value="azure"></el-option>
-                    </el-select>
-                </el-form-item>
-                
-                <!-- 路由选择 -->
-                <el-form-item label="绑定渠道">
-                    <div class="w-full">
-                        <div v-for="(route, idx) in tokenForm.routes" :key="idx" class="flex gap-2 mb-2">
-                            <el-select v-model="route.channel_id" placeholder="选择渠道" class="flex-1">
-                                <el-option 
-                                    v-for="c in availableChannels" 
-                                    :key="c.id" 
-                                    :label="c.name + ' (' + c.type + ')'" 
-                                    :value="c.id">
-                                </el-option>
-                            </el-select>
-                            <el-input-number v-model="route.weight" :min="1" :max="100" label="权重"></el-input-number>
-                            <el-button type="danger" icon="Delete" circle @click="removeRoute(idx)"></el-button>
+        // 1. Modal Component (现代化弹窗)
+        const Modal = ({ isOpen, title, onClose, children, footer }) => {
+            if (!isOpen) return null;
+            return (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm transition-opacity">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl m-4 transform transition-all flex flex-col max-h-[90vh]">
+                        <div className="flex justify-between items-center p-6 border-b border-gray-100">
+                            <h3 className="text-xl font-semibold text-gray-800">{title}</h3>
+                            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
+                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                            </button>
                         </div>
-                        <el-button type="primary" plain size="small" @click="addRoute">+ 添加渠道 (负载均衡)</el-button>
+                        <div className="p-6 overflow-y-auto flex-1">
+                            {children}
+                        </div>
+                        {footer && (
+                            <div className="p-6 border-t border-gray-100 bg-gray-50 rounded-b-xl flex justify-end gap-3">
+                                {footer}
+                            </div>
+                        )}
                     </div>
-                </el-form-item>
-            </el-form>
-            <template #footer>
-                <el-button @click="tokenDialog.visible = false">取消</el-button>
-                <el-button type="primary" @click="createToken" :loading="saving">创建并生成 Key</el-button>
-            </template>
-        </el-dialog>
-        
-        <!-- 结果展示弹窗 -->
-        <el-dialog v-model="resultDialog.visible" title="令牌生成成功" width="500px">
-            <div class="bg-green-50 p-4 rounded">
-                <p class="font-bold text-green-800 mb-2">请立即保存以下凭证，它不会再次显示！</p>
-                <el-input 
-                    type="textarea" 
-                    :rows="10" 
-                    v-model="resultDialog.content" 
-                    readonly>
-                </el-input>
+                </div>
+            );
+        };
+
+        // 2. Input Component
+        const Input = ({ label, type = "text", value, onChange, placeholder, className = "", multiline = false, rows = 4 }) => (
+            <div className={`mb-4 ${className}`}>
+                {label && <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>}
+                {multiline ? (
+                    <textarea 
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-sm font-mono"
+                        rows={rows}
+                        value={value}
+                        onChange={e => onChange(e.target.value)}
+                        placeholder={placeholder}
+                    />
+                ) : (
+                    <input 
+                        type={type}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-sm"
+                        value={value}
+                        onChange={e => onChange(e.target.value)}
+                        placeholder={placeholder}
+                    />
+                )}
             </div>
-            <template #footer>
-                <el-button type="primary" @click="resultDialog.visible = false">关闭</el-button>
-            </template>
-        </el-dialog>
+        );
 
-    </div>
+        // 3. Select Component
+        const Select = ({ label, value, onChange, options, className = "" }) => (
+            <div className={`mb-4 ${className}`}>
+                {label && <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>}
+                <div className="relative">
+                    <select 
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-sm appearance-none bg-white"
+                        value={value}
+                        onChange={e => onChange(e.target.value)}
+                    >
+                        {options.map(opt => (
+                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                        ))}
+                    </select>
+                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
+                        <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                    </div>
+                </div>
+            </div>
+        );
 
-    <script>
-        const { createApp, ref, reactive, onMounted, computed } = Vue;
-        const { ElMessage } = ElementPlus;
-        const icons = ElementPlusIconsVue;
+        // 4. Button Component
+        const Button = ({ children, onClick, variant = "primary", className = "", disabled = false, loading = false }) => {
+            const variants = {
+                primary: "bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-200",
+                secondary: "bg-white border border-gray-300 text-gray-700 hover:bg-gray-50",
+                danger: "bg-red-500 hover:bg-red-600 text-white shadow-md shadow-red-200",
+                ghost: "text-gray-500 hover:text-gray-700 hover:bg-gray-100"
+            };
+            
+            return (
+                <button 
+                    onClick={onClick}
+                    disabled={disabled || loading}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${variants[variant]} ${className} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+                >
+                    {loading && (
+                        <svg className="animate-spin h-4 w-4 text-current" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                    )}
+                    {children}
+                </button>
+            );
+        };
 
-        const app = createApp({
-            setup() {
-                const currentTab = ref('channels');
-                const loading = ref(false);
-                const saving = ref(false);
-                const testing = ref(false);
-                
-                // 数据
-                const channels = ref([]);
-                const tokens = ref([]);
-                const users = ref([]);
-                
-                // 渠道表单
-                const channelDialog = reactive({ visible: false, isEdit: false });
-                const channelForm = reactive({
-                    id: null, name: '', type: 'vertex', credentials: '', 
-                    extra_config: { endpoint: '', api_version: '' },
-                    models_config: {}
-                });
+        // 5. Confirm Dialog (替代原生 confirm)
+        const ConfirmDialog = ({ isOpen, title, message, onConfirm, onCancel, loading }) => (
+            <Modal isOpen={isOpen} title={title} onClose={onCancel} footer={
+                <>
+                    <Button variant="secondary" onClick={onCancel}>取消</Button>
+                    <Button variant="danger" onClick={onConfirm} loading={loading}>确定删除</Button>
+                </>
+            }>
+                <p className="text-gray-600">{message}</p>
+            </Modal>
+        );
 
-                // 令牌表单
-                const tokenDialog = reactive({ visible: false });
-                const tokenForm = reactive({
-                    user_id: null, name: '', type: 'vertex', 
-                    routes: [{ channel_id: null, weight: 10 }]
-                });
-                
-                const resultDialog = reactive({ visible: false, content: '' });
+        // --- Main Application ---
 
-                const API_BASE = '/api/admin'; // Node.js 代理路径
+        const App = () => {
+            const [activeTab, setActiveTab] = useState('channels');
+            const [channels, setChannels] = useState([]);
+            const [tokens, setTokens] = useState([]);
+            const [users, setUsers] = useState([]);
+            const [loading, setLoading] = useState(false);
 
-                // 初始化加载
-                onMounted(() => {
-                    loadChannels();
-                });
+            // Dialog States
+            const [channelModal, setChannelModal] = useState({ open: false, data: null });
+            const [tokenModal, setTokenModal] = useState({ open: false });
+            const [userModal, setUserModal] = useState({ open: false });
+            const [confirmModal, setConfirmModal] = useState({ open: false, type: null, id: null });
+            const [resultModal, setResultModal] = useState({ open: false, content: '' });
 
-                const handleSelect = (key) => {
-                    currentTab.value = key;
-                    if (key === 'channels') loadChannels();
-                    if (key === 'tokens') { loadTokens(); loadUsers(); loadChannels(); }
-                    if (key === 'users') loadUsers();
-                };
+            // Form States
+            const [channelForm, setChannelForm] = useState({});
+            const [tokenForm, setTokenForm] = useState({ routes: [{ channel_id: '', weight: 10 }] });
+            const [userForm, setUserForm] = useState({});
 
-                // --- Channels Logic ---
-                const loadChannels = async () => {
-                    loading.value = true;
-                    try {
+            const API_BASE = '/api/admin';
+
+            // Initial Load
+            useEffect(() => {
+                fetchData('channels');
+            }, []);
+
+            const fetchData = async (type) => {
+                setLoading(true);
+                try {
+                    if (type === 'channels') {
                         const res = await axios.get(`${API_BASE}/channels`);
-                        channels.value = res.data.data;
-                    } catch (e) { ElMessage.error('加载失败'); }
-                    loading.value = false;
-                };
-
-                const openChannelDialog = (row) => {
-                    if (row) {
-                        channelDialog.isEdit = true;
-                        Object.assign(channelForm, row);
-                        // 确保 extra_config 存在
-                        if (!channelForm.extra_config) channelForm.extra_config = { endpoint: '', api_version: '' };
-                        // 将 JSON 对象转回 extra_config
-                        if (typeof channelForm.extra_config === 'string') channelForm.extra_config = JSON.parse(channelForm.extra_config);
-                    } else {
-                        channelDialog.isEdit = false;
-                        channelForm.id = null;
-                        channelForm.name = '';
-                        channelForm.type = 'vertex';
-                        channelForm.credentials = '';
-                        channelForm.extra_config = { endpoint: '', api_version: '' };
-                    }
-                    channelDialog.visible = true;
-                };
-
-                const saveChannel = async () => {
-                    saving.value = true;
-                    try {
-                        if (channelDialog.isEdit) {
-                            await axios.put(`${API_BASE}/channels/${channelForm.id}`, channelForm);
-                        } else {
-                            await axios.post(`${API_BASE}/channels`, channelForm);
-                        }
-                        ElMessage.success('保存成功');
-                        channelDialog.visible = false;
-                        loadChannels();
-                    } catch (e) { ElMessage.error(e.response?.data?.error || '保存失败'); }
-                    saving.value = false;
-                };
-                
-                const deleteChannel = async (id) => {
-                    if(!confirm('确定删除吗？')) return;
-                    try {
-                        await axios.delete(`${API_BASE}/channels/${id}`);
-                        ElMessage.success('已删除');
-                        loadChannels();
-                    } catch(e) { ElMessage.error(e.response?.data?.error || '删除失败'); }
-                };
-
-                const testConnection = async () => {
-                    testing.value = true;
-                    try {
-                        const res = await axios.post(`${API_BASE}/channels/test-connection`, channelForm);
-                        if (res.data.success) ElMessage.success(res.data.message);
-                        else ElMessage.warning(res.data.message);
-                    } catch(e) { ElMessage.error('测试出错'); }
-                    testing.value = false;
-                };
-
-                // --- Tokens Logic ---
-                const loadTokens = async () => {
-                    loading.value = true;
-                    try {
-                        const res = await axios.get(`${API_BASE}/tokens`);
-                        tokens.value = res.data.data;
-                    } catch(e) {}
-                    loading.value = false;
-                };
-
-                const openTokenDialog = () => {
-                    tokenForm.user_id = users.value.length > 0 ? users.value[0].id : null;
-                    tokenForm.name = '';
-                    tokenForm.type = 'vertex';
-                    tokenForm.routes = [{ channel_id: null, weight: 10 }];
-                    tokenDialog.visible = true;
-                };
-
-                // 过滤可用的 Channels (根据当前选的 type)
-                const availableChannels = computed(() => {
-                    // 这里做了简化，实际上不同类型的 channel 兼容性不同
-                    // 比如 vertex type 的 token 只能绑 vertex 类型的 channel
-                    // azure type 的 token 可以绑 azure 或 openai channel
-                    if (tokenForm.type === 'vertex') {
-                        return channels.value.filter(c => c.type === 'vertex');
-                    } else {
-                        return channels.value.filter(c => c.type !== 'vertex');
-                    }
-                });
-
-                const handleTokenTypeChange = () => {
-                    // 清空已选的不兼容渠道
-                    tokenForm.routes.forEach(r => r.channel_id = null);
-                };
-
-                const addRoute = () => tokenForm.routes.push({ channel_id: null, weight: 10 });
-                const removeRoute = (idx) => tokenForm.routes.splice(idx, 1);
-
-                const createToken = async () => {
-                    saving.value = true;
-                    try {
-                        // 过滤无效路由
-                        const validRoutes = tokenForm.routes.filter(r => r.channel_id);
-                        if(validRoutes.length === 0) {
-                            ElMessage.warning('请至少选择一个渠道');
-                            saving.value = false;
-                            return;
-                        }
-                        
-                        const payload = { ...tokenForm, routes: validRoutes };
-                        const res = await axios.post(`${API_BASE}/tokens`, payload);
-                        
-                        // 显示结果
-                        resultDialog.content = JSON.stringify(res.data.credentials, null, 2);
-                        resultDialog.visible = true;
-                        tokenDialog.visible = false;
-                        loadTokens();
-                    } catch(e) { ElMessage.error(e.response?.data?.error || '创建失败'); }
-                    saving.value = false;
-                };
-
-                // --- Users Logic ---
-                const loadUsers = async () => {
-                    try {
+                        setChannels(res.data.data);
+                    } else if (type === 'tokens') {
+                        const [tRes, uRes, cRes] = await Promise.all([
+                            axios.get(`${API_BASE}/tokens`),
+                            axios.get(`${API_BASE}/users`),
+                            axios.get(`${API_BASE}/channels`)
+                        ]);
+                        setTokens(tRes.data.data);
+                        setUsers(uRes.data.data);
+                        setChannels(cRes.data.data);
+                    } else if (type === 'users') {
                         const res = await axios.get(`${API_BASE}/users`);
-                        users.value = res.data.data;
-                    } catch(e) {}
-                };
-                const openUserDialog = async () => {
-                     // 简单实现：直接弹个 prompt 演示
-                     const name = prompt("请输入用户名");
-                     if(name) {
-                         await axios.post(`${API_BASE}/users`, { username: name, password: '123', remark: 'created via console' });
-                         loadUsers();
-                     }
+                        setUsers(res.data.data);
+                    }
+                } catch (err) {
+                    console.error(err);
+                    alert('加载数据失败: ' + (err.response?.data?.error || err.message));
                 }
+                setLoading(false);
+            };
 
-                return {
-                    currentTab, handleSelect, loading, saving, testing,
-                    channels, tokens, users,
-                    channelDialog, channelForm, openChannelDialog, saveChannel, deleteChannel, testConnection,
-                    tokenDialog, tokenForm, openTokenDialog, createToken, availableChannels, handleTokenTypeChange,
-                    addRoute, removeRoute,
-                    resultDialog, openUserDialog
-                };
-            }
-        });
+            const handleTabChange = (tab) => {
+                setActiveTab(tab);
+                fetchData(tab);
+            };
 
-        // 注册 Element Plus
-        app.use(ElementPlus);
+            // --- Channel Handlers ---
+            const openChannelModal = (channel = null) => {
+                if (channel) {
+                    setChannelForm({
+                        ...channel,
+                        extra_config: typeof channel.extra_config === 'string' 
+                            ? JSON.parse(channel.extra_config) 
+                            : (channel.extra_config || { endpoint: '', api_version: '' })
+                    });
+                } else {
+                    setChannelForm({ name: '', type: 'vertex', credentials: '', extra_config: { endpoint: '', api_version: '' } });
+                }
+                setChannelModal({ open: true, isEdit: !!channel });
+            };
 
-        // 注册图标
-        for (const [key, component] of Object.entries(ElementPlusIconsVue)) {
-            app.component(key, component);
-        }
+            const saveChannel = async () => {
+                try {
+                    if (channelModal.isEdit) {
+                        await axios.put(`${API_BASE}/channels/${channelForm.id}`, channelForm);
+                    } else {
+                        await axios.post(`${API_BASE}/channels`, channelForm);
+                    }
+                    setChannelModal({ open: false });
+                    fetchData('channels');
+                } catch (err) {
+                    alert('保存失败: ' + err.response?.data?.error);
+                }
+            };
 
-        app.mount('#app');
+            const handleDelete = async () => {
+                try {
+                    if (confirmModal.type === 'channel') {
+                        await axios.delete(`${API_BASE}/channels/${confirmModal.id}`);
+                        fetchData('channels');
+                    }
+                    setConfirmModal({ open: false });
+                } catch (err) {
+                    alert('删除失败');
+                }
+            };
+
+            // --- Token Handlers ---
+            const openTokenModal = () => {
+                setTokenForm({
+                    user_id: users.length > 0 ? users[0].id : '',
+                    name: '',
+                    type: 'vertex',
+                    routes: [{ channel_id: '', weight: 10 }]
+                });
+                setTokenModal({ open: true });
+            };
+
+            const createToken = async () => {
+                try {
+                    const payload = {
+                        ...tokenForm,
+                        routes: tokenForm.routes.filter(r => r.channel_id).map(r => ({...r, weight: parseInt(r.weight)}))
+                    };
+                    const res = await axios.post(`${API_BASE}/tokens`, payload);
+                    setTokenModal({ open: false });
+                    setResultModal({ open: true, content: JSON.stringify(res.data.credentials, null, 2) });
+                    fetchData('tokens');
+                } catch (err) {
+                    alert('创建失败: ' + err.response?.data?.error);
+                }
+            };
+
+            // --- User Handlers ---
+            const createUser = async () => {
+                if (!userForm.username) return;
+                try {
+                    await axios.post(`${API_BASE}/users`, userForm);
+                    setUserModal({ open: false });
+                    fetchData('users');
+                } catch (err) {
+                    alert('创建失败');
+                }
+            };
+
+            // --- Renders ---
+
+            const Sidebar = () => (
+                <div className="w-64 bg-slate-900 text-white flex-shrink-0 flex flex-col shadow-xl z-10">
+                    <div className="h-16 flex items-center px-6 font-bold text-xl tracking-wider bg-slate-950">
+                        <span className="text-blue-500 mr-2">❖</span> Gemini Proxy
+                    </div>
+                    <nav className="flex-1 py-6 space-y-1">
+                        {[
+                            { id: 'channels', label: '渠道管理', icon: 'M13 10V3L4 14h7v7l9-11h-7z' },
+                            { id: 'tokens', label: '令牌管理', icon: 'M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z' },
+                            { id: 'users', label: '用户管理', icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z' }
+                        ].map(item => (
+                            <button
+                                key={item.id}
+                                onClick={() => handleTabChange(item.id)}
+                                className={`w-full flex items-center px-6 py-3 transition-all duration-200 border-l-4 ${
+                                    activeTab === item.id 
+                                    ? 'bg-slate-800 border-blue-500 text-white' 
+                                    : 'border-transparent text-slate-400 hover:bg-slate-800 hover:text-white'
+                                }`}
+                            >
+                                <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={item.icon}></path></svg>
+                                {item.label}
+                            </button>
+                        ))}
+                    </nav>
+                    <div className="p-4 bg-slate-950 text-xs text-slate-500 text-center">
+                        v3.0.0 | Resource-based
+                    </div>
+                </div>
+            );
+
+            return (
+                <div className="flex h-screen bg-gray-100 font-sans antialiased">
+                    <Sidebar />
+                    
+                    <main className="flex-1 flex flex-col overflow-hidden">
+                        <header className="bg-white shadow-sm z-0 h-16 flex items-center justify-between px-8">
+                            <h2 className="text-xl font-semibold text-gray-800">
+                                {activeTab === 'channels' && '真实渠道 (Upstream Channels)'}
+                                {activeTab === 'tokens' && '虚拟令牌 (Virtual Tokens)'}
+                                {activeTab === 'users' && '系统用户 (System Users)'}
+                            </h2>
+                            <div className="flex items-center gap-4">
+                                <div className="text-sm text-gray-500">Admin Console</div>
+                                <div className="h-8 w-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold">A</div>
+                            </div>
+                        </header>
+
+                        <div className="flex-1 overflow-y-auto p-8">
+                            {/* Channels View */}
+                            {activeTab === 'channels' && (
+                                <div className="space-y-6">
+                                    <div className="flex justify-end">
+                                        <Button onClick={() => openChannelModal()}>+ 新增渠道</Button>
+                                    </div>
+                                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                                        <table className="min-w-full divide-y divide-gray-200">
+                                            <thead className="bg-gray-50">
+                                                <tr>
+                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">名称</th>
+                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">类型</th>
+                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
+                                                    <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="bg-white divide-y divide-gray-200">
+                                                {channels.map(row => (
+                                                    <tr key={row.id} className="hover:bg-gray-50 transition-colors">
+                                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{row.id}</td>
+                                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{row.name}</td>
+                                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                                                                row.type === 'vertex' ? 'bg-blue-100 text-blue-800' : 
+                                                                row.type === 'azure' ? 'bg-purple-100 text-purple-800' : 'bg-green-100 text-green-800'
+                                                            }`}>
+                                                                {row.type}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                            <span className={`h-2.5 w-2.5 rounded-full inline-block mr-2 ${row.status ? 'bg-green-500' : 'bg-red-500'}`}></span>
+                                                            {row.status ? 'Active' : 'Inactive'}
+                                                        </td>
+                                                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                                            <button onClick={() => openChannelModal(row)} className="text-blue-600 hover:text-blue-900 mr-4">编辑</button>
+                                                            <button onClick={() => setConfirmModal({ open: true, type: 'channel', id: row.id })} className="text-red-600 hover:text-red-900">删除</button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                        {channels.length === 0 && <div className="p-8 text-center text-gray-400">暂无数据</div>}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Tokens View */}
+                            {activeTab === 'tokens' && (
+                                <div className="space-y-6">
+                                    <div className="flex justify-end">
+                                        <Button onClick={openTokenModal}>+ 创建 Token</Button>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                        {tokens.map(token => (
+                                            <div key={token.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
+                                                <div className="flex justify-between items-start mb-4">
+                                                    <div>
+                                                        <h3 className="font-bold text-gray-900">{token.name}</h3>
+                                                        <div className="text-xs text-gray-500 mt-1">User: {token.username}</div>
+                                                    </div>
+                                                    <span className={`px-2 py-1 text-xs font-bold rounded ${
+                                                        token.type === 'vertex' ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'
+                                                    }`}>{token.type}</span>
+                                                </div>
+                                                <div className="space-y-2">
+                                                    <div className="text-xs font-semibold text-gray-400 uppercase">Routes</div>
+                                                    {token.routes && token.routes.map((r, i) => (
+                                                        <div key={i} className="flex justify-between text-sm items-center bg-gray-50 p-2 rounded">
+                                                            <span className="text-gray-700 truncate flex-1 mr-2">{r.channel_name}</span>
+                                                            <span className="text-gray-400 text-xs">Weight: {r.weight}</span>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Users View */}
+                            {activeTab === 'users' && (
+                                <div className="space-y-6">
+                                    <div className="flex justify-end">
+                                        <Button onClick={() => setUserModal({ open: true })}>+ 新增用户</Button>
+                                    </div>
+                                    <div className="bg-white rounded-xl shadow-sm border border-gray-200">
+                                        <table className="min-w-full divide-y divide-gray-200">
+                                            <thead className="bg-gray-50">
+                                                <tr>
+                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">用户名</th>
+                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">备注</th>
+                                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">创建时间</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="bg-white divide-y divide-gray-200">
+                                                {users.map(u => (
+                                                    <tr key={u.id}>
+                                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{u.id}</td>
+                                                        <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{u.username}</td>
+                                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{u.remark || '-'}</td>
+                                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{new Date(u.created_at).toLocaleDateString()}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </main>
+
+                    {/* --- MODALS --- */}
+
+                    {/* Channel Modal */}
+                    <Modal 
+                        isOpen={channelModal.open} 
+                        title={channelModal.isEdit ? "编辑渠道" : "新增渠道"} 
+                        onClose={() => setChannelModal({ open: false })}
+                        footer={
+                            <>
+                                <Button variant="secondary" onClick={() => setChannelModal({ open: false })}>取消</Button>
+                                <Button onClick={saveChannel}>保存</Button>
+                            </>
+                        }
+                    >
+                        <Input label="渠道名称" value={channelForm.name} onChange={v => setChannelForm({...channelForm, name: v})} placeholder="例如: Vertex US-Central" />
+                        <Select label="类型" value={channelForm.type} onChange={v => setChannelForm({...channelForm, type: v})} options={[
+                            { value: 'vertex', label: 'Google Vertex AI' },
+                            { value: 'azure', label: 'Azure OpenAI' },
+                            { value: 'openai', label: 'OpenAI' },
+                            { value: 'anthropic', label: 'Anthropic' }
+                        ]} />
+                        <Input 
+                            label="凭证 (Credentials)" 
+                            value={channelForm.credentials} 
+                            onChange={v => setChannelForm({...channelForm, credentials: v})} 
+                            multiline rows={6}
+                            placeholder={channelForm.type === 'vertex' ? '粘贴 Google Service Account JSON' : '粘贴 API Key'} 
+                        />
+                        {channelForm.type === 'azure' && (
+                            <div className="p-4 bg-blue-50 rounded-lg border border-blue-100 mb-4">
+                                <h4 className="text-xs font-bold text-blue-800 uppercase mb-3">Azure 配置</h4>
+                                <Input label="Endpoint" value={channelForm.extra_config?.endpoint} onChange={v => setChannelForm({...channelForm, extra_config: {...channelForm.extra_config, endpoint: v}})} placeholder="https://xxx.openai.azure.com" />
+                                <Input label="API Version" value={channelForm.extra_config?.api_version} onChange={v => setChannelForm({...channelForm, extra_config: {...channelForm.extra_config, api_version: v}})} placeholder="2023-05-15" />
+                            </div>
+                        )}
+                    </Modal>
+
+                    {/* Token Modal */}
+                    <Modal
+                        isOpen={tokenModal.open}
+                        title="创建虚拟令牌"
+                        onClose={() => setTokenModal({ open: false })}
+                        footer={
+                            <>
+                                <Button variant="secondary" onClick={() => setTokenModal({ open: false })}>取消</Button>
+                                <Button onClick={createToken}>创建并生成 Key</Button>
+                            </>
+                        }
+                    >
+                        <Select label="归属用户" value={tokenForm.user_id} onChange={v => setTokenForm({...tokenForm, user_id: v})} 
+                            options={users.map(u => ({ value: u.id, label: u.username }))} />
+                        <Input label="名称备注" value={tokenForm.name} onChange={v => setTokenForm({...tokenForm, name: v})} />
+                        <Select label="协议类型" value={tokenForm.type} onChange={v => setTokenForm({...tokenForm, type: v})} options={[
+                            { value: 'vertex', label: 'Google Vertex (OAuth2)' },
+                            { value: 'azure', label: 'OpenAI / Azure (Key)' }
+                        ]} />
+                        
+                        <div className="mb-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-2">路由绑定</label>
+                            {tokenForm.routes.map((route, idx) => (
+                                <div key={idx} className="flex gap-2 mb-2">
+                                    <select 
+                                        className="flex-1 px-3 py-2 border rounded-lg text-sm"
+                                        value={route.channel_id}
+                                        onChange={e => {
+                                            const newRoutes = [...tokenForm.routes];
+                                            newRoutes[idx].channel_id = e.target.value;
+                                            setTokenForm({...tokenForm, routes: newRoutes});
+                                        }}
+                                    >
+                                        <option value="">选择渠道...</option>
+                                        {channels
+                                            .filter(c => tokenForm.type === 'vertex' ? c.type === 'vertex' : c.type !== 'vertex')
+                                            .map(c => (
+                                            <option key={c.id} value={c.id}>{c.name} ({c.type})</option>
+                                        ))}
+                                    </select>
+                                    <input type="number" className="w-20 px-3 py-2 border rounded-lg text-sm" placeholder="权重" value={route.weight} 
+                                        onChange={e => {
+                                            const newRoutes = [...tokenForm.routes];
+                                            newRoutes[idx].weight = e.target.value;
+                                            setTokenForm({...tokenForm, routes: newRoutes});
+                                        }}
+                                    />
+                                    <button onClick={() => {
+                                        const newRoutes = [...tokenForm.routes];
+                                        newRoutes.splice(idx, 1);
+                                        setTokenForm({...tokenForm, routes: newRoutes});
+                                    }} className="text-red-500 hover:bg-red-50 p-2 rounded">×</button>
+                                </div>
+                            ))}
+                            <button onClick={() => setTokenForm({...tokenForm, routes: [...tokenForm.routes, { channel_id: '', weight: 10 }]})} 
+                                className="text-sm text-blue-600 font-medium hover:underline">+ 添加路由 (负载均衡)</button>
+                        </div>
+                    </Modal>
+
+                    {/* User Modal */}
+                    <Modal isOpen={userModal.open} title="新增用户" onClose={() => setUserModal({ open: false })} footer={
+                        <Button onClick={createUser}>创建</Button>
+                    }>
+                        <Input label="用户名" value={userForm.username} onChange={v => setUserForm({...userForm, username: v})} />
+                        <Input label="密码" type="password" value={userForm.password} onChange={v => setUserForm({...userForm, password: v})} />
+                        <Input label="备注" value={userForm.remark} onChange={v => setUserForm({...userForm, remark: v})} />
+                    </Modal>
+
+                    {/* Confirm Dialog */}
+                    <ConfirmDialog 
+                        isOpen={confirmModal.open} 
+                        title="确认删除" 
+                        message="确定要删除这个项目吗？此操作无法撤销。" 
+                        onCancel={() => setConfirmModal({ open: false })}
+                        onConfirm={handleDelete}
+                    />
+
+                    {/* Result Modal */}
+                    <Modal isOpen={resultModal.open} title="令牌生成成功" onClose={() => setResultModal({ open: false })}>
+                        <div className="bg-green-50 p-4 rounded-lg border border-green-100">
+                            <p className="text-green-800 font-bold mb-2 text-sm">请立即保存以下凭证：</p>
+                            <pre className="bg-white p-4 rounded border border-green-200 text-xs font-mono overflow-x-auto">{resultModal.content}</pre>
+                        </div>
+                    </Modal>
+
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
     </script>
 </body>
 </html>
