@@ -125,8 +125,8 @@ router.post('/', async (req, res) => {
         
         // 1. 插入 Tokens 表
         const [resToken] = await connection.query(
-            "INSERT INTO sys_virtual_tokens (user_id, name, type, token_key, token_secret, public_key, limit_config) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            [user_id, name, type, token_key, token_secret, public_key, JSON.stringify(limit_config || {})]
+            "INSERT INTO sys_virtual_tokens (user_id, name, type, token_key, token_secret, public_key, limit_config, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            [user_id, name, type, token_key, token_secret, public_key, JSON.stringify(limit_config || {}), req.body.expires_at || null]
         );
         const tokenId = resToken.insertId;
         
@@ -159,6 +159,28 @@ router.post('/', async (req, res) => {
     }
 });
 
-// 删除和更新逻辑省略，类似 Channels
+/**
+ * 更新令牌 (主要用于状态切换)
+ */
+router.put('/:id', async (req, res) => {
+    const { id } = req.params;
+    const { status } = req.body;
+    
+    try {
+        if (status !== undefined) {
+            await db.query("UPDATE sys_virtual_tokens SET status = ? WHERE id = ?", [status, id]);
+            
+            // 触发缓存同步
+            const [token] = await db.query("SELECT * FROM sys_virtual_tokens WHERE id = ?", [id]);
+            await SyncManager.updateVirtualTokenCache(token[0]);
+            
+            return res.json({ message: "Token status updated" });
+        }
+        res.json({ message: "No changes" });
+    } catch (err) {
+        logger.error('Update token failed:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
 
 module.exports = router;

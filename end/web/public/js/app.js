@@ -289,7 +289,10 @@ const App = () => {
             user_id: users.length > 0 ? users[0].id : '',
             name: '',
             type: 'vertex',
-            routes: [{ channel_id: '', weight: 10 }]
+            routes: [{ channel_id: '', weight: 10 }],
+            expires_at: '',
+            enable_whitelist: false,
+            allowed_models: []
         });
         setTokenModal({ open: true });
     };
@@ -298,7 +301,11 @@ const App = () => {
         try {
             const payload = {
                 ...tokenForm,
-                routes: tokenForm.routes.filter(r => r.channel_id).map(r => ({...r, weight: parseInt(r.weight)}))
+                routes: tokenForm.routes.filter(r => r.channel_id).map(r => ({...r, weight: parseInt(r.weight)})),
+                expires_at: tokenForm.expires_at || null,
+                limit_config: {
+                    allowed_models: tokenForm.enable_whitelist ? tokenForm.allowed_models : []
+                }
             };
             const res = await axios.post(API_BASE + '/tokens', payload);
             setTokenModal({ open: false });
@@ -308,6 +315,35 @@ const App = () => {
             const msg = (err.response && err.response.data && err.response.data.error) || 'Unknown Error';
             alert('创建失败: ' + msg);
         }
+    };
+
+    const toggleTokenStatus = async (row) => {
+        const newStatus = row.status ? 0 : 1;
+        const originalData = [...tokens];
+        setTokens(tokens.map(t => t.id === row.id ? { ...t, status: newStatus } : t));
+        try {
+            await axios.put(API_BASE + '/tokens/' + row.id, { status: newStatus });
+        } catch (err) {
+            alert('更新状态失败');
+            setTokens(originalData);
+        }
+    };
+
+    // Helper for token allowed models
+    const addAllowedModel = (modelName) => {
+        if (!tokenForm.allowed_models.includes(modelName)) {
+            setTokenForm(prev => ({
+                ...prev,
+                allowed_models: [...prev.allowed_models, modelName]
+            }));
+        }
+    };
+
+    const removeAllowedModel = (modelName) => {
+        setTokenForm(prev => ({
+            ...prev,
+            allowed_models: prev.allowed_models.filter(m => m !== modelName)
+        }));
     };
 
     // --- User Handlers ---
@@ -468,34 +504,164 @@ const App = () => {
                             <div className="flex justify-end">
                                 <Button onClick={openTokenModal}>+ 创建 Token</Button>
                             </div>
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                                {tokens.map(token => (
-                                    <div key={token.id} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow">
-                                        <div className="flex justify-between items-start mb-4">
-                                            <div>
-                                                <h3 className="font-bold text-gray-900">{token.name}</h3>
-                                                <div className="text-xs text-gray-500 mt-1">User: {token.username}</div>
-                                            </div>
-                                            <span className={`px-2 py-1 text-xs font-bold rounded ${
-                                                token.type === 'vertex' ? 'bg-blue-50 text-blue-700' : 'bg-purple-50 text-purple-700'
-                                            }`}>{token.type}</span>
-                                        </div>
-                                        <div className="space-y-2">
-                                            <div className="text-xs font-semibold text-gray-400 uppercase">Routes</div>
-                                            {token.routes && token.routes.map((r, i) => (
-                                                <div key={i} className="flex justify-between text-sm items-center bg-gray-50 p-2 rounded">
-                                                    <span className="text-gray-700 truncate flex-1 mr-2">{r.channel_name}</span>
-                                                    <span className="text-gray-400 text-xs">Weight: {r.weight}</span>
-                                                </div>
-                                            ))}
-                                        </div>
-                                    </div>
-                                ))}
+                            <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+                                <table className="min-w-full divide-y divide-gray-200">
+                                    <thead className="bg-gray-50">
+                                        <tr>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">ID</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">名称</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">用户</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">类型</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">过期时间</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
+                                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">路由</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="bg-white divide-y divide-gray-200">
+                                        {tokens.map(token => (
+                                            <tr key={token.id} className="hover:bg-gray-50 transition-colors">
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{token.id}</td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{token.name}</td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{token.username}</td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                    <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${
+                                                        token.type === 'vertex' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
+                                                    }`}>{token.type}</span>
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                    {token.expires_at ? new Date(token.expires_at).toLocaleString() : '永久有效'}
+                                                </td>
+                                                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                                                    <Switch 
+                                                        checked={!!token.status} 
+                                                        onChange={() => toggleTokenStatus(token)}
+                                                    />
+                                                </td>
+                                                <td className="px-6 py-4 text-sm text-gray-500">
+                                                    {token.routes && token.routes.map((r, i) => (
+                                                        <div key={i} className="text-xs">
+                                                            {r.channel_name} ({r.weight})
+                                                        </div>
+                                                    ))}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                                {tokens.length === 0 && <div className="p-8 text-center text-gray-400">暂无数据</div>}
                             </div>
                         </div>
                     )}
 
-                    {/* Users View */}
+                    {/* ... */}
+
+            <Modal
+                isOpen={tokenModal.open}
+                title="创建虚拟令牌"
+                onClose={() => setTokenModal({ open: false })}
+                footer={
+                    <div className="flex justify-end gap-3 w-full">
+                        <Button variant="secondary" onClick={() => setTokenModal({ open: false })}>取消</Button>
+                        <Button onClick={createToken}>创建并生成 Key</Button>
+                    </div>
+                }
+            >
+                <div className="space-y-6 pb-20">
+                    <Select label="归属用户" value={tokenForm.user_id} onChange={v => setTokenForm({...tokenForm, user_id: v})} 
+                        options={users.map(u => ({ value: u.id, label: u.username }))} className="relative z-30" />
+                    <Input label="名称备注" value={tokenForm.name} onChange={v => setTokenForm({...tokenForm, name: v})} />
+                    
+                    <div className="grid grid-cols-2 gap-4">
+                        <Select label="协议类型" value={tokenForm.type} onChange={v => setTokenForm({...tokenForm, type: v})} options={[
+                            { value: 'vertex', label: 'Google Vertex (OAuth2)' },
+                            { value: 'azure', label: 'OpenAI / Azure (Key)' }
+                        ]} className="relative z-20" />
+                        
+                        <div className="mb-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">过期时间 (选填)</label>
+                            <input 
+                                type="datetime-local" 
+                                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                                value={tokenForm.expires_at}
+                                onChange={e => setTokenForm({...tokenForm, expires_at: e.target.value})}
+                            />
+                        </div>
+                    </div>
+                    
+                    <div className="relative z-10 border-t border-gray-100 pt-4">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">路由绑定</label>
+                        {tokenForm.routes.map((route, idx) => (
+                            <div key={idx} className="flex gap-2 mb-2">
+                                <select 
+                                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+                                    value={route.channel_id}
+                                    onChange={e => {
+                                        const newRoutes = [...tokenForm.routes];
+                                        newRoutes[idx].channel_id = e.target.value;
+                                        setTokenForm({...tokenForm, routes: newRoutes});
+                                    }}
+                                >
+                                    <option value="">选择渠道...</option>
+                                    {availableChannels.map(c => (
+                                        <option key={c.id} value={c.id}>{c.name} ({c.type})</option>
+                                    ))}
+                                </select>
+                                <input type="number" className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="权重" value={route.weight} 
+                                    onChange={e => {
+                                        const newRoutes = [...tokenForm.routes];
+                                        newRoutes[idx].weight = e.target.value;
+                                        setTokenForm({...tokenForm, routes: newRoutes});
+                                    }}
+                                />
+                                <button onClick={() => {
+                                    const newRoutes = [...tokenForm.routes];
+                                    newRoutes.splice(idx, 1);
+                                    setTokenForm({...tokenForm, routes: newRoutes});
+                                }} className="text-red-500 hover:bg-red-50 p-2 rounded font-bold">×</button>
+                            </div>
+                        ))}
+                        <button onClick={() => setTokenForm({...tokenForm, routes: [...tokenForm.routes, { channel_id: '', weight: 10 }]})} 
+                            className="text-sm text-blue-600 font-medium hover:underline mt-2">+ 添加路由 (负载均衡)</button>
+                    </div>
+
+                    <div className="border-t border-gray-100 pt-4">
+                        <div className="flex items-center mb-4">
+                            <Switch checked={tokenForm.enable_whitelist} onChange={v => setTokenForm({...tokenForm, enable_whitelist: v})} />
+                            <span className="ml-2 text-sm font-medium text-gray-700">启用模型白名单限制</span>
+                        </div>
+                        
+                        {tokenForm.enable_whitelist && (
+                            <div className="bg-gray-50 p-4 rounded-lg">
+                                <div className="mb-2">
+                                    <select 
+                                        className="w-full px-3 py-2 border rounded text-sm"
+                                        onChange={e => {
+                                            if(e.target.value) {
+                                                addAllowedModel(e.target.value);
+                                                e.target.value = '';
+                                            }
+                                        }}
+                                    >
+                                        <option value="">+ 添加允许的模型...</option>
+                                        {models.map(m => (
+                                            <option key={m.id} value={m.name}>{m.name} ({m.provider})</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    {tokenForm.allowed_models.map(m => (
+                                        <span key={m} className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded flex items-center">
+                                            {m}
+                                            <button onClick={() => removeAllowedModel(m)} className="ml-2 text-blue-500 hover:text-blue-900 font-bold">×</button>
+                                        </span>
+                                    ))}
+                                    {tokenForm.allowed_models.length === 0 && <span className="text-xs text-gray-400">暂无限制模型，请添加</span>}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            </Modal>
                     {activeTab === 'users' && (
                         <div className="space-y-6">
                             <div className="flex justify-end">
@@ -813,9 +979,28 @@ const App = () => {
             />
 
             <Modal isOpen={resultModal.open} title="令牌生成成功" onClose={() => setResultModal({ open: false })}>
-                <div className="bg-green-50 p-4 rounded-lg border border-green-100">
+                <div className="bg-green-50 p-4 rounded-lg border border-green-100 mb-4">
                     <p className="text-green-800 font-bold mb-2 text-sm">请立即保存以下凭证：</p>
-                    <pre className="bg-white p-4 rounded border border-green-200 text-xs font-mono overflow-x-auto">{resultModal.content}</pre>
+                    <pre className="bg-white p-4 rounded border border-green-200 text-xs font-mono overflow-x-auto select-all">{resultModal.content}</pre>
+                </div>
+                <div className="flex justify-end gap-3">
+                    <Button variant="secondary" onClick={() => {
+                        navigator.clipboard.writeText(resultModal.content);
+                        alert('已复制到剪贴板');
+                    }}>📋 复制</Button>
+                    <Button variant="secondary" onClick={() => {
+                        const isJson = resultModal.content.trim().startsWith('{');
+                        const blob = new Blob([resultModal.content], { type: isJson ? 'application/json' : 'text/plain' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = isJson ? 'vertex-key.json' : 'api-key.txt';
+                        document.body.appendChild(a);
+                        a.click();
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                    }}>⬇️ 下载</Button>
+                    <Button onClick={() => setResultModal({ open: false })}>关闭</Button>
                 </div>
             </Modal>
 
