@@ -93,22 +93,31 @@ const App = () => {
     };
 
     // --- Channel Handlers ---
-    const openChannelModal = (channel = null) => {
+    const openChannelModal = async (channel = null) => {
         if (channel) {
-            let extra = { endpoint: '', api_version: '' };
-            if (channel.extra_config) {
-                extra = typeof channel.extra_config === 'string' 
-                    ? JSON.parse(channel.extra_config) 
-                    : channel.extra_config;
+            try {
+                // Fetch full details including credentials
+                const res = await axios.get(API_BASE + '/channels/' + channel.id);
+                const fullChannel = res.data.data;
+
+                let extra = { endpoint: '', api_version: '' };
+                if (fullChannel.extra_config) {
+                    extra = typeof fullChannel.extra_config === 'string' 
+                        ? JSON.parse(fullChannel.extra_config) 
+                        : fullChannel.extra_config;
+                }
+                setChannelForm({ ...fullChannel, extra_config: extra });
+                setChannelModal({ open: true, isEdit: true });
+            } catch (err) {
+                alert('获取渠道详情失败');
             }
-            setChannelForm({ ...channel, extra_config: extra });
         } else {
             setChannelForm({ 
                 name: '', type: 'vertex', credentials: '', 
                 extra_config: { endpoint: '', api_version: '' } 
             });
+            setChannelModal({ open: true, isEdit: false });
         }
-        setChannelModal({ open: true, isEdit: !!channel });
     };
 
     const saveChannel = async () => {

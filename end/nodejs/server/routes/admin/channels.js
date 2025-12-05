@@ -50,6 +50,19 @@ router.get('/', async (req, res) => {
 });
 
 /**
+ * 获取单个渠道详情
+ */
+router.get('/:id', async (req, res) => {
+    try {
+        const [channels] = await db.query("SELECT * FROM sys_channels WHERE id = ?", [req.params.id]);
+        if (channels.length === 0) return res.status(404).json({ error: "Channel not found" });
+        res.json({ data: channels[0] });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+/**
  * 创建新渠道
  */
 router.post('/', async (req, res) => {
