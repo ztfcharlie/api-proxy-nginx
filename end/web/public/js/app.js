@@ -564,7 +564,7 @@ const App = () => {
                     <div className="flex justify-between items-center p-6 border-b border-gray-100 bg-gray-50 rounded-t-xl">
                         <div>
                             <h3 className="text-xl font-semibold text-gray-800">绑定模型</h3>
-                            <p className="text-sm text-gray-500 mt-1">为渠道 <span className="font-bold text-blue-600">{channelModelsModal.channel?.name}</span> 配置可用模型</p>
+                            <p className="text-sm text-gray-500 mt-1">为渠道 <span className="font-bold text-blue-600">{channelModelsModal.channel && channelModelsModal.channel.name}</span> 配置可用模型</p>
                         </div>
                         <button onClick={() => setChannelModelsModal({...channelModelsModal, open: false})} className="text-gray-400 hover:text-gray-600 transition-colors">
                             <Icons.Close />
