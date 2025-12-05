@@ -212,10 +212,10 @@ window.Modules.Channels = () => {
             <Modal 
                 isOpen={editModal.open} 
                 title={editModal.isEdit ? "Edit Channel" : "New Channel"} 
-                onClose={() => setEditModal({ open: false })}
+                onClose={() => setEditModal({ open: false, isEdit: false })}
                 footer={
                     <div className="flex justify-end gap-3">
-                        <Button variant="secondary" onClick={() => setEditModal({ open: false })}>Cancel</Button>
+                        <Button variant="secondary" onClick={() => setEditModal({ open: false, isEdit: false })}>Cancel</Button>
                         <Button onClick={saveChannel}>Save</Button>
                     </div>
                 }
@@ -241,9 +241,9 @@ window.Modules.Channels = () => {
                 <Button onClick={testConnection} variant="secondary" className="w-full justify-center border-dashed">Test Connection</Button>
             </Modal>
 
-            <Modal size="xl" isOpen={bindingModal.open} title="Bind Models" onClose={() => setBindingModal({ open: false })} footer={
+            <Modal size="xl" isOpen={bindingModal.open} title="Bind Models" onClose={() => setBindingModal({ open: false, channel: null, list: [] })} footer={
                 <div className="flex justify-end gap-3">
-                    <Button variant="secondary" onClick={() => setBindingModal({ open: false })}>Cancel</Button>
+                    <Button variant="secondary" onClick={() => setBindingModal({ open: false, channel: null, list: [] })}>Cancel</Button>
                     <Button onClick={saveBinding}>Save Config</Button>
                 </div>
             }>

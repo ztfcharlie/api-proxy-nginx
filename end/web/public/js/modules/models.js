@@ -99,10 +99,11 @@ window.Modules.Models = () => {
             }>
                 <Input label="Name" value={form.name} onChange={v => setForm({ ...form, name: v })} />
                 <div className="grid grid-cols-2 gap-4">
-                    <Input label="Input Price" type="number" value={form.price_input} onChange={v => setForm({ ...form, price_input: v })} />
-                    <Input label="Output Price" type="number" value={form.price_output} onChange={v => setForm({ ...form, price_output: v })} />
-                    <Input label="Cache Price" type="number" value={form.price_cache} onChange={v => setForm({ ...form, price_cache: v })} />
-                    <Input label="Request Price" type="number" value={form.price_request} onChange={v => setForm({ ...form, price_request: v })} />
+                    <Input label="Input Price ($/1M)" type="number" value={form.price_input} onChange={v => setForm({ ...form, price_input: v })} />
+                    <Input label="Output Price ($/1M)" type="number" value={form.price_output} onChange={v => setForm({ ...form, price_output: v })} />
+                    <Input label="Cache Price ($/1M)" type="number" value={form.price_cache} onChange={v => setForm({ ...form, price_cache: v })} />
+                    <Input label="Request Price ($/Req)" type="number" value={form.price_request} onChange={v => setForm({ ...form, price_request: v })} />
+                    <Input label="Time Price ($/s)" type="number" value={form.price_time} onChange={v => setForm({ ...form, price_time: v })} />
                 </div>
             </Modal>
 
