@@ -17,87 +17,136 @@ const App = () => {
     const [confirmModal, setConfirmModal] = useState({ open: false, type: null, id: null });
     const [resultModal, setResultModal] = useState({ open: false, content: '' });
 
-    // Form States
-    const [channelForm, setChannelForm] = useState({});
-    const [modelForm, setModelForm] = useState({});
-    const [tokenForm, setTokenForm] = useState({ routes: [{ channel_id: '', weight: 10 }] });
-    const [userForm, setUserForm] = useState({});
-
-    const API_BASE = '/api/admin';
-
-    useEffect(() => {
-        fetchData('channels');
-    }, []);
-
-    const fetchData = async (type) => {
-        setLoading(true);
-        try {
-            if (type === 'channels') {
-                const res = await axios.get(API_BASE + '/channels');
-                setChannels(res.data.data);
-            } else if (type === 'models') {
-                const res = await axios.get(API_BASE + '/models');
-                setModels(res.data.data);
-            } else if (type === 'tokens') {
-                const [tRes, uRes, cRes] = await Promise.all([
-                    axios.get(API_BASE + '/tokens'),
-                    axios.get(API_BASE + '/users'),
-                    axios.get(API_BASE + '/channels')
-                ]);
-                setTokens(tRes.data.data);
-                setUsers(uRes.data.data);
-                setChannels(cRes.data.data);
-            } else if (type === 'users') {
-                const res = await axios.get(API_BASE + '/users');
-                setUsers(res.data.data);
-            }
-        } catch (err) {
-            console.error(err);
-            const msg = (err.response && err.response.data && err.response.data.error) || err.message;
-            alert('加载数据失败: ' + msg);
-        }
-        setLoading(false);
-    };
-
-    const handleTabChange = (tab) => {
-        setActiveTab(tab);
-        fetchData(tab);
-    };
-
-    // --- Channel Handlers ---
-    const openChannelModal = (channel = null) => {
-        if (channel) {
-            let extra = { endpoint: '', api_version: '' };
-            if (channel.extra_config) {
-                extra = typeof channel.extra_config === 'string' 
-                    ? JSON.parse(channel.extra_config) 
-                    : channel.extra_config;
-            }
-            setChannelForm({
-                ...channel,
-                extra_config: extra
-            });
-        } else {
-            setChannelForm({ name: '', type: 'vertex', credentials: '', extra_config: { endpoint: '', api_version: '' } });
-        }
-        setChannelModal({ open: true, isEdit: !!channel });
-    };
-
-    const saveChannel = async () => {
-        try {
-            if (channelModal.isEdit) {
-                await axios.put(API_BASE + '/channels/' + channelForm.id, channelForm);
-            } else {
-                await axios.post(API_BASE + '/channels', channelForm);
-            }
-            setChannelModal({ open: false });
+                // Form States
+        const [channelForm, setChannelForm] = useState({});
+        const [modelForm, setModelForm] = useState({});
+        const [tokenForm, setTokenForm] = useState({ routes: [{ channel_id: '', weight: 10 }] });
+        const [userForm, setUserForm] = useState({});
+    
+        const API_BASE = '/api/admin';
+    
+        useEffect(() => {
+            // Initial load: channels + models (needed for binding)
             fetchData('channels');
-        } catch (err) {
-            const msg = (err.response && err.response.data && err.response.data.error) || 'Unknown Error';
-            alert('保存失败: ' + msg);
-        }
-    };
-
+            fetchData('models'); 
+        }, []);
+    
+        const fetchData = async (type) => {
+            setLoading(true);
+            try {
+                if (type === 'channels') {
+                    const res = await axios.get(API_BASE + '/channels');
+                    setChannels(res.data.data);
+                } else if (type === 'models') {
+                    const res = await axios.get(API_BASE + '/models');
+                    setModels(res.data.data);
+                } 
+                // ... (rest unchanged)
+                else if (type === 'tokens') {
+                    const [tRes, uRes, cRes] = await Promise.all([
+                        axios.get(API_BASE + '/tokens'),
+                        axios.get(API_BASE + '/users'),
+                        axios.get(API_BASE + '/channels')
+                    ]);
+                    setTokens(tRes.data.data);
+                    setUsers(uRes.data.data);
+                    setChannels(cRes.data.data);
+                } else if (type === 'users') {
+                    const res = await axios.get(API_BASE + '/users');
+                    setUsers(res.data.data);
+                }
+            } catch (err) {
+                console.error(err);
+                // alert('加载数据失败');
+            }
+            setLoading(false);
+        };
+    
+        // ...
+    
+        // --- Channel Handlers ---
+        const openChannelModal = (channel = null) => {
+            if (channel) {
+                let extra = { endpoint: '', api_version: '' };
+                if (channel.extra_config) {
+                    extra = typeof channel.extra_config === 'string' 
+                        ? JSON.parse(channel.extra_config) 
+                        : channel.extra_config;
+                }
+                
+                // Parse models_config to array for UI
+                let modelsConfig = [];
+                let rawConfig = channel.models_config;
+                if (typeof rawConfig === 'string') rawConfig = JSON.parse(rawConfig);
+                if (rawConfig) {
+                    modelsConfig = Object.entries(rawConfig).map(([name, cfg]) => ({
+                        name,
+                        rpm: cfg.rpm || 100000000,
+                        pricing_mode: cfg.pricing_mode || 'token'
+                    }));
+                }
+    
+                setChannelForm({
+                    ...channel,
+                    extra_config: extra,
+                    models_list: modelsConfig // Temporary UI state
+                });
+            } else {
+                setChannelForm({ 
+                    name: '', type: 'vertex', credentials: '', 
+                    extra_config: { endpoint: '', api_version: '' },
+                    models_list: [] 
+                });
+            }
+            setChannelModal({ open: true, isEdit: !!channel });
+        };
+    
+        const saveChannel = async () => {
+            try {
+                // Convert models_list array back to models_config object
+                const configObj = {};
+                if (channelForm.models_list && channelForm.models_list.length > 0) {
+                    channelForm.models_list.forEach(m => {
+                        configObj[m.name] = {
+                            rpm: parseInt(m.rpm),
+                            pricing_mode: m.pricing_mode,
+                            enabled: true
+                        };
+                    });
+                }
+                
+                const payload = { ...channelForm, models_config: configObj };
+                // Remove temp field
+                delete payload.models_list;
+    
+                if (channelModal.isEdit) {
+                    await axios.put(API_BASE + '/channels/' + channelForm.id, payload);
+                } else {
+                    await axios.post(API_BASE + '/channels', payload);
+                }
+                setChannelModal({ open: false });
+                fetchData('channels');
+            } catch (err) {
+                const msg = (err.response && err.response.data && err.response.data.error) || 'Unknown Error';
+                alert('保存失败: ' + msg);
+            }
+        };
+    
+        // Helper to add model to channel
+        const addModelToChannel = () => {
+            setChannelForm(prev => ({
+                ...prev,
+                models_list: [...(prev.models_list || []), { name: '', rpm: 100000000, pricing_mode: 'token' }]
+            }));
+        };
+    
+        const removeModelFromChannel = (idx) => {
+            const newList = [...channelForm.models_list];
+            newList.splice(idx, 1);
+            setChannelForm({ ...channelForm, models_list: newList });
+        };
+    
+        // ... (rest unchanged)
     const toggleChannelStatus = async (row) => {
         const newStatus = row.status ? 0 : 1;
         const originalData = [...channels];
@@ -464,6 +513,75 @@ const App = () => {
                         <Input label="API Version" value={channelForm.extra_config && channelForm.extra_config.api_version} onChange={v => setChannelForm({...channelForm, extra_config: {...channelForm.extra_config, api_version: v}})} placeholder="2023-05-15" />
                     </div>
                 )}
+
+                <div className="mb-4 border-t pt-4">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">模型绑定 (Models Config)</label>
+                    {(channelForm.models_list || []).map((item, idx) => (
+                        <div key={idx} className="flex gap-2 mb-2 items-start">
+                            <div className="flex-1">
+                                <select 
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+                                    value={item.name}
+                                    onChange={e => {
+                                        const list = [...channelForm.models_list];
+                                        list[idx].name = e.target.value;
+                                        setChannelForm({...channelForm, models_list: list});
+                                    }}
+                                >
+                                    <option value="">选择模型...</option>
+                                    {models
+                                        .filter(m => {
+                                            // Simple mapping: vertex->google, azure/openai->openai, etc.
+                                            if(channelForm.type === 'vertex') return m.provider === 'google';
+                                            if(channelForm.type === 'azure' || channelForm.type === 'openai') return m.provider === 'openai';
+                                            if(channelForm.type === 'anthropic') return m.provider === 'anthropic';
+                                            if(channelForm.type === 'qwen') return m.provider === 'qwen';
+                                            if(channelForm.type === 'deepseek') return m.provider === 'deepseek';
+                                            return true;
+                                        })
+                                        .map(m => (
+                                        <option key={m.id} value={m.name}>{m.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="w-24">
+                                <input type="number" className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm" 
+                                    placeholder="RPM" value={item.rpm}
+                                    onChange={e => {
+                                        const list = [...channelForm.models_list];
+                                        list[idx].rpm = e.target.value;
+                                        setChannelForm({...channelForm, models_list: list});
+                                    }}
+                                />
+                            </div>
+                            <div className="w-28">
+                                <select 
+                                    className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+                                    value={item.pricing_mode}
+                                    onChange={e => {
+                                        const list = [...channelForm.models_list];
+                                        list[idx].pricing_mode = e.target.value;
+                                        setChannelForm({...channelForm, models_list: list});
+                                    }}
+                                >
+                                    <option value="token">按Token</option>
+                                    <option value="second">按秒</option>
+                                    <option value="request">按次</option>
+                                </select>
+                            </div>
+                            <button onClick={() => {
+                                const list = [...channelForm.models_list];
+                                list.splice(idx, 1);
+                                setChannelForm({...channelForm, models_list: list});
+                            }} className="text-red-500 hover:bg-red-50 p-2 rounded">×</button>
+                        </div>
+                    ))}
+                    <button onClick={() => setChannelForm({
+                        ...channelForm, 
+                        models_list: [...(channelForm.models_list || []), { name: '', rpm: 100000000, pricing_mode: 'token' }]
+                    })} className="text-sm text-blue-600 font-medium hover:underline">+ 添加模型</button>
+                </div>
+
                 <div className="mt-4">
                     <Button onClick={testConnection} variant="ghost" className="text-sm w-full justify-center border border-dashed border-gray-300">测试连接</Button>
                 </div>
