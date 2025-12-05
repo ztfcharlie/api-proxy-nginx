@@ -71,6 +71,7 @@ window.Modules.Models = () => {
                             <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Input ($/1M)</th>
                             <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Output ($/1M)</th>
                             <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Cache ($/1M)</th>
+                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Time ($/s)</th>
                             <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Req ($/Req)</th>
                             <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Action</th>
                         </tr>
@@ -82,6 +83,7 @@ window.Modules.Models = () => {
                                 <td className="px-6 py-4 text-right text-sm text-gray-500">{m.price_input}</td>
                                 <td className="px-6 py-4 text-right text-sm text-gray-500">{m.price_output}</td>
                                 <td className="px-6 py-4 text-right text-sm text-gray-500">{m.price_cache}</td>
+                                <td className="px-6 py-4 text-right text-sm text-gray-500">{m.price_time}</td>
                                 <td className="px-6 py-4 text-right text-sm text-gray-500">{m.price_request}</td>
                                 <td className="px-6 py-4 text-right text-sm font-medium">
                                     <button onClick={() => openModal(m)} className="text-blue-600 hover:text-blue-900 mr-4">Edit</button>
