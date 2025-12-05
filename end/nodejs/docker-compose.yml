@@ -14,14 +14,6 @@ services:
       # Node.js服务专用数据目录
       - ./logs:/app/logs
       - ./tmp:/app/tmp
-      # 全局共享的服务账号文件（可读写）
-      - ../data/client:/app/client
-      # 全局共享的客户id和渠道模型配置映射文件（可读写）
-      - ../data/map:/app/map
-      # 全局共享的JSON密钥文件（可读写）
-      - ../data/json:/app/json
-      # 全局共享的JWT缓存文件（可读写）
-      - ../data/jwt:/app/jwt
       # 挂载 .env 文件到容器中（所有配置都在这里）
       - ./.env:/app/.env:ro
     networks:
