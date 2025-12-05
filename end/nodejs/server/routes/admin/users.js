@@ -31,4 +31,39 @@ router.post('/', async (req, res) => {
     }
 });
 
+/**
+ * 更新用户
+ */
+router.put('/:id', async (req, res) => {
+    const { id } = req.params;
+    const { status, password, remark } = req.body;
+    
+    try {
+        const updates = [];
+        const params = [];
+        
+        if (status !== undefined) {
+            updates.push("status = ?");
+            params.push(status);
+        }
+        if (remark !== undefined) {
+            updates.push("remark = ?");
+            params.push(remark);
+        }
+        if (password) {
+            // 这里暂时假设明文，如果要加密请用 bcrypt
+            updates.push("password_hash = ?");
+            params.push(password);
+        }
+        
+        if (updates.length === 0) return res.json({ message: "No changes" });
+        
+        params.push(id);
+        await db.query(`UPDATE sys_users SET ${updates.join(', ')} WHERE id = ?`, params);
+        res.json({ message: "User updated" });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 module.exports = router;

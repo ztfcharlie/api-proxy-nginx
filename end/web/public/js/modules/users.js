@@ -27,6 +27,12 @@ window.Modules.Users = () => {
         } catch (e) { alert('Create failed'); }
     };
 
+    const toggleStatus = async (row) => {
+        const newStatus = row.status ? 0 : 1;
+        setUsers(users.map(u => u.id === row.id ? { ...u, status: newStatus } : u));
+        try { await axios.put(API_BASE + '/users/' + row.id, { status: newStatus }); } catch (e) { fetchUsers(); }
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex justify-end"><Button onClick={() => { setForm({}); setModal({ open: true }); }}>+ Create User</Button></div>
@@ -45,7 +51,7 @@ window.Modules.Users = () => {
                             <tr key={u.id} className="hover:bg-gray-50">
                                 <td className="px-6 py-4 text-sm text-gray-500">{u.id}</td>
                                 <td className="px-6 py-4 text-sm font-medium text-gray-900">{u.username}</td>
-                                <td className="px-6 py-4 text-sm"><Switch checked={!!u.status} disabled /></td>
+                                <td className="px-6 py-4 text-sm"><Switch checked={!!u.status} onChange={() => toggleStatus(u)} /></td>
                                 <td className="px-6 py-4 text-sm text-gray-500">{new Date(u.created_at).toLocaleDateString()}</td>
                             </tr>
                         ))}
