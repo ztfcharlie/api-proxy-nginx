@@ -720,57 +720,59 @@ const App = () => {
                     </div>
                 }
             >
-                <Select label="归属用户" value={tokenForm.user_id} onChange={v => setTokenForm({...tokenForm, user_id: v})} 
-                    options={users.map(u => ({ value: u.id, label: u.username }))} />
-                <Input label="名称备注" value={tokenForm.name} onChange={v => setTokenForm({...tokenForm, name: v})} />
-                <Select label="协议类型" value={tokenForm.type} onChange={v => setTokenForm({...tokenForm, type: v})} options={[
-                    { value: 'vertex', label: 'Google Vertex (OAuth2)' },
-                    { value: 'azure', label: 'OpenAI / Azure (Key)' }
-                ]} />
-                
-                <div className="mb-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">路由绑定</label>
-                    {tokenForm.routes.map((route, idx) => (
-                        <div key={idx} className="flex gap-2 mb-2 items-center">
-                            <div className="flex-1">
-                                <select 
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
-                                    value={route.channel_id}
+                <div className="space-y-6 pb-12">
+                    <Select label="归属用户" value={tokenForm.user_id} onChange={v => setTokenForm({...tokenForm, user_id: v})} 
+                        options={users.map(u => ({ value: u.id, label: u.username }))} className="relative z-30" />
+                    <Input label="名称备注" value={tokenForm.name} onChange={v => setTokenForm({...tokenForm, name: v})} />
+                    <Select label="协议类型" value={tokenForm.type} onChange={v => setTokenForm({...tokenForm, type: v})} options={[
+                        { value: 'vertex', label: 'Google Vertex (OAuth2)' },
+                        { value: 'azure', label: 'OpenAI / Azure (Key)' }
+                    ]} className="relative z-20" />
+                    
+                    <div className="relative z-10">
+                        <label className="block text-sm font-medium text-gray-700 mb-2">路由绑定</label>
+                        {tokenForm.routes.map((route, idx) => (
+                            <div key={idx} className="flex gap-2 mb-2 items-center">
+                                <div className="flex-1">
+                                    <select 
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
+                                        value={route.channel_id}
+                                        onChange={e => {
+                                            const newRoutes = [...tokenForm.routes];
+                                            newRoutes[idx].channel_id = e.target.value;
+                                            setTokenForm({...tokenForm, routes: newRoutes});
+                                        }}
+                                    >
+                                        <option value="">选择渠道...</option>
+                                        {availableChannels.map(c => (
+                                            <option key={c.id} value={c.id}>{c.name} ({c.type})</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <input type="number" className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="权重" value={route.weight} 
                                     onChange={e => {
                                         const newRoutes = [...tokenForm.routes];
-                                        newRoutes[idx].channel_id = e.target.value;
+                                        newRoutes[idx].weight = e.target.value;
                                         setTokenForm({...tokenForm, routes: newRoutes});
                                     }}
-                                >
-                                    <option value="">选择渠道...</option>
-                                    {availableChannels.map(c => (
-                                        <option key={c.id} value={c.id}>{c.name} ({c.type})</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <input type="number" className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="权重" value={route.weight} 
-                                onChange={e => {
+                                />
+                                <button onClick={() => {
                                     const newRoutes = [...tokenForm.routes];
-                                    newRoutes[idx].weight = e.target.value;
+                                    newRoutes.splice(idx, 1);
                                     setTokenForm({...tokenForm, routes: newRoutes});
-                                }}
-                            />
-                            <button onClick={() => {
-                                const newRoutes = [...tokenForm.routes];
-                                newRoutes.splice(idx, 1);
-                                setTokenForm({...tokenForm, routes: newRoutes});
-                            }} className="text-red-500 hover:bg-red-50 p-2 rounded font-bold">×</button>
-                        </div>
-                    ))}
-                    
-                    {availableChannels.length === 0 && (
-                        <div className="text-xs text-amber-600 mb-2 bg-amber-50 p-2 rounded">
-                            当前协议类型 ({tokenForm.type}) 下没有可用的渠道。请先在渠道管理中创建对应类型的渠道。
-                        </div>
-                    )}
+                                }} className="text-red-500 hover:bg-red-50 p-2 rounded font-bold">×</button>
+                            </div>
+                        ))}
+                        
+                        {availableChannels.length === 0 && (
+                            <div className="text-xs text-amber-600 mb-2 bg-amber-50 p-2 rounded">
+                                当前协议类型 ({tokenForm.type}) 下没有可用的渠道。请先在渠道管理中创建对应类型的渠道。
+                            </div>
+                        )}
 
-                    <button onClick={() => setTokenForm({...tokenForm, routes: [...tokenForm.routes, { channel_id: '', weight: 10 }]})} 
-                        className="text-sm text-blue-600 font-medium hover:underline mt-2">+ 添加路由 (负载均衡)</button>
+                        <button onClick={() => setTokenForm({...tokenForm, routes: [...tokenForm.routes, { channel_id: '', weight: 10 }]})} 
+                            className="text-sm text-blue-600 font-medium hover:underline mt-2">+ 添加路由 (负载均衡)</button>
+                    </div>
                 </div>
             </Modal>
 

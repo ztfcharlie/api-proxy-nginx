@@ -21,7 +21,7 @@ window.Modal = ({ isOpen, title, onClose, children, footer }) => {
                         <Icons.Close />
                     </button>
                 </div>
-                <div className="p-6 overflow-y-auto flex-1">
+                <div className="p-6 overflow-y-auto flex-1 min-h-[300px]">
                     {children}
                 </div>
                 {footer && (
