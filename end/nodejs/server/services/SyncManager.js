@@ -79,22 +79,24 @@ class SyncManager {
      */
     async updateChannelCache(channel) {
         try {
+            // 如果渠道被禁用，直接删除缓存，让 Lua 查不到（或者查不到报错）
+            if (channel.status === 0) {
+                await this.redis.del(`channel:${channel.id}`);
+                return;
+            }
+
             const cacheData = {
                 id: channel.id,
                 type: channel.type,
                 name: channel.name,
-                extra_config: channel.extra_config, // Azure endpoint 等
+                extra_config: channel.extra_config,
                 models_config: channel.models_config
             };
 
             if (channel.type === 'vertex') {
-                // Vertex: 触发一次刷新，确保 Access Token 存在
                 await serviceAccountManager.refreshSingleChannelToken(channel);
             } else {
-                // OpenAI/Azure: credentials 即为 Key
                 cacheData.key = channel.credentials;
-                
-                // 写入 Redis: channel:{id}
                 await this.redis.set(`channel:${channel.id}`, JSON.stringify(cacheData));
             }
             
@@ -104,45 +106,84 @@ class SyncManager {
     }
 
     /**
-     * 更新单个 Virtual Token 的缓存 (供 Lua 直接鉴权使用)
+     * 删除 Channel 缓存
+     */
+    async deleteChannelCache(channel) {
+        await this.redis.del(`channel:${channel.id}`);
+    }
+
+    /**
+     * 更新单个 Virtual Token 的缓存 (级联检查用户状态)
      */
     async updateVirtualTokenCache(token) {
         try {
-            // 1. 获取路由规则
+            // 1. 检查 Token 自身状态
+            if (token.status === 0) {
+                if (token.type !== 'vertex') await this.redis.del(`apikey:${token.token_key}`);
+                // Vertex vtoken is dynamic, but we can block issuance in oauth2_mock
+                return;
+            }
+
+            // 2. 检查用户状态 (级联)
+            const [users] = await db.query("SELECT status FROM sys_users WHERE id = ?", [token.user_id]);
+            if (users.length === 0 || users[0].status === 0) {
+                if (token.type !== 'vertex') await this.redis.del(`apikey:${token.token_key}`);
+                return;
+            }
+
+            // 3. 获取路由规则
             const [routes] = await db.query(
                 "SELECT channel_id, weight FROM sys_token_routes WHERE virtual_token_id = ?",
                 [token.id]
             );
 
             if (routes.length === 0) {
-                logger.warn(`Virtual Token ${token.id} has no routes, skipping cache.`);
+                // 没有路由也视为无效
+                if (token.type !== 'vertex') await this.redis.del(`apikey:${token.token_key}`);
                 return;
             }
 
-            // 2. 构建 Lua 所需的 JSON
+            // 4. 构建 Lua 数据
             const luaData = {
                 user_id: token.user_id,
                 virtual_token_id: token.id,
                 type: token.type,
-                token_key: token.token_key, // 方便 Lua 调试
+                token_key: token.token_key,
                 routes: routes,
                 limits: token.limit_config || {}
             };
 
-            // 3. 写入 Redis
-            // Key: apikey:{token_key}
-            // 仅针对非 Vertex (即 Bearer/API-Key 直接透传模式)
+            // 5. 写入 Redis
             if (token.type !== 'vertex') {
-                 await this.redis.set(`apikey:${token.token_key}`, JSON.stringify(luaData));
-            } else {
-                // 对于 Vertex，鉴权流程是 JWT -> /oauth2/token -> vtoken
-                // 客户端请求 /oauth2/token 时，oauth2_mock.js 会查 MySQL
-                // 客户端请求 /v1/projects 时，带的是 vtoken (ya29...)，Lua 查 vtoken:xxx
-                // 所以这里不需要存 apikey:xxx
+                 // 检查过期时间
+                 let ttl = null;
+                 if (token.expires_at) {
+                     const diff = Math.floor((new Date(token.expires_at) - new Date()) / 1000);
+                     if (diff <= 0) {
+                         await this.redis.del(`apikey:${token.token_key}`); // 已过期
+                         return;
+                     }
+                     ttl = diff;
+                 }
+                 
+                 if (ttl) {
+                     await this.redis.setex(`apikey:${token.token_key}`, ttl, JSON.stringify(luaData));
+                 } else {
+                     await this.redis.set(`apikey:${token.token_key}`, JSON.stringify(luaData));
+                 }
             }
 
         } catch (error) {
             logger.error(`Failed to cache virtual token ${token.id}:`, error);
+        }
+    }
+
+    /**
+     * 删除 Token 缓存
+     */
+    async deleteTokenCache(token) {
+        if (token.type !== 'vertex') {
+            await this.redis.del(`apikey:${token.token_key}`);
         }
     }
 }

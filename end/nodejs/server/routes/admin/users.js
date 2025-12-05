@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const db = require('../../config/db').dbPool;
 const logger = require('../../services/LoggerService');
+const SyncManager = require('../../services/SyncManager');
 
 router.get('/', async (req, res) => {
     try {
@@ -15,11 +16,7 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
     const { username, password, remark } = req.body;
     try {
-        // 简单 hash (实际建议用 bcrypt)
-        // 这里假设 password_hash 直接存明文或者前端 hash (演示用)
-        // 正确做法: const hash = await bcrypt.hash(password, 10);
-        const hash = password; 
-        
+        const hash = password; // Plain text for MVP
         await db.query(
             "INSERT INTO sys_users (username, password_hash, remark) VALUES (?, ?, ?)",
             [username, hash, remark]
@@ -30,9 +27,6 @@ router.post('/', async (req, res) => {
     }
 });
 
-/**
- * 更新用户
- */
 router.put('/:id', async (req, res) => {
     const { id } = req.params;
     const { status, password, remark } = req.body;
@@ -50,7 +44,6 @@ router.put('/:id', async (req, res) => {
             params.push(remark);
         }
         if (password) {
-            // 这里暂时假设明文，如果要加密请用 bcrypt
             updates.push("password_hash = ?");
             params.push(password);
         }
@@ -59,6 +52,15 @@ router.put('/:id', async (req, res) => {
         
         params.push(id);
         await db.query(`UPDATE sys_users SET ${updates.join(', ')} WHERE id = ?`, params);
+        
+        // 如果更新了状态，需要刷新该用户下所有 Token 的缓存
+        if (status !== undefined) {
+            const [tokens] = await db.query("SELECT * FROM sys_virtual_tokens WHERE user_id = ?", [id]);
+            for (const token of tokens) {
+                await SyncManager.updateVirtualTokenCache(token);
+            }
+        }
+
         res.json({ message: "User updated" });
     } catch (err) {
         res.status(500).json({ error: err.message });
