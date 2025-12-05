@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../../config/db').dbPool;
-const bcrypt = require('bcryptjs'); // 需要确认 package.json 是否有 bcryptjs
 const logger = require('../../services/LoggerService');
 
 router.get('/', async (req, res) => {
