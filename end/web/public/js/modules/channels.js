@@ -143,7 +143,7 @@ window.Modules.Channels = () => {
                 };
             });
             await axios.put(API_BASE + '/channels/' + bindingModal.channel.id, { models_config: configObj });
-            setBindingModal({ open: false });
+            setBindingModal({ open: false, channel: null, list: [] }); // Reset to full initial state
             fetchChannels();
         } catch (e) { alert('Save config failed'); }
     };
