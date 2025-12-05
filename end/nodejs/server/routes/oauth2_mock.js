@@ -10,20 +10,20 @@ module.exports = function(redisService, serviceAccountManager) {
 
     /**
      * 辅助函数：简单负载均衡选择器
-     * 根据 sys_route_rules 选择一个合适的渠道
+     * 根据 sys_token_routes 选择一个合适的渠道
      */
-    async function selectChannel(virtualKeyId) {
-        // 1. 查询该 Virtual Key 绑定的所有可用规则
+    async function selectChannel(virtualTokenId) {
+        // 1. 查询该 Virtual Token 绑定的所有可用规则
         const query = `
             SELECT r.channel_id, r.weight, c.name 
-            FROM sys_route_rules r
+            FROM sys_token_routes r
             JOIN sys_channels c ON r.channel_id = c.id
-            WHERE r.virtual_key_id = ? AND c.status = 1
+            WHERE r.virtual_token_id = ? AND c.status = 1
         `;
-        const [rules] = await db.query(query, [virtualKeyId]);
+        const [rules] = await db.query(query, [virtualTokenId]);
 
         if (rules.length === 0) {
-            throw new Error('No available channels for this key');
+            throw new Error('No available channels for this token');
         }
 
         // 2. 简单随机权重算法 (也可以轮询)
@@ -48,35 +48,36 @@ module.exports = function(redisService, serviceAccountManager) {
                 return res.status(400).json({ error: 'invalid_grant', error_description: 'Invalid JWT format' });
             }
 
-            const clientEmail = decoded.payload.iss; // 通常是 service account email
+            const clientEmail = decoded.payload.iss; 
             
-            // 3. 查找对应的 Virtual Key
-            const [keys] = await db.query(
-                "SELECT id, user_id, public_key, model_whitelist FROM sys_virtual_keys WHERE client_email = ? AND status = 1", 
+            // 3. 查找对应的 Virtual Token
+            // Vertex 的 client_email 存储在 token_key 字段
+            const [tokens] = await db.query(
+                "SELECT id, user_id, public_key, limit_config FROM sys_virtual_tokens WHERE token_key = ? AND status = 1 AND type = 'vertex'", 
                 [clientEmail]
             );
 
-            if (keys.length === 0) {
+            if (tokens.length === 0) {
                 logger.warn(`Token request for unknown email: ${clientEmail}`);
                 return res.status(401).json({ error: 'invalid_grant', error_description: 'Unknown client email' });
             }
 
-            const vKey = keys[0];
+            const vToken = tokens[0];
 
             // 4. 验证签名 (使用数据库中存的公钥)
             try {
-                jwt.verify(assertion, vKey.public_key, { algorithms: ['RS256'] });
+                jwt.verify(assertion, vToken.public_key, { algorithms: ['RS256'] });
             } catch (err) {
-                logger.warn(`Signature verification failed for user ${vKey.user_id}: ${err.message}`);
+                logger.warn(`Signature verification failed for user ${vToken.user_id}: ${err.message}`);
                 return res.status(401).json({ error: 'invalid_grant', error_description: 'Invalid JWT signature' });
             }
 
             // 5. 路由选择：选一个真实的 Vertex 渠道
             let targetChannel;
             try {
-                targetChannel = await selectChannel(vKey.id);
+                targetChannel = await selectChannel(vToken.id);
             } catch (err) {
-                logger.warn(`No channels for user ${vKey.user_id}: ${err.message}`);
+                logger.warn(`No channels for user ${vToken.user_id}: ${err.message}`);
                 return res.status(503).json({ error: 'service_unavailable', error_description: 'No upstream channels available' });
             }
 
@@ -98,8 +99,9 @@ module.exports = function(redisService, serviceAccountManager) {
             const mappingData = {
                 real_token: realToken,
                 channel_id: targetChannel.channel_id,
-                user_id: vKey.user_id,
-                virtual_key_id: vKey.id
+                user_id: vToken.user_id,
+                virtual_token_id: vToken.id,
+                limit_config: vToken.limit_config // 透传限制配置
             };
 
             await redisService.set(
@@ -108,7 +110,7 @@ module.exports = function(redisService, serviceAccountManager) {
                 expiresIn
             );
 
-            logger.info(`Issued virtual token for user [${vKey.user_id}] mapped to channel [${targetChannel.channel_id}]`);
+            logger.info(`Issued virtual token for user [${vToken.user_id}] mapped to channel [${targetChannel.channel_id}]`);
 
             // 9. 返回响应
             res.json({

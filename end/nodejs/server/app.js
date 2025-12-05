@@ -14,7 +14,7 @@ const OAuth2Service = require('./services/OAuth2Service');
 const TokenService = require('./services/TokenService');
 const TokenMappingService = require('./services/TokenMappingService');
 const ServiceAccountManager = require('./services/ServiceAccountManager'); 
-const SyncManager = require('./services/SyncManager'); // New
+const SyncManager = require('./services/SyncManager');
 const { CacheService } = require('./services/CacheService');
 
 const { errorHandler } = require('./middleware/errorHandler');
@@ -24,12 +24,7 @@ const { loggingMiddleware } = require('./middleware/logging');
 const indexRoutes = require('./routes/index');
 const oauth2Routes = require('./routes/oauth2');
 const oauth2MockRoutes = require('./routes/oauth2_mock');
-const adminRoutes = require('./routes/admin');
-const clientRoutes = require('./routes/clients');
-const serverAccountRoutes = require('./routes/serverAccounts');
-const mapConfigRoutes = require('./routes/mapConfig');
-const serviceKeyRoutes = require('./routes/serviceKeys');
-const jwtFileRoutes = require('./routes/jwtFiles');
+const adminRoutes = require('./routes/admin/index'); // New Admin Structure
 const healthRoutes = require('./routes/health');
 
 class OAuth2MockServer {
@@ -104,11 +99,7 @@ class OAuth2MockServer {
             oauth2Routes(req, res, next);
         });
 
-        this.app.use(`${apiPrefix}/clients`, clientRoutes);
-        this.app.use(`${apiPrefix}/server-accounts`, serverAccountRoutes);
-        this.app.use(`${apiPrefix}/map-config`, mapConfigRoutes);
-        this.app.use(`${apiPrefix}/service-keys`, serviceKeyRoutes);
-        this.app.use(`${apiPrefix}/jwt-files`, jwtFileRoutes);
+        // New Admin APIs
         this.app.use(`${adminPath}`, adminRoutes);
     }
 
@@ -158,12 +149,10 @@ class OAuth2MockServer {
             ServiceAccountManager.startTokenRefreshJob();
             LoggerService.info('ServiceAccountManager initialized');
 
-            // --- NEW: SyncManager ---
+            // --- SyncManager ---
             SyncManager.initialize(this.services.redis);
-            // 异步执行同步，不阻塞启动，但可能导致启动初期缓存未命中
-            // 如果数据量小，建议 await
-            await SyncManager.performFullSync();
-            LoggerService.info('SyncManager: Full data synchronization completed');
+            // 异步执行同步
+            SyncManager.performFullSync(); 
 
             // Mock Router
             this.mockRouter = oauth2MockRoutes(this.services.redis, ServiceAccountManager);
