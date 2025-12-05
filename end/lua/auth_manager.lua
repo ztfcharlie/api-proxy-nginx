@@ -60,27 +60,55 @@ function _M.authenticate_client()
         end
 
         local mapping_data = cjson.decode(data_str)
-        
-        -- 获取真实 Token (Node.js 已将其存入 vtoken 映射中，或我们需要二次查找)
-        -- 根据之前的 Node.js 实现，mapping_data 包含 real_token
         real_token = mapping_data.real_token
-        metadata = mapping_data -- 包含 channel_id, user_id 等
+        metadata = mapping_data
 
-        -- 如果 vtoken 里没存 real_token (防止过期策略), 可以二次查找:
-        -- local rt_key = "real_token:" .. mapping_data.channel_id
-        -- real_token = red:get(rt_key)
+        -- 增强：获取 Channel 的详细配置 (包含 models_config)
+        local channel_key = "channel:" .. tostring(metadata.channel_id)
+        local channel_data_str, _ = red:get(channel_key)
+        if channel_data_str and channel_data_str ~= ngx.null then
+            local channel_data = cjson.decode(channel_data_str)
+            metadata.models_config = channel_data.models_config
+            metadata.channel_type = channel_data.type
+        end
 
     else
-        -- Case B: Static API Key (e.g., sk-...)
-        -- 暂未完全实现 Node.js 端的 API Key 写入逻辑，预留接口
-        -- local cache_key = "apikey:" .. client_token
-        -- ...
+        -- Case B: Static API Key (OpenAI/Azure)
+        -- 实现 apikey:xxx 查找
+        local cache_key = "apikey:" .. client_token
+        local data_str, err = red:get(cache_key)
         
-        -- 临时：如果不是 ya29.virtual，可能是直接透传或者是未知的
-        -- 这里先报 401，等待 API Key 功能完善
-        red:set_keepalive(10000, 100)
-        utils.error_response(401, "Unsupported token format")
-        return nil
+        if not data_str or data_str == ngx.null then
+            red:set_keepalive(10000, 100)
+            utils.error_response(401, "Invalid API Key")
+            return nil
+        end
+        
+        local mapping_data = cjson.decode(data_str)
+        
+        -- 对于 API Key 模式，我们可能需要做简单的负载均衡（Lua端）或者直接取第一个
+        -- 这里的实现假设 mapping_data.routes 包含 channel_id
+        -- 简化：直接取第一个可用渠道
+        local route = mapping_data.routes[1]
+        local channel_id = route.channel_id
+        
+        -- 获取 Channel 详情 (获取真实 Key)
+        local channel_key = "channel:" .. tostring(channel_id)
+        local channel_data_str, _ = red:get(channel_key)
+        
+        if not channel_data_str or channel_data_str == ngx.null then
+             red:set_keepalive(10000, 100)
+             utils.error_response(503, "Upstream channel configuration missing")
+             return nil
+        end
+        
+        local channel_data = cjson.decode(channel_data_str)
+        real_token = channel_data.key -- 对于非 Vertex，key 存在这里
+        metadata = mapping_data
+        metadata.channel_id = channel_id
+        metadata.channel_type = channel_data.type
+        metadata.models_config = channel_data.models_config
+        metadata.extra_config = channel_data.extra_config -- Azure Endpoint
     end
 
     -- 4. 验证结果
@@ -94,19 +122,47 @@ function _M.authenticate_client()
     red:set_keepalive(10000, 100)
 
     -- 6. 返回结果
-    -- 参数对应: client_token, real_access_token, metadata (代替 key_filename)
     return client_token, real_token, metadata
 end
 
 -- 获取 API 主机
--- key_filename 参数现在接收的是 metadata 表
 function _M.get_api_host(metadata, model_name)
-    -- 默认 Vertex Host
-    -- 将来可以根据 metadata.channel_id 或 metadata.region 动态调整
-    -- 例如: if metadata.region == "europe-west1" then return "europe-west1-aiplatform..." end
+    -- 默认值
+    local region = "us-central1"
     
-    -- 这里先硬编码为 us-central1，这是 Vertex 的默认值
-    return "us-central1-aiplatform.googleapis.com"
+    -- 尝试从 models_config 中获取特定模型的 region 配置
+    if metadata and metadata.models_config then
+        -- 尝试直接匹配
+        local model_cfg = metadata.models_config[model_name]
+        
+        -- 如果没找到，可能需要处理版本号 (e.g. gpt-4-0314 -> gpt-4)
+        -- 这里先只做精确匹配
+        
+        if model_cfg then
+            if model_cfg.region and model_cfg.region ~= "" then
+                region = model_cfg.region
+            end
+        end
+    end
+
+    -- 针对不同类型构建 Host
+    if metadata.channel_type == "azure" then
+        -- Azure: 从 extra_config 获取 endpoint
+        if metadata.extra_config and metadata.extra_config.endpoint then
+            -- 移除 https:// 前缀
+            local host = metadata.extra_config.endpoint
+            host = string.gsub(host, "https://", "")
+            host = string.gsub(host, "http://", "")
+            -- 移除尾部 slash
+            if string.sub(host, -1) == "/" then
+                host = string.sub(host, 1, -2)
+            end
+            return host
+        end
+    end
+
+    -- 默认 Vertex
+    return region .. "-aiplatform.googleapis.com"
 end
 
 return _M

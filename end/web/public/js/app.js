@@ -156,7 +156,8 @@ const App = () => {
             modelsList = Object.entries(rawConfig).map(([name, cfg]) => ({
                 name,
                 rpm: cfg.rpm || 100000000,
-                pricing_mode: cfg.pricing_mode || 'token'
+                pricing_mode: cfg.pricing_mode || 'token',
+                region: cfg.region || 'us-central1' // Load region
             }));
         }
         setSearchTerm('');
@@ -169,7 +170,8 @@ const App = () => {
         const newItem = {
             name: model.name,
             rpm: 100000000,
-            pricing_mode: 'token'
+            pricing_mode: 'token',
+            region: 'us-central1' // Default region
         };
         setChannelModelsModal(prev => ({ ...prev, list: [...prev.list, newItem] }));
     };
@@ -194,7 +196,8 @@ const App = () => {
                 configObj[m.name] = {
                     rpm: parseInt(m.rpm),
                     pricing_mode: m.pricing_mode,
-                    enabled: true
+                    enabled: true,
+                    region: m.region // Save region
                 };
             });
             
@@ -627,6 +630,9 @@ const App = () => {
                                     <thead>
                                         <tr>
                                             <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">模型名称</th>
+                                            {channelModelsModal.channel?.type === 'vertex' && (
+                                                <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase w-28">区域 (Region)</th>
+                                            )}
                                             <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase w-32">RPM</th>
                                             <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase w-32">计费模式</th>
                                             <th className="px-3 py-2 w-10"></th>
@@ -636,6 +642,17 @@ const App = () => {
                                         {channelModelsModal.list.map((item, idx) => (
                                             <tr key={idx} className="hover:bg-gray-50">
                                                 <td className="px-3 py-3 text-sm font-medium text-gray-900">{item.name}</td>
+                                                {channelModelsModal.channel?.type === 'vertex' && (
+                                                    <td className="px-3 py-3">
+                                                        <input 
+                                                            type="text" 
+                                                            className="w-full px-2 py-1 border rounded text-sm"
+                                                            placeholder="us-central1"
+                                                            value={item.region}
+                                                            onChange={(e) => updateChannelModelConfig(idx, 'region', e.target.value)}
+                                                        />
+                                                    </td>
+                                                )}
                                                 <td className="px-3 py-3">
                                                     <input 
                                                         type="number" 
@@ -667,7 +684,7 @@ const App = () => {
                                         ))}
                                         {channelModelsModal.list.length === 0 && (
                                             <tr>
-                                                <td colSpan="4" className="p-8 text-center text-gray-400 text-sm border-dashed border-2 border-gray-100 rounded-lg m-4">
+                                                <td colSpan={channelModelsModal.channel?.type === 'vertex' ? 5 : 4} className="p-8 text-center text-gray-400 text-sm border-dashed border-2 border-gray-100 rounded-lg m-4">
                                                     请从左侧选择要绑定的模型
                                                 </td>
                                             </tr>
