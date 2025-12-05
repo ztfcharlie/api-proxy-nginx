@@ -630,7 +630,7 @@ const App = () => {
                                     <thead>
                                         <tr>
                                             <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">模型名称</th>
-                                            {channelModelsModal.channel?.type === 'vertex' && (
+                                            {channelModelsModal.channel && channelModelsModal.channel.type === 'vertex' && (
                                                 <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase w-28">区域 (Region)</th>
                                             )}
                                             <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase w-32">RPM</th>
@@ -642,7 +642,7 @@ const App = () => {
                                         {channelModelsModal.list.map((item, idx) => (
                                             <tr key={idx} className="hover:bg-gray-50">
                                                 <td className="px-3 py-3 text-sm font-medium text-gray-900">{item.name}</td>
-                                                {channelModelsModal.channel?.type === 'vertex' && (
+                                                {channelModelsModal.channel && channelModelsModal.channel.type === 'vertex' && (
                                                     <td className="px-3 py-3">
                                                         <input 
                                                             type="text" 
@@ -684,7 +684,7 @@ const App = () => {
                                         ))}
                                         {channelModelsModal.list.length === 0 && (
                                             <tr>
-                                                <td colSpan={channelModelsModal.channel?.type === 'vertex' ? 5 : 4} className="p-8 text-center text-gray-400 text-sm border-dashed border-2 border-gray-100 rounded-lg m-4">
+                                                <td colSpan={(channelModelsModal.channel && channelModelsModal.channel.type === 'vertex') ? 5 : 4} className="p-8 text-center text-gray-400 text-sm border-dashed border-2 border-gray-100 rounded-lg m-4">
                                                     请从左侧选择要绑定的模型
                                                 </td>
                                             </tr>
