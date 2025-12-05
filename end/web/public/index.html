@@ -9,19 +9,12 @@
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
     <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
-    <!-- Heroicons -->
-    <script src="https://unpkg.com/@heroicons/react@2.0.18/24/outline/index.js"></script>
     
     <style>
-        /* 自定义滚动条 */
         ::-webkit-scrollbar { width: 8px; height: 8px; }
         ::-webkit-scrollbar-track { background: #f1f1f1; }
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-        .modal-enter { opacity: 0; transform: scale(0.95); }
-        .modal-enter-active { opacity: 1; transform: scale(1); transition: all 0.2s ease-out; }
-        .modal-exit { opacity: 1; transform: scale(1); }
-        .modal-exit-active { opacity: 0; transform: scale(0.95); transition: all 0.2s ease-in; }
     </style>
 </head>
 <body class="bg-gray-50 text-gray-900 h-screen overflow-hidden">
@@ -30,9 +23,17 @@
     <script type="text/babel">
         const { useState, useEffect, useMemo } = React;
 
-        // --- Components ---
+        // Icons (SVG Components)
+        const Icons = {
+            Channels: () => <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>,
+            Tokens: () => <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>,
+            Users: () => <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>,
+            Close: () => <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>,
+            Spinner: () => <svg className="animate-spin h-4 w-4 text-current" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>,
+            ChevronDown: () => <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+        };
 
-        // 1. Modal Component (现代化弹窗)
+        // Components
         const Modal = ({ isOpen, title, onClose, children, footer }) => {
             if (!isOpen) return null;
             return (
@@ -41,7 +42,7 @@
                         <div className="flex justify-between items-center p-6 border-b border-gray-100">
                             <h3 className="text-xl font-semibold text-gray-800">{title}</h3>
                             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
-                                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+                                <Icons.Close />
                             </button>
                         </div>
                         <div className="p-6 overflow-y-auto flex-1">
@@ -57,7 +58,6 @@
             );
         };
 
-        // 2. Input Component
         const Input = ({ label, type = "text", value, onChange, placeholder, className = "", multiline = false, rows = 4 }) => (
             <div className={`mb-4 ${className}`}>
                 {label && <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>}
@@ -65,7 +65,7 @@
                     <textarea 
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-sm font-mono"
                         rows={rows}
-                        value={value}
+                        value={value || ''}
                         onChange={e => onChange(e.target.value)}
                         placeholder={placeholder}
                     />
@@ -73,7 +73,7 @@
                     <input 
                         type={type}
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-sm"
-                        value={value}
+                        value={value || ''}
                         onChange={e => onChange(e.target.value)}
                         placeholder={placeholder}
                     />
@@ -81,14 +81,13 @@
             </div>
         );
 
-        // 3. Select Component
         const Select = ({ label, value, onChange, options, className = "" }) => (
             <div className={`mb-4 ${className}`}>
                 {label && <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>}
                 <div className="relative">
                     <select 
                         className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-sm appearance-none bg-white"
-                        value={value}
+                        value={value || ''}
                         onChange={e => onChange(e.target.value)}
                     >
                         {options.map(opt => (
@@ -96,13 +95,12 @@
                         ))}
                     </select>
                     <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-700">
-                        <svg className="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                        <Icons.ChevronDown />
                     </div>
                 </div>
             </div>
         );
 
-        // 4. Button Component
         const Button = ({ children, onClick, variant = "primary", className = "", disabled = false, loading = false }) => {
             const variants = {
                 primary: "bg-blue-600 hover:bg-blue-700 text-white shadow-md shadow-blue-200",
@@ -117,18 +115,12 @@
                     disabled={disabled || loading}
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${variants[variant]} ${className} ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
-                    {loading && (
-                        <svg className="animate-spin h-4 w-4 text-current" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                    )}
+                    {loading && <Icons.Spinner />}
                     {children}
                 </button>
             );
         };
 
-        // 5. Confirm Dialog (替代原生 confirm)
         const ConfirmDialog = ({ isOpen, title, message, onConfirm, onCancel, loading }) => (
             <Modal isOpen={isOpen} title={title} onClose={onCancel} footer={
                 <div className="flex justify-end gap-3 w-full">
@@ -163,7 +155,6 @@
 
             const API_BASE = '/api/admin';
 
-            // Initial Load
             useEffect(() => {
                 fetchData('channels');
             }, []);
@@ -172,24 +163,25 @@
                 setLoading(true);
                 try {
                     if (type === 'channels') {
-                        const res = await axios.get(`${API_BASE}/channels`);
+                        const res = await axios.get(API_BASE + '/channels');
                         setChannels(res.data.data);
                     } else if (type === 'tokens') {
                         const [tRes, uRes, cRes] = await Promise.all([
-                            axios.get(`${API_BASE}/tokens`),
-                            axios.get(`${API_BASE}/users`),
-                            axios.get(`${API_BASE}/channels`)
+                            axios.get(API_BASE + '/tokens'),
+                            axios.get(API_BASE + '/users'),
+                            axios.get(API_BASE + '/channels')
                         ]);
                         setTokens(tRes.data.data);
                         setUsers(uRes.data.data);
                         setChannels(cRes.data.data);
                     } else if (type === 'users') {
-                        const res = await axios.get(`${API_BASE}/users`);
+                        const res = await axios.get(API_BASE + '/users');
                         setUsers(res.data.data);
                     }
                 } catch (err) {
                     console.error(err);
-                    alert('加载数据失败: ' + (err.response?.data?.error || err.message));
+                    const msg = (err.response && err.response.data && err.response.data.error) || err.message;
+                    alert('加载数据失败: ' + msg);
                 }
                 setLoading(false);
             };
@@ -199,14 +191,17 @@
                 fetchData(tab);
             };
 
-            // --- Channel Handlers ---
             const openChannelModal = (channel = null) => {
                 if (channel) {
+                    let extra = { endpoint: '', api_version: '' };
+                    if (channel.extra_config) {
+                        extra = typeof channel.extra_config === 'string' 
+                            ? JSON.parse(channel.extra_config) 
+                            : channel.extra_config;
+                    }
                     setChannelForm({
                         ...channel,
-                        extra_config: typeof channel.extra_config === 'string' 
-                            ? JSON.parse(channel.extra_config) 
-                            : (channel.extra_config || { endpoint: '', api_version: '' })
+                        extra_config: extra
                     });
                 } else {
                     setChannelForm({ name: '', type: 'vertex', credentials: '', extra_config: { endpoint: '', api_version: '' } });
@@ -217,21 +212,22 @@
             const saveChannel = async () => {
                 try {
                     if (channelModal.isEdit) {
-                        await axios.put(`${API_BASE}/channels/${channelForm.id}`, channelForm);
+                        await axios.put(API_BASE + '/channels/' + channelForm.id, channelForm);
                     } else {
-                        await axios.post(`${API_BASE}/channels`, channelForm);
+                        await axios.post(API_BASE + '/channels', channelForm);
                     }
                     setChannelModal({ open: false });
                     fetchData('channels');
                 } catch (err) {
-                    alert('保存失败: ' + err.response?.data?.error);
+                    const msg = (err.response && err.response.data && err.response.data.error) || 'Unknown Error';
+                    alert('保存失败: ' + msg);
                 }
             };
 
             const handleDelete = async () => {
                 try {
                     if (confirmModal.type === 'channel') {
-                        await axios.delete(`${API_BASE}/channels/${confirmModal.id}`);
+                        await axios.delete(API_BASE + '/channels/' + confirmModal.id);
                         fetchData('channels');
                     }
                     setConfirmModal({ open: false });
@@ -240,7 +236,14 @@
                 }
             };
 
-            // --- Token Handlers ---
+            const testConnection = async () => {
+                try {
+                    const res = await axios.post(API_BASE + '/channels/test-connection', channelForm);
+                    if (res.data.success) alert(res.data.message);
+                    else alert('测试失败: ' + res.data.message);
+                } catch(e) { alert('测试出错'); }
+            };
+
             const openTokenModal = () => {
                 setTokenForm({
                     user_id: users.length > 0 ? users[0].id : '',
@@ -257,20 +260,20 @@
                         ...tokenForm,
                         routes: tokenForm.routes.filter(r => r.channel_id).map(r => ({...r, weight: parseInt(r.weight)}))
                     };
-                    const res = await axios.post(`${API_BASE}/tokens`, payload);
+                    const res = await axios.post(API_BASE + '/tokens', payload);
                     setTokenModal({ open: false });
                     setResultModal({ open: true, content: JSON.stringify(res.data.credentials, null, 2) });
                     fetchData('tokens');
                 } catch (err) {
-                    alert('创建失败: ' + err.response?.data?.error);
+                    const msg = (err.response && err.response.data && err.response.data.error) || 'Unknown Error';
+                    alert('创建失败: ' + msg);
                 }
             };
 
-            // --- User Handlers ---
             const createUser = async () => {
                 if (!userForm.username) return;
                 try {
-                    await axios.post(`${API_BASE}/users`, userForm);
+                    await axios.post(API_BASE + '/users', userForm);
                     setUserModal({ open: false });
                     fetchData('users');
                 } catch (err) {
@@ -278,36 +281,23 @@
                 }
             };
 
-            // --- Renders ---
-
             const Sidebar = () => (
                 <div className="w-64 bg-slate-900 text-white flex-shrink-0 flex flex-col shadow-xl z-10">
                     <div className="h-16 flex items-center px-6 font-bold text-xl tracking-wider bg-slate-950">
                         <span className="text-blue-500 mr-2">❖</span> Gemini Proxy
                     </div>
                     <nav className="flex-1 py-6 space-y-1">
-                        {[
-                            { id: 'channels', label: '渠道管理', icon: 'M13 10V3L4 14h7v7l9-11h-7z' },
-                            { id: 'tokens', label: '令牌管理', icon: 'M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z' },
-                            { id: 'users', label: '用户管理', icon: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z' }
-                        ].map(item => (
-                            <button
-                                key={item.id}
-                                onClick={() => handleTabChange(item.id)}
-                                className={`w-full flex items-center px-6 py-3 transition-all duration-200 border-l-4 ${
-                                    activeTab === item.id 
-                                    ? 'bg-slate-800 border-blue-500 text-white' 
-                                    : 'border-transparent text-slate-400 hover:bg-slate-800 hover:text-white'
-                                }`}
-                            >
-                                <svg className="w-5 h-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={item.icon}></path></svg>
-                                {item.label}
-                            </button>
-                        ))}
+                        <button onClick={() => handleTabChange('channels')} className={`w-full flex items-center px-6 py-3 transition-all duration-200 border-l-4 ${activeTab === 'channels' ? 'bg-slate-800 border-blue-500 text-white' : 'border-transparent text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+                            <Icons.Channels /> 渠道管理
+                        </button>
+                        <button onClick={() => handleTabChange('tokens')} className={`w-full flex items-center px-6 py-3 transition-all duration-200 border-l-4 ${activeTab === 'tokens' ? 'bg-slate-800 border-blue-500 text-white' : 'border-transparent text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+                            <Icons.Tokens /> 令牌管理
+                        </button>
+                        <button onClick={() => handleTabChange('users')} className={`w-full flex items-center px-6 py-3 transition-all duration-200 border-l-4 ${activeTab === 'users' ? 'bg-slate-800 border-blue-500 text-white' : 'border-transparent text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+                            <Icons.Users /> 用户管理
+                        </button>
                     </nav>
-                    <div className="p-4 bg-slate-950 text-xs text-slate-500 text-center">
-                        v3.0.0 | Resource-based
-                    </div>
+                    <div className="p-4 bg-slate-950 text-xs text-slate-500 text-center">v3.0.0</div>
                 </div>
             );
 
@@ -444,16 +434,15 @@
 
                     {/* --- MODALS --- */}
 
-                    {/* Channel Modal */}
                     <Modal 
                         isOpen={channelModal.open} 
                         title={channelModal.isEdit ? "编辑渠道" : "新增渠道"} 
                         onClose={() => setChannelModal({ open: false })}
                         footer={
-                            <>
+                            <div className="flex justify-end gap-3 w-full">
                                 <Button variant="secondary" onClick={() => setChannelModal({ open: false })}>取消</Button>
                                 <Button onClick={saveChannel}>保存</Button>
-                            </>
+                            </div>
                         }
                     >
                         <Input label="渠道名称" value={channelForm.name} onChange={v => setChannelForm({...channelForm, name: v})} placeholder="例如: Vertex US-Central" />
@@ -473,22 +462,24 @@
                         {channelForm.type === 'azure' && (
                             <div className="p-4 bg-blue-50 rounded-lg border border-blue-100 mb-4">
                                 <h4 className="text-xs font-bold text-blue-800 uppercase mb-3">Azure 配置</h4>
-                                <Input label="Endpoint" value={channelForm.extra_config?.endpoint} onChange={v => setChannelForm({...channelForm, extra_config: {...channelForm.extra_config, endpoint: v}})} placeholder="https://xxx.openai.azure.com" />
-                                <Input label="API Version" value={channelForm.extra_config?.api_version} onChange={v => setChannelForm({...channelForm, extra_config: {...channelForm.extra_config, api_version: v}})} placeholder="2023-05-15" />
+                                <Input label="Endpoint" value={channelForm.extra_config && channelForm.extra_config.endpoint} onChange={v => setChannelForm({...channelForm, extra_config: {...channelForm.extra_config, endpoint: v}})} placeholder="https://xxx.openai.azure.com" />
+                                <Input label="API Version" value={channelForm.extra_config && channelForm.extra_config.api_version} onChange={v => setChannelForm({...channelForm, extra_config: {...channelForm.extra_config, api_version: v}})} placeholder="2023-05-15" />
                             </div>
                         )}
+                        <div className="mt-4">
+                            <Button onClick={testConnection} variant="ghost" className="text-sm w-full justify-center border border-dashed border-gray-300">测试连接</Button>
+                        </div>
                     </Modal>
 
-                    {/* Token Modal */}
                     <Modal
                         isOpen={tokenModal.open}
                         title="创建虚拟令牌"
                         onClose={() => setTokenModal({ open: false })}
                         footer={
-                            <>
+                            <div className="flex justify-end gap-3 w-full">
                                 <Button variant="secondary" onClick={() => setTokenModal({ open: false })}>取消</Button>
                                 <Button onClick={createToken}>创建并生成 Key</Button>
-                            </>
+                            </div>
                         }
                     >
                         <Select label="归属用户" value={tokenForm.user_id} onChange={v => setTokenForm({...tokenForm, user_id: v})} 
@@ -504,7 +495,7 @@
                             {tokenForm.routes.map((route, idx) => (
                                 <div key={idx} className="flex gap-2 mb-2">
                                     <select 
-                                        className="flex-1 px-3 py-2 border rounded-lg text-sm"
+                                        className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm"
                                         value={route.channel_id}
                                         onChange={e => {
                                             const newRoutes = [...tokenForm.routes];
@@ -519,7 +510,7 @@
                                             <option key={c.id} value={c.id}>{c.name} ({c.type})</option>
                                         ))}
                                     </select>
-                                    <input type="number" className="w-20 px-3 py-2 border rounded-lg text-sm" placeholder="权重" value={route.weight} 
+                                    <input type="number" className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm" placeholder="权重" value={route.weight} 
                                         onChange={e => {
                                             const newRoutes = [...tokenForm.routes];
                                             newRoutes[idx].weight = e.target.value;
@@ -530,24 +521,25 @@
                                         const newRoutes = [...tokenForm.routes];
                                         newRoutes.splice(idx, 1);
                                         setTokenForm({...tokenForm, routes: newRoutes});
-                                    }} className="text-red-500 hover:bg-red-50 p-2 rounded">×</button>
+                                    }} className="text-red-500 hover:bg-red-50 p-2 rounded font-bold">×</button>
                                 </div>
                             ))}
                             <button onClick={() => setTokenForm({...tokenForm, routes: [...tokenForm.routes, { channel_id: '', weight: 10 }]})} 
-                                className="text-sm text-blue-600 font-medium hover:underline">+ 添加路由 (负载均衡)</button>
+                                className="text-sm text-blue-600 font-medium hover:underline mt-2">+ 添加路由 (负载均衡)</button>
                         </div>
                     </Modal>
 
-                    {/* User Modal */}
                     <Modal isOpen={userModal.open} title="新增用户" onClose={() => setUserModal({ open: false })} footer={
-                        <Button onClick={createUser}>创建</Button>
+                        <div className="flex justify-end gap-3 w-full">
+                            <Button variant="secondary" onClick={() => setUserModal({ open: false })}>取消</Button>
+                            <Button onClick={createUser}>创建</Button>
+                        </div>
                     }>
                         <Input label="用户名" value={userForm.username} onChange={v => setUserForm({...userForm, username: v})} />
                         <Input label="密码" type="password" value={userForm.password} onChange={v => setUserForm({...userForm, password: v})} />
                         <Input label="备注" value={userForm.remark} onChange={v => setUserForm({...userForm, remark: v})} />
                     </Modal>
 
-                    {/* Confirm Dialog */}
                     <ConfirmDialog 
                         isOpen={confirmModal.open} 
                         title="确认删除" 
@@ -556,7 +548,6 @@
                         onConfirm={handleDelete}
                     />
 
-                    {/* Result Modal */}
                     <Modal isOpen={resultModal.open} title="令牌生成成功" onClose={() => setResultModal({ open: false })}>
                         <div className="bg-green-50 p-4 rounded-lg border border-green-100">
                             <p className="text-green-800 font-bold mb-2 text-sm">请立即保存以下凭证：</p>
