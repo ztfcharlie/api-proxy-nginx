@@ -8,13 +8,10 @@ echo "================================"
 # 检查并创建必要的目录
 echo "📁 检查目录权限和结构..."
 
-# 需要创建的目录列表
+# 需要创建的目录列表 (只保留必要的运行时目录)
 directories=(
     "/app/logs"
     "/app/tmp"
-    "/app/client"
-    "/app/client/google_server_account"
-    "/app/map"
 )
 
 # 尝试创建目录，如果失败则警告

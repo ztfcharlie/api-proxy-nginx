@@ -53,7 +53,7 @@ COPY --chown=nodejs:nodejs entrypoint.sh /app/entrypoint.sh
 RUN chmod +x /app/entrypoint.sh
 
 # 创建必要的目录并设置权限
-RUN mkdir -p /app/logs /app/tmp /app/client/google_server_account && \
+RUN mkdir -p /app/logs /app/tmp && \
     chown -R nodejs:nodejs /app
 
 # 切换到非root用户
