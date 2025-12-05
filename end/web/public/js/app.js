@@ -1,5 +1,30 @@
 const { useState, useEffect, useMemo } = React;
 
+// --- Sidebar Component ---
+const Sidebar = ({ activeTab, onTabChange }) => (
+    <div className="w-64 bg-slate-900 text-white flex-shrink-0 flex flex-col shadow-xl z-10">
+        <div className="h-16 flex items-center px-6 font-bold text-xl tracking-wider bg-slate-950">
+            <span className="text-blue-500 mr-2">❖</span> Gemini Proxy
+        </div>
+        <nav className="flex-1 py-6 space-y-1">
+            <button onClick={() => onTabChange('channels')} className={`w-full flex items-center px-6 py-3 transition-all duration-200 border-l-4 ${activeTab === 'channels' ? 'bg-slate-800 border-blue-500 text-white' : 'border-transparent text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+                <Icons.Channels /> 渠道管理
+            </button>
+            <button onClick={() => onTabChange('models')} className={`w-full flex items-center px-6 py-3 transition-all duration-200 border-l-4 ${activeTab === 'models' ? 'bg-slate-800 border-blue-500 text-white' : 'border-transparent text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+                <Icons.Models /> 模型管理
+            </button>
+            <button onClick={() => onTabChange('tokens')} className={`w-full flex items-center px-6 py-3 transition-all duration-200 border-l-4 ${activeTab === 'tokens' ? 'bg-slate-800 border-blue-500 text-white' : 'border-transparent text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+                <Icons.Tokens /> 令牌管理
+            </button>
+            <button onClick={() => onTabChange('users')} className={`w-full flex items-center px-6 py-3 transition-all duration-200 border-l-4 ${activeTab === 'users' ? 'bg-slate-800 border-blue-500 text-white' : 'border-transparent text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+                <Icons.Users /> 用户管理
+            </button>
+        </nav>
+        <div className="p-4 bg-slate-950 text-xs text-slate-500 text-center">v3.2.1</div>
+    </div>
+);
+
+// --- Main App Component ---
 const App = () => {
     const [activeTab, setActiveTab] = useState('channels');
     const [activeModelTab, setActiveModelTab] = useState('openai');
@@ -10,154 +35,189 @@ const App = () => {
     const [loading, setLoading] = useState(false);
 
     // Dialog States
-    const [channelModal, setChannelModal] = useState({ open: false, data: null });
+    const [channelModal, setChannelModal] = useState({ open: false, isEdit: false });
+    const [channelModelsModal, setChannelModelsModal] = useState({ open: false, channel: null, list: [] });
     const [modelModal, setModelModal] = useState({ open: false, isEdit: false });
     const [tokenModal, setTokenModal] = useState({ open: false });
     const [userModal, setUserModal] = useState({ open: false });
     const [confirmModal, setConfirmModal] = useState({ open: false, type: null, id: null });
     const [resultModal, setResultModal] = useState({ open: false, content: '' });
 
-                // Form States
-        const [channelForm, setChannelForm] = useState({});
-        const [modelForm, setModelForm] = useState({});
-        const [tokenForm, setTokenForm] = useState({ routes: [{ channel_id: '', weight: 10 }] });
-        const [userForm, setUserForm] = useState({});
-    
-        const API_BASE = '/api/admin';
-    
-        useEffect(() => {
-            // Initial load: channels + models (needed for binding)
-            fetchData('channels');
-            fetchData('models'); 
-        }, []);
-    
-        const fetchData = async (type) => {
-            setLoading(true);
-            try {
-                if (type === 'channels') {
-                    const res = await axios.get(API_BASE + '/channels');
-                    setChannels(res.data.data);
-                } else if (type === 'models') {
-                    const res = await axios.get(API_BASE + '/models');
-                    setModels(res.data.data);
-                } 
-                // ... (rest unchanged)
-                else if (type === 'tokens') {
-                    const [tRes, uRes, cRes] = await Promise.all([
-                        axios.get(API_BASE + '/tokens'),
-                        axios.get(API_BASE + '/users'),
-                        axios.get(API_BASE + '/channels')
-                    ]);
-                    setTokens(tRes.data.data);
-                    setUsers(uRes.data.data);
-                    setChannels(cRes.data.data);
-                } else if (type === 'users') {
-                    const res = await axios.get(API_BASE + '/users');
-                    setUsers(res.data.data);
-                }
-            } catch (err) {
-                console.error(err);
-                // alert('加载数据失败');
+    // Form States
+    const [channelForm, setChannelForm] = useState({});
+    const [modelForm, setModelForm] = useState({});
+    const [tokenForm, setTokenForm] = useState({ routes: [{ channel_id: '', weight: 10 }] });
+    const [userForm, setUserForm] = useState({});
+    const [searchTerm, setSearchTerm] = useState('');
+
+    const API_BASE = '/api/admin';
+
+    useEffect(() => {
+        fetchData('channels');
+        fetchData('models');
+    }, []);
+
+    const fetchData = async (type) => {
+        setLoading(true);
+        try {
+            if (type === 'channels') {
+                const res = await axios.get(API_BASE + '/channels');
+                setChannels(res.data.data);
+            } else if (type === 'models') {
+                const res = await axios.get(API_BASE + '/models');
+                setModels(res.data.data);
+            } else if (type === 'tokens') {
+                const [tRes, uRes, cRes] = await Promise.all([
+                    axios.get(API_BASE + '/tokens'),
+                    axios.get(API_BASE + '/users'),
+                    axios.get(API_BASE + '/channels')
+                ]);
+                setTokens(tRes.data.data);
+                setUsers(uRes.data.data);
+                setChannels(cRes.data.data);
+            } else if (type === 'users') {
+                const res = await axios.get(API_BASE + '/users');
+                setUsers(res.data.data);
             }
-            setLoading(false);
-        };
-    
-        // ...
-    
-        // --- Channel Handlers ---
-        const openChannelModal = (channel = null) => {
-            if (channel) {
-                let extra = { endpoint: '', api_version: '' };
-                if (channel.extra_config) {
-                    extra = typeof channel.extra_config === 'string' 
-                        ? JSON.parse(channel.extra_config) 
-                        : channel.extra_config;
-                }
-                
-                // Parse models_config to array for UI
-                let modelsConfig = [];
-                let rawConfig = channel.models_config;
-                if (typeof rawConfig === 'string') rawConfig = JSON.parse(rawConfig);
-                if (rawConfig) {
-                    modelsConfig = Object.entries(rawConfig).map(([name, cfg]) => ({
-                        name,
-                        rpm: cfg.rpm || 100000000,
-                        pricing_mode: cfg.pricing_mode || 'token'
-                    }));
-                }
-    
-                setChannelForm({
-                    ...channel,
-                    extra_config: extra,
-                    models_list: modelsConfig // Temporary UI state
-                });
+        } catch (err) {
+            console.error(err);
+            const msg = (err.response && err.response.data && err.response.data.error) || err.message;
+            alert('加载数据失败: ' + msg);
+        }
+        setLoading(false);
+    };
+
+    const handleTabChange = (tab) => {
+        setActiveTab(tab);
+        fetchData(tab);
+    };
+
+    // --- Channel Handlers ---
+    const openChannelModal = (channel = null) => {
+        if (channel) {
+            let extra = { endpoint: '', api_version: '' };
+            if (channel.extra_config) {
+                extra = typeof channel.extra_config === 'string' 
+                    ? JSON.parse(channel.extra_config) 
+                    : channel.extra_config;
+            }
+            setChannelForm({ ...channel, extra_config: extra });
+        } else {
+            setChannelForm({ 
+                name: '', type: 'vertex', credentials: '', 
+                extra_config: { endpoint: '', api_version: '' } 
+            });
+        }
+        setChannelModal({ open: true, isEdit: !!channel });
+    };
+
+    const saveChannel = async () => {
+        try {
+            if (channelModal.isEdit) {
+                await axios.put(API_BASE + '/channels/' + channelForm.id, channelForm);
             } else {
-                setChannelForm({ 
-                    name: '', type: 'vertex', credentials: '', 
-                    extra_config: { endpoint: '', api_version: '' },
-                    models_list: [] 
-                });
+                await axios.post(API_BASE + '/channels', channelForm);
             }
-            setChannelModal({ open: true, isEdit: !!channel });
-        };
-    
-        const saveChannel = async () => {
-            try {
-                // Convert models_list array back to models_config object
-                const configObj = {};
-                if (channelForm.models_list && channelForm.models_list.length > 0) {
-                    channelForm.models_list.forEach(m => {
-                        configObj[m.name] = {
-                            rpm: parseInt(m.rpm),
-                            pricing_mode: m.pricing_mode,
-                            enabled: true
-                        };
-                    });
-                }
-                
-                const payload = { ...channelForm, models_config: configObj };
-                // Remove temp field
-                delete payload.models_list;
-    
-                if (channelModal.isEdit) {
-                    await axios.put(API_BASE + '/channels/' + channelForm.id, payload);
-                } else {
-                    await axios.post(API_BASE + '/channels', payload);
-                }
-                setChannelModal({ open: false });
-                fetchData('channels');
-            } catch (err) {
-                const msg = (err.response && err.response.data && err.response.data.error) || 'Unknown Error';
-                alert('保存失败: ' + msg);
-            }
-        };
-    
-        // Helper to add model to channel
-        const addModelToChannel = () => {
-            setChannelForm(prev => ({
-                ...prev,
-                models_list: [...(prev.models_list || []), { name: '', rpm: 100000000, pricing_mode: 'token' }]
-            }));
-        };
-    
-        const removeModelFromChannel = (idx) => {
-            const newList = [...channelForm.models_list];
-            newList.splice(idx, 1);
-            setChannelForm({ ...channelForm, models_list: newList });
-        };
-    
-        // ... (rest unchanged)
+            setChannelModal({ open: false });
+            fetchData('channels');
+        } catch (err) {
+            const msg = (err.response && err.response.data && err.response.data.error) || 'Unknown Error';
+            alert('保存失败: ' + msg);
+        }
+    };
+
     const toggleChannelStatus = async (row) => {
         const newStatus = row.status ? 0 : 1;
         const originalData = [...channels];
         setChannels(channels.map(c => c.id === row.id ? { ...c, status: newStatus } : c));
-        
         try {
             await axios.put(API_BASE + '/channels/' + row.id, { status: newStatus });
         } catch (err) {
             alert('更新状态失败');
             setChannels(originalData);
         }
+    };
+
+    // --- Channel Models Binding Handlers ---
+    const openChannelModelsModal = (channel) => {
+        let modelsList = [];
+        let rawConfig = channel.models_config;
+        if (typeof rawConfig === 'string') rawConfig = JSON.parse(rawConfig);
+        if (rawConfig) {
+            modelsList = Object.entries(rawConfig).map(([name, cfg]) => ({
+                name,
+                rpm: cfg.rpm || 100000000,
+                pricing_mode: cfg.pricing_mode || 'token'
+            }));
+        }
+        setSearchTerm('');
+        setChannelModelsModal({ open: true, channel: channel, list: modelsList });
+    };
+
+    const addModelToChannel = (model) => {
+        if (channelModelsModal.list.some(m => m.name === model.name)) return;
+        
+        const newItem = {
+            name: model.name,
+            rpm: 100000000,
+            pricing_mode: 'token'
+        };
+        setChannelModelsModal(prev => ({ ...prev, list: [...prev.list, newItem] }));
+    };
+
+    const removeModelFromChannel = (name) => {
+        setChannelModelsModal(prev => ({
+            ...prev,
+            list: prev.list.filter(m => m.name !== name)
+        }));
+    };
+
+    const updateChannelModelConfig = (idx, field, value) => {
+        const newList = [...channelModelsModal.list];
+        newList[idx][field] = value;
+        setChannelModelsModal(prev => ({ ...prev, list: newList }));
+    };
+
+    const saveChannelModels = async () => {
+        try {
+            const configObj = {};
+            channelModelsModal.list.forEach(m => {
+                configObj[m.name] = {
+                    rpm: parseInt(m.rpm),
+                    pricing_mode: m.pricing_mode,
+                    enabled: true
+                };
+            });
+            
+            await axios.put(API_BASE + '/channels/' + channelModelsModal.channel.id, {
+                models_config: configObj
+            });
+            
+            setChannelModelsModal({ open: false, channel: null, list: [] });
+            fetchData('channels');
+        } catch (err) {
+            alert('保存模型配置失败');
+        }
+    };
+
+    const getAvailableModelsForChannel = () => {
+        if (!channelModelsModal.channel) return [];
+        const type = channelModelsModal.channel.type;
+        
+        return models.filter(m => {
+            let match = false;
+            if(type === 'vertex') match = m.provider === 'google';
+            else if(type === 'azure' || type === 'openai') match = m.provider === 'openai';
+            else if(type === 'anthropic') match = m.provider === 'anthropic';
+            else if(type === 'qwen') match = m.provider === 'qwen';
+            else if(type === 'deepseek') match = m.provider === 'deepseek';
+            else match = true;
+
+            if (match && searchTerm) {
+                match = m.name.toLowerCase().includes(searchTerm.toLowerCase());
+            }
+            return match;
+        });
     };
 
     const testConnection = async () => {
@@ -263,32 +323,9 @@ const App = () => {
         }
     }, [channels, tokenForm.type]);
 
-    const Sidebar = () => (
-        <div className="w-64 bg-slate-900 text-white flex-shrink-0 flex flex-col shadow-xl z-10">
-            <div className="h-16 flex items-center px-6 font-bold text-xl tracking-wider bg-slate-950">
-                <span className="text-blue-500 mr-2">❖</span> Gemini Proxy
-            </div>
-            <nav className="flex-1 py-6 space-y-1">
-                <button onClick={() => handleTabChange('channels')} className={`w-full flex items-center px-6 py-3 transition-all duration-200 border-l-4 ${activeTab === 'channels' ? 'bg-slate-800 border-blue-500 text-white' : 'border-transparent text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
-                    <Icons.Channels /> 渠道管理
-                </button>
-                <button onClick={() => handleTabChange('models')} className={`w-full flex items-center px-6 py-3 transition-all duration-200 border-l-4 ${activeTab === 'models' ? 'bg-slate-800 border-blue-500 text-white' : 'border-transparent text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
-                    <Icons.Models /> 模型管理
-                </button>
-                <button onClick={() => handleTabChange('tokens')} className={`w-full flex items-center px-6 py-3 transition-all duration-200 border-l-4 ${activeTab === 'tokens' ? 'bg-slate-800 border-blue-500 text-white' : 'border-transparent text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
-                    <Icons.Tokens /> 令牌管理
-                </button>
-                <button onClick={() => handleTabChange('users')} className={`w-full flex items-center px-6 py-3 transition-all duration-200 border-l-4 ${activeTab === 'users' ? 'bg-slate-800 border-blue-500 text-white' : 'border-transparent text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
-                    <Icons.Users /> 用户管理
-                </button>
-            </nav>
-            <div className="p-4 bg-slate-950 text-xs text-slate-500 text-center">v3.1.0</div>
-        </div>
-    );
-
     return (
         <div className="flex h-screen bg-gray-100 font-sans antialiased">
-            <Sidebar />
+            <Sidebar activeTab={activeTab} onTabChange={handleTabChange} />
             
             <main className="flex-1 flex flex-col overflow-hidden">
                 <header className="bg-white shadow-sm z-0 h-16 flex items-center justify-between px-8">
@@ -342,6 +379,7 @@ const App = () => {
                                                     />
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                                    <button onClick={() => openChannelModelsModal(row)} className="text-indigo-600 hover:text-indigo-900 mr-4 font-semibold border border-indigo-200 px-3 py-1 rounded bg-indigo-50">⚡ 绑定模型</button>
                                                     <button onClick={() => openChannelModal(row)} className="text-blue-600 hover:text-blue-900 mr-4">编辑</button>
                                                     <button onClick={() => setConfirmModal({ open: true, type: 'channel', id: row.id })} className="text-red-600 hover:text-red-900">删除</button>
                                                 </td>
@@ -357,7 +395,6 @@ const App = () => {
                     {/* Models View */}
                     {activeTab === 'models' && (
                         <div className="space-y-6">
-                            {/* Provider Tabs */}
                             <div className="flex border-b border-gray-200">
                                 {['openai', 'google', 'anthropic', 'qwen', 'deepseek'].map(provider => (
                                     <button
@@ -481,6 +518,7 @@ const App = () => {
 
             {/* --- MODALS --- */}
 
+            {/* Channel Modal (Basic Info) */}
             <Modal 
                 isOpen={channelModal.open} 
                 title={channelModal.isEdit ? "编辑渠道" : "新增渠道"} 
@@ -497,7 +535,9 @@ const App = () => {
                     { value: 'vertex', label: 'Google Vertex AI' },
                     { value: 'azure', label: 'Azure OpenAI' },
                     { value: 'openai', label: 'OpenAI' },
-                    { value: 'anthropic', label: 'Anthropic' }
+                    { value: 'anthropic', label: 'Anthropic' },
+                    { value: 'qwen', label: 'Qwen (Aliyun)' },
+                    { value: 'deepseek', label: 'DeepSeek' }
                 ]} />
                 <Input 
                     label="凭证 (Credentials)" 
@@ -513,79 +553,128 @@ const App = () => {
                         <Input label="API Version" value={channelForm.extra_config && channelForm.extra_config.api_version} onChange={v => setChannelForm({...channelForm, extra_config: {...channelForm.extra_config, api_version: v}})} placeholder="2023-05-15" />
                     </div>
                 )}
-
-                <div className="mb-4 border-t pt-4">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">模型绑定 (Models Config)</label>
-                    {(channelForm.models_list || []).map((item, idx) => (
-                        <div key={idx} className="flex gap-2 mb-2 items-start">
-                            <div className="flex-1">
-                                <select 
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm bg-white"
-                                    value={item.name}
-                                    onChange={e => {
-                                        const list = [...channelForm.models_list];
-                                        list[idx].name = e.target.value;
-                                        setChannelForm({...channelForm, models_list: list});
-                                    }}
-                                >
-                                    <option value="">选择模型...</option>
-                                    {models
-                                        .filter(m => {
-                                            // Simple mapping: vertex->google, azure/openai->openai, etc.
-                                            if(channelForm.type === 'vertex') return m.provider === 'google';
-                                            if(channelForm.type === 'azure' || channelForm.type === 'openai') return m.provider === 'openai';
-                                            if(channelForm.type === 'anthropic') return m.provider === 'anthropic';
-                                            if(channelForm.type === 'qwen') return m.provider === 'qwen';
-                                            if(channelForm.type === 'deepseek') return m.provider === 'deepseek';
-                                            return true;
-                                        })
-                                        .map(m => (
-                                        <option key={m.id} value={m.name}>{m.name}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div className="w-24">
-                                <input type="number" className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm" 
-                                    placeholder="RPM" value={item.rpm}
-                                    onChange={e => {
-                                        const list = [...channelForm.models_list];
-                                        list[idx].rpm = e.target.value;
-                                        setChannelForm({...channelForm, models_list: list});
-                                    }}
-                                />
-                            </div>
-                            <div className="w-28">
-                                <select 
-                                    className="w-full px-2 py-2 border border-gray-300 rounded-lg text-sm bg-white"
-                                    value={item.pricing_mode}
-                                    onChange={e => {
-                                        const list = [...channelForm.models_list];
-                                        list[idx].pricing_mode = e.target.value;
-                                        setChannelForm({...channelForm, models_list: list});
-                                    }}
-                                >
-                                    <option value="token">按Token</option>
-                                    <option value="second">按秒</option>
-                                    <option value="request">按次</option>
-                                </select>
-                            </div>
-                            <button onClick={() => {
-                                const list = [...channelForm.models_list];
-                                list.splice(idx, 1);
-                                setChannelForm({...channelForm, models_list: list});
-                            }} className="text-red-500 hover:bg-red-50 p-2 rounded">×</button>
-                        </div>
-                    ))}
-                    <button onClick={() => setChannelForm({
-                        ...channelForm, 
-                        models_list: [...(channelForm.models_list || []), { name: '', rpm: 100000000, pricing_mode: 'token' }]
-                    })} className="text-sm text-blue-600 font-medium hover:underline">+ 添加模型</button>
-                </div>
-
                 <div className="mt-4">
                     <Button onClick={testConnection} variant="ghost" className="text-sm w-full justify-center border border-dashed border-gray-300">测试连接</Button>
                 </div>
             </Modal>
+
+            {/* Channel Models Binding Modal (New) */}
+            <div className={`fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm transition-opacity ${channelModelsModal.open ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
+                <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl m-4 transform transition-all flex flex-col h-[85vh]">
+                    <div className="flex justify-between items-center p-6 border-b border-gray-100 bg-gray-50 rounded-t-xl">
+                        <div>
+                            <h3 className="text-xl font-semibold text-gray-800">绑定模型</h3>
+                            <p className="text-sm text-gray-500 mt-1">为渠道 <span className="font-bold text-blue-600">{channelModelsModal.channel?.name}</span> 配置可用模型</p>
+                        </div>
+                        <button onClick={() => setChannelModelsModal({...channelModelsModal, open: false})} className="text-gray-400 hover:text-gray-600 transition-colors">
+                            <Icons.Close />
+                        </button>
+                    </div>
+                    
+                    <div className="flex-1 overflow-hidden flex">
+                        {/* Left: Available Models */}
+                        <div className="w-1/3 border-r border-gray-200 flex flex-col bg-gray-50">
+                            <div className="p-4 border-b border-gray-200">
+                                <input 
+                                    type="text" 
+                                    placeholder="搜索可用模型..." 
+                                    className="w-full px-3 py-2 border rounded-lg text-sm"
+                                    value={searchTerm}
+                                    onChange={e => setSearchTerm(e.target.value)}
+                                />
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                                {getAvailableModelsForChannel().map(m => {
+                                    const isAdded = channelModelsModal.list.some(x => x.name === m.name);
+                                    return (
+                                        <button 
+                                            key={m.id}
+                                            onClick={() => addModelToChannel(m)}
+                                            disabled={isAdded}
+                                            className={`w-full text-left px-4 py-3 rounded-lg text-sm transition-all flex justify-between items-center ${
+                                                isAdded ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white hover:bg-blue-50 hover:text-blue-700 shadow-sm'
+                                            }`}
+                                        >
+                                            <span>{m.name}</span>
+                                            {!isAdded && <span className="text-blue-500 font-bold">+</span>}
+                                            {isAdded && <span className="text-gray-400">✓</span>}
+                                        </button>
+                                    );
+                                })}
+                                {getAvailableModelsForChannel().length === 0 && (
+                                    <div className="text-center text-gray-400 text-sm p-4">没有匹配的模型</div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Right: Configured Models */}
+                        <div className="w-2/3 flex flex-col bg-white">
+                            <div className="p-4 border-b border-gray-200 bg-gray-50 flex justify-between items-center">
+                                <span className="font-semibold text-gray-700 text-sm">已绑定模型 ({channelModelsModal.list.length})</span>
+                                <span className="text-xs text-gray-500">配置 RPM 和计费模式</span>
+                            </div>
+                            <div className="flex-1 overflow-y-auto p-4">
+                                <table className="min-w-full divide-y divide-gray-200">
+                                    <thead>
+                                        <tr>
+                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">模型名称</th>
+                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase w-32">RPM</th>
+                                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase w-32">计费模式</th>
+                                            <th className="px-3 py-2 w-10"></th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {channelModelsModal.list.map((item, idx) => (
+                                            <tr key={idx} className="hover:bg-gray-50">
+                                                <td className="px-3 py-3 text-sm font-medium text-gray-900">{item.name}</td>
+                                                <td className="px-3 py-3">
+                                                    <input 
+                                                        type="number" 
+                                                        className="w-full px-2 py-1 border rounded text-sm"
+                                                        value={item.rpm}
+                                                        onChange={(e) => updateChannelModelConfig(idx, 'rpm', e.target.value)}
+                                                    />
+                                                </td>
+                                                <td className="px-3 py-3">
+                                                    <select 
+                                                        className="w-full px-2 py-1 border rounded text-sm bg-white"
+                                                        value={item.pricing_mode}
+                                                        onChange={(e) => updateChannelModelConfig(idx, 'pricing_mode', e.target.value)}
+                                                    >
+                                                        <option value="token">Token</option>
+                                                        <option value="second">Second</option>
+                                                        <option value="request">Request</option>
+                                                    </select>
+                                                </td>
+                                                <td className="px-3 py-3 text-right">
+                                                    <button 
+                                                        onClick={() => removeModelFromChannel(item.name)}
+                                                        className="text-red-400 hover:text-red-600"
+                                                    >
+                                                        <Icons.Close />
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                        {channelModelsModal.list.length === 0 && (
+                                            <tr>
+                                                <td colSpan="4" className="p-8 text-center text-gray-400 text-sm border-dashed border-2 border-gray-100 rounded-lg m-4">
+                                                    请从左侧选择要绑定的模型
+                                                </td>
+                                            </tr>
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="p-6 border-t border-gray-100 bg-gray-50 rounded-b-xl flex justify-end gap-3">
+                        <Button variant="secondary" onClick={() => setChannelModelsModal({...channelModelsModal, open: false})}>取消</Button>
+                        <Button onClick={saveChannelModels}>保存配置</Button>
+                    </div>
+                </div>
+            </div>
 
             {/* Model Modal */}
             <Modal
