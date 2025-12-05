@@ -6,16 +6,14 @@ window.Modules = window.Modules || {};
 window.Modules.Channels = () => {
     const [channels, setChannels] = useState([]);
     const [loading, setLoading] = useState(false);
-    const [models, setModels] = useState([]); // Needed for binding models
+    const [models, setModels] = useState([]);
 
-    // Modal States
     const [editModal, setEditModal] = useState({ open: false, isEdit: false });
     const [bindingModal, setBindingModal] = useState({ open: false, channel: null, list: [] });
     const [confirmModal, setConfirmModal] = useState({ open: false, id: null });
 
-    // Form States
     const [form, setForm] = useState({});
-    const [searchTerm, setSearchTerm] = useState(''); // For binding modal
+    const [searchTerm, setSearchTerm] = useState('');
 
     const API_BASE = '/api/admin';
 
@@ -40,12 +38,9 @@ window.Modules.Channels = () => {
         } catch (e) { console.error(e); }
     };
 
-    // --- CRUD Handlers ---
-
     const openEditModal = async (channel = null) => {
         if (channel) {
             try {
-                // Fetch full details
                 const res = await axios.get(API_BASE + '/channels/' + channel.id);
                 const fullData = res.data.data;
                 let extra = { endpoint: '', api_version: '' };
@@ -54,7 +49,7 @@ window.Modules.Channels = () => {
                 }
                 setForm({ ...fullData, extra_config: extra });
                 setEditModal({ open: true, isEdit: true });
-            } catch (e) { alert('获取详情失败'); }
+            } catch (e) { alert('Get details failed'); }
         } else {
             setForm({ 
                 name: '', type: 'vertex', credentials: '', 
@@ -73,7 +68,7 @@ window.Modules.Channels = () => {
             }
             setEditModal({ open: false });
             fetchChannels();
-        } catch (e) { alert('保存失败'); }
+        } catch (e) { alert('Save failed'); }
     };
 
     const deleteChannel = async () => {
@@ -81,12 +76,11 @@ window.Modules.Channels = () => {
             await axios.delete(API_BASE + '/channels/' + confirmModal.id);
             setConfirmModal({ open: false });
             fetchChannels();
-        } catch (e) { alert('删除失败'); }
+        } catch (e) { alert('Delete failed'); }
     };
 
     const toggleStatus = async (row) => {
         const newStatus = row.status ? 0 : 1;
-        // Optimistic update
         setChannels(channels.map(c => c.id === row.id ? { ...c, status: newStatus } : c));
         try {
             await axios.put(API_BASE + '/channels/' + row.id, { status: newStatus });
@@ -96,11 +90,9 @@ window.Modules.Channels = () => {
     const testConnection = async () => {
         try {
             const res = await axios.post(API_BASE + '/channels/test-connection', form);
-            if (res.data.success) alert('连接成功'); else alert('连接失败: ' + res.data.message);
-        } catch (e) { alert('测试出错'); }
+            if (res.data.success) alert('Connection successful'); else alert('Connection failed: ' + res.data.message);
+        } catch (e) { alert('Test error'); }
     };
-
-    // --- Binding Models Handlers ---
 
     const openBindingModal = (channel) => {
         let list = [];
@@ -153,10 +145,9 @@ window.Modules.Channels = () => {
             await axios.put(API_BASE + '/channels/' + bindingModal.channel.id, { models_config: configObj });
             setBindingModal({ open: false });
             fetchChannels();
-        } catch (e) { alert('保存配置失败'); }
+        } catch (e) { alert('Save config failed'); }
     };
 
-    // Helper to filter models for binding modal
     const getAvailableModels = () => {
         if (!bindingModal.channel) return [];
         const type = bindingModal.channel.type;
@@ -179,7 +170,7 @@ window.Modules.Channels = () => {
     return (
         <div className="space-y-6">
             <div className="flex justify-end">
-                <Button onClick={() => openEditModal()}>+ 新增渠道</Button>
+                <Button onClick={() => openEditModal()}>+ New Channel</Button>
             </div>
             
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
@@ -187,10 +178,10 @@ window.Modules.Channels = () => {
                     <thead className="bg-gray-50">
                         <tr>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">名称</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">类型</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">状态</th>
-                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">操作</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
+                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Action</th>
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
@@ -207,31 +198,30 @@ window.Modules.Channels = () => {
                                     <Switch checked={!!row.status} onChange={() => toggleStatus(row)} />
                                 </td>
                                 <td className="px-6 py-4 text-right text-sm font-medium">
-                                    <button onClick={() => openBindingModal(row)} className="text-indigo-600 hover:text-indigo-900 mr-4 border border-indigo-200 px-3 py-1 rounded bg-indigo-50">⚡ 绑定模型</button>
-                                    <button onClick={() => openEditModal(row)} className="text-blue-600 hover:text-blue-900 mr-4">编辑</button>
-                                    <button onClick={() => setConfirmModal({ open: true, id: row.id })} className="text-red-600 hover:text-red-900">删除</button>
+                                    <button onClick={() => openBindingModal(row)} className="text-indigo-600 hover:text-indigo-900 mr-4 border border-indigo-200 px-3 py-1 rounded bg-indigo-50">⚡ Models</button>
+                                    <button onClick={() => openEditModal(row)} className="text-blue-600 hover:text-blue-900 mr-4">Edit</button>
+                                    <button onClick={() => setConfirmModal({ open: true, id: row.id })} className="text-red-600 hover:text-red-900">Delete</button>
                                 </td>
                             </tr>
                         ))}
-                        {channels.length === 0 && !loading && <tr><td colSpan="5" className="p-8 text-center text-gray-400">暂无数据</td></tr>}
+                        {channels.length === 0 && !loading && <tr><td colSpan="5" className="p-8 text-center text-gray-400">No Data</td></tr>}
                     </tbody>
                 </table>
             </div>
 
-            {/* Edit Modal */}
             <Modal 
                 isOpen={editModal.open} 
-                title={editModal.isEdit ? "编辑渠道" : "新增渠道"} 
+                title={editModal.isEdit ? "Edit Channel" : "New Channel"} 
                 onClose={() => setEditModal({ open: false })}
                 footer={
                     <div className="flex justify-end gap-3">
-                        <Button variant="secondary" onClick={() => setEditModal({ open: false })}>取消</Button>
-                        <Button onClick={saveChannel}>保存</Button>
+                        <Button variant="secondary" onClick={() => setEditModal({ open: false })}>Cancel</Button>
+                        <Button onClick={saveChannel}>Save</Button>
                     </div>
                 }
             >
-                <Input label="渠道名称" value={form.name} onChange={v => setForm({...form, name: v})} />
-                <Select label="类型" value={form.type} onChange={v => setForm({...form, type: v})} className="relative z-50" options={[
+                <Input label="Name" value={form.name} onChange={v => setForm({...form, name: v})} />
+                <Select label="Type" value={form.type} onChange={v => setForm({...form, type: v})} className="relative z-50" options={[
                     { value: 'vertex', label: 'Google Vertex AI' },
                     { value: 'azure', label: 'Azure OpenAI' },
                     { value: 'openai', label: 'OpenAI' },
@@ -239,27 +229,27 @@ window.Modules.Channels = () => {
                     { value: 'qwen', label: 'Qwen' },
                     { value: 'deepseek', label: 'DeepSeek' }
                 ]} />
-                <Input label="凭证 (Credentials)" value={form.credentials} onChange={v => setForm({...form, credentials: v})} multiline rows={6} placeholder="JSON or Key" />
+                <Input label="Credentials" value={form.credentials} onChange={v => setForm({...form, credentials: v})} multiline rows={6} placeholder="JSON or Key" />
+                
                 {form.type === 'azure' && (
                     <div className="p-4 bg-blue-50 rounded mb-4">
                         <Input label="Endpoint" value={form.extra_config && form.extra_config.endpoint} onChange={v => setForm({...form, extra_config: {...form.extra_config, endpoint: v}})} />
                         <Input label="API Version" value={form.extra_config && form.extra_config.api_version} onChange={v => setForm({...form, extra_config: {...form.extra_config, api_version: v}})} />
                     </div>
                 )}
-                <Button onClick={testConnection} variant="secondary" className="w-full justify-center border-dashed">测试连接</Button>
+                
+                <Button onClick={testConnection} variant="secondary" className="w-full justify-center border-dashed">Test Connection</Button>
             </Modal>
 
-            {/* Binding Modal */}
-            <Modal size="xl" isOpen={bindingModal.open} title="绑定模型" onClose={() => setBindingModal({ open: false })} footer={
+            <Modal size="xl" isOpen={bindingModal.open} title="Bind Models" onClose={() => setBindingModal({ open: false })} footer={
                 <div className="flex justify-end gap-3">
-                    <Button variant="secondary" onClick={() => setBindingModal({ open: false })}>取消</Button>
-                    <Button onClick={saveBinding}>保存配置</Button>
+                    <Button variant="secondary" onClick={() => setBindingModal({ open: false })}>Cancel</Button>
+                    <Button onClick={saveBinding}>Save Config</Button>
                 </div>
             }>
                 <div className="flex h-[60vh]">
-                    {/* Left Panel */}
                     <div className="w-1/3 border-r bg-gray-50 flex flex-col">
-                        <div className="p-4 border-b"><input className="w-full px-3 py-2 border rounded" placeholder="搜索..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
+                        <div className="p-4 border-b"><input className="w-full px-3 py-2 border rounded" placeholder="Search..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} /></div>
                         <div className="flex-1 overflow-y-auto p-2 space-y-1">
                             {getAvailableModels().map(m => {
                                 const added = bindingModal.list.some(x => x.name === m.name);
@@ -272,9 +262,8 @@ window.Modules.Channels = () => {
                             })}
                         </div>
                     </div>
-                    {/* Right Panel */}
                     <div className="w-2/3 flex flex-col bg-white">
-                        <div className="p-4 border-b bg-gray-50 font-bold text-gray-700">已绑定 ({bindingModal.list.length})</div>
+                        <div className="p-4 border-b bg-gray-50 font-bold text-gray-700">Bound ({bindingModal.list.length})</div>
                         <div className="flex-1 overflow-y-auto p-4 pb-24">
                             <table className="w-full">
                                 <thead>
@@ -311,8 +300,7 @@ window.Modules.Channels = () => {
                 </div>
             </Modal>
 
-            {/* Confirm Delete */}
-            <ConfirmDialog isOpen={confirmModal.open} title="确认删除" message="确定要删除吗？" onCancel={() => setConfirmModal({ open: false })} onConfirm={deleteChannel} />
+            <ConfirmDialog isOpen={confirmModal.open} title="Confirm Delete" message="Are you sure?" onCancel={() => setConfirmModal({ open: false })} onConfirm={deleteChannel} />
         </div>
     );
 };
