@@ -100,7 +100,7 @@ class OAuth2MockServer {
         });
 
         // New Admin APIs
-        this.app.use(`${adminPath}`, adminRoutes);
+        this.app.use(`${apiPrefix}${adminPath}`, adminRoutes);
     }
 
     setupErrorHandling() {
