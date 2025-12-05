@@ -1,91 +1,127 @@
 const express = require('express');
+const jwt = require('jsonwebtoken');
+const { v4: uuidv4 } = require('uuid');
+const db = require('../config/db').dbPool;
+const logger = require('../services/LoggerService');
+
 const router = express.Router();
-const forge = require('node-forge');
-const Redis = require('ioredis');
-const mysql = require('mysql2/promise');
-const crypto = require('crypto');
 
-// 实例化资源 (实际项目中应注入)
-const redis = new Redis({ host: 'api-proxy-redis', port: 6379 });
-const dbPool = mysql.createPool({ host: 'mysql', user: 'root', password: 'password', database: 'ai_proxy' });
+module.exports = function(redisService, serviceAccountManager) {
 
-/**
- * 模拟 Google OAuth2 Token 端点
- * POST /oauth2/token
- * 
- * 客户端流程：
- * 1. 使用我们给它的私钥，签署一个 JWT (grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer)
- * 2. 将 JWT 发送到此接口
- */
-router.post('/token', async (req, res) => {
-    try {
-        const grantType = req.body.grant_type;
-        const assertion = req.body.assertion;
+    /**
+     * 辅助函数：简单负载均衡选择器
+     * 根据 sys_route_rules 选择一个合适的渠道
+     */
+    async function selectChannel(virtualKeyId) {
+        // 1. 查询该 Virtual Key 绑定的所有可用规则
+        const query = `
+            SELECT r.channel_id, r.weight, c.name 
+            FROM sys_route_rules r
+            JOIN sys_channels c ON r.channel_id = c.id
+            WHERE r.virtual_key_id = ? AND c.status = 1
+        `;
+        const [rules] = await db.query(query, [virtualKeyId]);
 
-        if (grantType !== 'urn:ietf:params:oauth:grant-type:jwt-bearer' || !assertion) {
-            return res.status(400).json({ error: 'invalid_grant', error_description: 'Invalid grant_type or missing assertion' });
+        if (rules.length === 0) {
+            throw new Error('No available channels for this key');
         }
 
-        // 1. 解析 JWT (不验证签名先拿到 header/payload)
-        const parts = assertion.split('.');
-        if (parts.length !== 3) {
-            return res.status(400).json({ error: 'invalid_request', error_description: 'Malformed JWT' });
-        }
-
-        const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString());
-        const clientEmail = payload.iss; // 客户端 Email，对应我们的 Virtual Key access_key
-
-        // 2. 查找对应的 Virtual Key
-        const [rows] = await dbPool.query(
-            'SELECT id, user_id, public_key FROM sys_virtual_keys WHERE access_key = ? AND type = "vertex" AND status = 1',
-            [clientEmail]
-        );
-
-        if (rows.length === 0) {
-            return res.status(400).json({ error: 'invalid_client', error_description: 'Client not found' });
-        }
-
-        const virtualKey = rows[0];
-
-        // 3. 验证签名 (使用库中存储的公钥)
-        // 注意：这里需要严格的 RSA-SHA256 验证逻辑，简化起见假设 verifyJWT 函数存在
-        // const isValid = verifyJWT(assertion, virtualKey.public_key);
-        // if (!isValid) throw ...
-        
-        // 这里做一个简单的模拟验证逻辑
-        if (!virtualKey.public_key) {
-             return res.status(500).json({ error: 'server_error', error_description: 'Public key missing' });
-        }
-        
-        // 4. 生成一个 Virtual Access Token
-        // 格式模拟 Google: ya29.xxxx...
-        const virtualAccessToken = 'ya29.virtual.' + crypto.randomBytes(32).toString('hex');
-
-        // 5. 将 Virtual Token 映射关系存入 Redis
-        // 这样 Lua 层拿到这个 Token 时，知道它属于哪个 Virtual Key ID
-        const tokenData = {
-            virtual_key_id: virtualKey.id,
-            user_id: virtualKey.user_id,
-            scope: payload.scope
-        };
-
-        // 存入 Redis，有效期 1 小时
-        await redis.set(`vtoken:${virtualAccessToken}`, JSON.stringify(tokenData), 'EX', 3600);
-
-        // 6. 确保路由规则已加载到 Redis (懒加载或同步)
-        // await syncRoutesToRedis(virtualKey.id);
-
-        // 7. 返回标准响应
-        res.json({
-            access_token: virtualAccessToken,
-            token_type: 'Bearer',
-            expires_in: 3600
-        });
-
-    } catch (error) {
-        console.error('OAuth2 Error:', error);
-        res.status(500).json({ error: 'internal_error' });
+        // 2. 简单随机权重算法 (也可以轮询)
+        const randomIndex = Math.floor(Math.random() * rules.length);
+        return rules[randomIndex];
     }
-});
 
-module.exports = router;
+    // POST /token
+    router.post('/token', async (req, res) => {
+        const grantType = req.body.grant_type;
+        const assertion = req.body.assertion; // 客户端签名的 JWT
+
+        // 1. 基础参数校验
+        if (grantType !== 'urn:ietf:params:oauth:grant-type:jwt-bearer' || !assertion) {
+            return res.status(400).json({ error: 'invalid_request', error_description: 'Missing grant_type or assertion' });
+        }
+
+        try {
+            // 2. 解码 JWT Header 获取 Key ID (kid) 或直接解码 payload 获取 iss (client_email)
+            const decoded = jwt.decode(assertion, { complete: true });
+            if (!decoded) {
+                return res.status(400).json({ error: 'invalid_grant', error_description: 'Invalid JWT format' });
+            }
+
+            const clientEmail = decoded.payload.iss; // 通常是 service account email
+            
+            // 3. 查找对应的 Virtual Key
+            const [keys] = await db.query(
+                "SELECT id, user_id, public_key, model_whitelist FROM sys_virtual_keys WHERE client_email = ? AND status = 1", 
+                [clientEmail]
+            );
+
+            if (keys.length === 0) {
+                logger.warn(`Token request for unknown email: ${clientEmail}`);
+                return res.status(401).json({ error: 'invalid_grant', error_description: 'Unknown client email' });
+            }
+
+            const vKey = keys[0];
+
+            // 4. 验证签名 (使用数据库中存的公钥)
+            try {
+                jwt.verify(assertion, vKey.public_key, { algorithms: ['RS256'] });
+            } catch (err) {
+                logger.warn(`Signature verification failed for user ${vKey.user_id}: ${err.message}`);
+                return res.status(401).json({ error: 'invalid_grant', error_description: 'Invalid JWT signature' });
+            }
+
+            // 5. 路由选择：选一个真实的 Vertex 渠道
+            let targetChannel;
+            try {
+                targetChannel = await selectChannel(vKey.id);
+            } catch (err) {
+                logger.warn(`No channels for user ${vKey.user_id}: ${err.message}`);
+                return res.status(503).json({ error: 'service_unavailable', error_description: 'No upstream channels available' });
+            }
+
+            // 6. 获取真实 Google Token (从 ServiceAccountManager 缓存拿)
+            let realToken;
+            try {
+                realToken = await serviceAccountManager.getValidToken(targetChannel.channel_id);
+            } catch (err) {
+                logger.error(`Failed to get real token: ${err.message}`);
+                return res.status(503).json({ error: 'service_unavailable', error_description: 'Upstream token error' });
+            }
+
+            // 7. 生成虚拟 Access Token
+            // 格式模拟 Google: ya29.virtual.<uuid>
+            const virtualAccessToken = 'ya29.virtual.' + uuidv4().replace(/-/g, '') + uuidv4().replace(/-/g, '');
+            const expiresIn = 3599; // 1小时 - 1秒
+
+            // 8. 建立映射关系存入 Redis (关键步骤)
+            const mappingData = {
+                real_token: realToken,
+                channel_id: targetChannel.channel_id,
+                user_id: vKey.user_id,
+                virtual_key_id: vKey.id
+            };
+
+            await redisService.set(
+                `vtoken:${virtualAccessToken}`, 
+                JSON.stringify(mappingData), 
+                expiresIn
+            );
+
+            logger.info(`Issued virtual token for user [${vKey.user_id}] mapped to channel [${targetChannel.channel_id}]`);
+
+            // 9. 返回响应
+            res.json({
+                access_token: virtualAccessToken,
+                token_type: 'Bearer',
+                expires_in: expiresIn
+            });
+
+        } catch (error) {
+            logger.error(`Token exchange unexpected error: ${error.message}`);
+            res.status(500).json({ error: 'internal_error' });
+        }
+    });
+
+    return router;
+};

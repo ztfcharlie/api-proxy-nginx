@@ -1,84 +1,111 @@
 const express = require('express');
-const fs = require('fs');
-const path = require('path');
 const router = express.Router();
-const LoggerService = require('../services/LoggerService');
+const { dbPool, redis } = require('../config/db');
+const SyncManager = require('../services/SyncManager');
 
-// Path logic to find map-config.json
-const getMapConfigPath = () => {
-    const possiblePaths = [
-        process.env.MAP_CONFIG_PATH, // Allow override
-        path.join(process.cwd(), 'map/map-config.json'), // Docker environment (process.cwd() is usually /app)
-        path.join(process.cwd(), '../data/map/map-config.json'), // Local dev if cwd is nodejs
-        path.join(__dirname, '../../../data/map/map-config.json'), // Relative to this file (nodejs/server/routes -> root -> data/map)
-        'D:\\www\\nginxzhuanfa\\end\\data\\map\\map-config.json' // Explicit absolute path as fallback/dev
-    ];
-    
-    for (const p of possiblePaths) {
-        if (p && fs.existsSync(p)) {
-            return p;
-        }
-    }
-    // Default for creation if not found
-    return possiblePaths[1]; 
-};
-
-/**
- * @route GET /api/map-config
- * @desc Get the current map configuration
- */
-router.get('/', (req, res) => {
+// 获取完整配置 (聚合 User, VirtualKeys, Channels)
+router.get('/', async (req, res) => {
     try {
-        const configPath = getMapConfigPath();
-        if (!fs.existsSync(configPath)) {
-             // If file doesn't exist, return a default structure or empty
-             return res.json({ 
-                 clients: [], 
-                 key_filename_gemini: [], 
-                 key_filename_claude: [] 
+        // 获取所有 Clients (Virtual Keys)
+        const [vKeys] = await dbPool.query(`
+            SELECT vk.id, vk.access_key as client_token, vk.type as service_type, vk.status
+            FROM sys_virtual_keys vk
+            WHERE vk.status = 1
+        `);
+
+        const clients = [];
+
+        for (const vk of vKeys) {
+            // 获取该 Key 绑定的 Channels
+            const [routes] = await dbPool.query(`
+                SELECT c.name as key_filename, r.weight as key_weight, r.model_whitelist
+                FROM sys_route_rules r
+                JOIN sys_channels c ON r.channel_id = c.id
+                WHERE r.virtual_key_id = ?
+            `, [vk.id]);
+
+            // 转换格式以适配前端 console.html
+            const clientData = {
+                client_token: vk.client_token,
+                enable: vk.status === 1,
+                service_type: vk.service_type,
+                key_filename_gemini: routes.map(r => ({
+                    key_filename: r.key_filename,
+                    key_weight: r.key_weight,
+                    models: r.model_whitelist || []
+                }))
+            };
+            clients.push(clientData);
+        }
+
+        // 获取所有 Channels 的模型配置 (适配前端格式)
+        const [channels] = await dbPool.query('SELECT name, type, credentials FROM sys_channels');
+        const key_filename_gemini = [];
+        
+        for (const ch of channels) {
+             // 简化的模型展示逻辑
+             key_filename_gemini.push({
+                 key_filename: ch.name,
+                 models: [] // 这里暂时留空，实际应从 DB 获取
              });
         }
-        const content = fs.readFileSync(configPath, 'utf8');
-        try {
-            const json = JSON.parse(content);
-            res.json(json);
-        } catch (e) {
-             LoggerService.error('Error parsing map config JSON:', e);
-             res.status(500).json({ error: 'Invalid JSON in config file' });
-        }
+
+        res.json({ clients, key_filename_gemini });
+
     } catch (error) {
-        LoggerService.error('Error reading map config:', error);
+        console.error('Map Config Get Error:', error);
         res.status(500).json({ error: error.message });
     }
 });
 
-/**
- * @route POST /api/map-config
- * @desc Update the map configuration
- */
-router.post('/', (req, res) => {
+// 保存配置 (这是一个复杂的事务操作)
+router.post('/', async (req, res) => {
+    const conn = await dbPool.getConnection();
     try {
-        const configPath = getMapConfigPath();
-        const newConfig = req.body;
-        
-        if (!newConfig || typeof newConfig !== 'object') {
-            return res.status(400).json({ error: 'Invalid configuration data' });
+        await conn.beginTransaction();
+        const { clients } = req.body; // 只处理 clients 部分的保存
+
+        // 简单粗暴策略：清空旧规则，写入新规则 (实际生产需优化)
+        // 1. 清理旧的 Virtual Keys
+        await conn.query('DELETE FROM sys_route_rules');
+        await conn.query('DELETE FROM sys_virtual_keys');
+
+        for (const client of clients) {
+            // 2. 创建 Virtual Key
+            const [res] = await conn.query(`
+                INSERT INTO sys_virtual_keys (user_id, access_key, type, status)
+                VALUES (1, ?, ?, ?)
+            `, [client.client_token, client.service_type, client.enable ? 1 : 0]);
+            
+            const vKeyId = res.insertId;
+
+            // 3. 创建路由规则
+            if (client.key_filename_gemini) {
+                for (const rule of client.key_filename_gemini) {
+                    // 查找 Channel ID (假设 name 唯一)
+                    const [chRows] = await conn.query('SELECT id FROM sys_channels WHERE name = ?', [rule.key_filename]);
+                    if (chRows.length > 0) {
+                        await conn.query(`
+                            INSERT INTO sys_route_rules (virtual_key_id, channel_id, weight, model_whitelist)
+                            VALUES (?, ?, ?, ?)
+                        `, [vKeyId, chRows[0].id, rule.key_weight || 10, JSON.stringify(rule.models || [])]);
+                    }
+                }
+            }
         }
+
+        await conn.commit();
         
-        // Create directory if it doesn't exist
-        const dir = path.dirname(configPath);
-        if (!fs.existsSync(dir)) {
-            fs.mkdirSync(dir, { recursive: true });
-        }
-        
-        // Write to file
-        fs.writeFileSync(configPath, JSON.stringify(newConfig, null, 2), 'utf8');
-        
-        LoggerService.info(`Map config updated successfully at ${configPath}`);
-        res.json({ success: true, message: 'Configuration saved' });
+        // 触发 Redis 同步
+        new SyncManager().syncAll();
+
+        res.json({ success: true });
     } catch (error) {
-        LoggerService.error('Error writing map config:', error);
+        await conn.rollback();
+        console.error('Map Config Save Error:', error);
         res.status(500).json({ error: error.message });
+    } finally {
+        conn.release();
     }
 });
 
