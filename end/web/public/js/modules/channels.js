@@ -341,27 +341,27 @@ window.Modules.Channels = () => {
                                 <tbody className="text-sm">
                                     {bindingModal.list.map((item, idx) => (
                                         <tr key={idx} className="border-b last:border-0">
-                                            <td className="py-2 pr-2">{item.name}</td>
+                                            <td className="py-2 pr-2 align-middle">{item.name}</td>
                                             {bindingModal.channel && bindingModal.channel.type === 'vertex' && (
-                                                <td className="py-2 pr-2"><input className="w-full border rounded px-2 py-1" value={item.region} onChange={e => updateBindingConfig(idx, 'region', e.target.value)} /></td>
+                                                <td className="py-2 pr-2 align-middle"><input className="w-full border rounded px-2 h-9" value={item.region} onChange={e => updateBindingConfig(idx, 'region', e.target.value)} /></td>
                                             )}
-                                            <td className="py-2 pr-2">
+                                            <td className="py-2 pr-2 align-middle">
                                                 <input 
                                                     type="text" 
-                                                    className="w-32 border border-gray-300 rounded px-2 py-1 text-right focus:ring-blue-500 focus:border-blue-500" 
+                                                    className="w-32 border border-gray-300 rounded px-2 h-9 text-right focus:ring-blue-500 focus:border-blue-500" 
                                                     value={item.rpm} 
                                                     onChange={e => updateBindingConfig(idx, 'rpm', e.target.value.replace(/[^0-9]/g, ''))} 
                                                 />
                                             </td>
-                                            <td className="py-2 pr-2">
+                                            <td className="py-2 pr-2 align-middle">
                                                 <Select value={item.pricing_mode} onChange={v => updateBindingConfig(idx, 'pricing_mode', v)} className="mb-0" options={[
                                                     { value: 'token', label: 'Token' }, { value: 'request', label: 'Request' }, { value: 'second', label: 'Second' }
                                                 ]} />
                                             </td>
-                                            <td className="py-2 pr-2">
+                                            <td className="py-2 pr-2 align-middle">
                                                 <button onClick={() => testModel(item.name)} className="text-blue-600 hover:underline text-xs">Test</button>
                                             </td>
-                                            <td className="py-2 text-right">
+                                            <td className="py-2 text-right align-middle">
                                                 <button onClick={() => removeModelFromBinding(item.name)} className="text-red-500"><Icons.Close /></button>
                                             </td>
                                         </tr>
