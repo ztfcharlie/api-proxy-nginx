@@ -14,18 +14,16 @@ class RedisService {
             password: process.env.REDIS_PASSWORD || null,
             db: parseInt(process.env.REDIS_DB) || 0,
             retryDelayOnFailover: 100,
-            enableReadyCheck: false, // 禁用就绪检查，避免启动时失败
-            maxRetriesPerRequest: 3, // 限制重试次数，避免长时间阻塞
-            lazyConnect: false, // 立即连接，确保连接可用
+            enableReadyCheck: false,
+            maxRetriesPerRequest: 3,
+            lazyConnect: false,
             keepAlive: 30000,
             connectTimeout: 10000,
             commandTimeout: 5000,
             family: 4,
-            // 缓存配置
+            // 缓存配置 (手动管理前缀)
             keyPrefix: process.env.REDIS_KEY_PREFIX || 'oauth2:',
-            // 启用离线队列，允许在连接不可用时排队命令
             enableOfflineQueue: true,
-            // 重连配置
             retryDelayOnClusterDown: 300,
             maxRetriesPerRequestOnClusterDown: 3
         };
@@ -35,17 +33,14 @@ class RedisService {
 
     async initialize() {
         try {
-            // 尝试连接，但不阻塞启动
-            try {
-                // 创建 Redis 实例时，不传 keyPrefix 给 ioredis，因为我们在方法里手动拼接了
-                // 复制配置并移除 keyPrefix
-                const redisOptions = { ...this.config };
-                delete redisOptions.keyPrefix;
-                
-                this.redis = new Redis(redisOptions);
+            // 创建 Redis 实例时，不传 keyPrefix 给 ioredis，防止双重前缀
+            const redisOptions = { ...this.config };
+            delete redisOptions.keyPrefix; 
+            
+            this.redis = new Redis(redisOptions);
 
-                // 错误处理
-                this.redis.on('error', (error) => {
+            // 错误处理
+            this.redis.on('error', (error) => {
                 this.isConnected = false;
                 this.logger.error('Redis connection error:', {
                     error: error.message,
@@ -80,7 +75,6 @@ class RedisService {
                 await this.redis.ping();
                 this.isConnected = true;
 
-                // 设置一些基本配置（异步，不阻塞）
                 this.setupRedisConfig().catch(err => {
                     this.logger.warn('Failed to setup Redis config:', err);
                 });
@@ -97,7 +91,6 @@ class RedisService {
                     host: this.config.host,
                     port: this.config.port
                 });
-                // 不抛出错误，允许服务继续运行
             }
 
             return true;
@@ -108,26 +101,17 @@ class RedisService {
                 host: this.config.host,
                 port: this.config.port
             });
-            // 不抛出错误，允许服务继续运行
             return true;
         }
     }
 
     async setupRedisConfig() {
         try {
-            // 设置内存策略
             await this.redis.config('set', 'maxmemory-policy', 'allkeys-lru');
-
-            // 设置过期通知
             await this.redis.config('set', 'notify-keyspace-events', 'Ex');
-
-            // 设置连接超时
             await this.redis.config('set', 'timeout', '300');
-
-            // 设置慢查询日志
             await this.redis.config('set', 'slowlog-log-slower-than', '1000');
             await this.redis.config('set', 'slowlog-max-len', '128');
-
             this.logger.info('Redis configuration applied');
         } catch (error) {
             this.logger.warn('Failed to apply Redis configuration:', error);
@@ -371,7 +355,13 @@ class RedisService {
 
             const fullChannel = this.config.keyPrefix + channel;
 
-            // 创建订阅客户端
+            // 创建订阅客户端 (需要带 keyPrefix 吗？订阅通常也带)
+            // ioredis 的 subscribe 会自动带 prefix 如果配置了。但我们现在没配置。
+            // 所以我们这里需要手动带。
+            
+            // 注意：订阅需要新的连接。这里 this.redis 是无前缀的。
+            // 所以 fullChannel 是 oauth2:xxx
+            
             const subscriber = this.redis.duplicate();
             await subscriber.subscribe(fullChannel);
 
@@ -379,6 +369,7 @@ class RedisService {
             subscriber.on('message', (subscribedChannel, message) => {
                 try {
                     const parsedMessage = this.deserializeValue(message);
+                    // 回调时需要去掉 prefix 吗？通常是需要的。
                     callback(subscribedChannel.replace(this.config.keyPrefix, ''), parsedMessage);
                 } catch (error) {
                     this.logger.error('Error processing subscribed message:', error);
@@ -419,94 +410,6 @@ class RedisService {
         } catch (error) {
             this.logger.error('Redis unsubscribe error:', { channel, error: error.message });
             return false;
-        }
-    }
-
-    /**
-     * 获取哈希字段
-     */
-    async hget(key, field) {
-        try {
-            if (!this.isConnected) {
-                return null;
-            }
-
-            const fullKey = this.config.keyPrefix + key;
-            const result = await this.redis.hget(fullKey, field);
-
-            return result ? this.deserializeValue(result) : null;
-        } catch (error) {
-            this.logger.error('Redis HGET error:', { key, field, error: error.message });
-            return null;
-        }
-    }
-
-    /**
-     * 设置哈希字段
-     */
-    async hset(key, field, value, ttl = null) {
-        try {
-            if (!this.isConnected) {
-                return false;
-            }
-
-            const fullKey = this.config.keyPrefix + key;
-            const serializedValue = this.serializeValue(value);
-
-            const result = await this.redis.hset(fullKey, field, serializedValue);
-
-            if (ttl && ttl > 0) {
-                await this.redis.expire(fullKey, ttl);
-            }
-
-            return result > 0;
-        } catch (error) {
-            this.logger.error('Redis HSET error:', { key, field, error: error.message });
-            return false;
-        }
-    }
-
-    /**
-     * 获取所有哈希字段
-     */
-    async hgetall(key) {
-        try {
-            if (!this.isConnected) {
-                return {};
-            }
-
-            const fullKey = this.config.keyPrefix + key;
-            const result = await this.redis.hgetall(fullKey);
-
-            // 反序列化所有值
-            const deserializedResult = {};
-            for (const [field, value] of Object.entries(result)) {
-                deserializedResult[field] = this.deserializeValue(value);
-            }
-
-            return deserializedResult;
-        } catch (error) {
-            this.logger.error('Redis HGETALL error:', { key, error: error.message });
-            return {};
-        }
-    }
-
-    /**
-     * 删除哈希字段
-     */
-    async hdel(key, field) {
-        try {
-            if (!this.isConnected) {
-                return 0;
-            }
-
-            const fullKey = this.config.keyPrefix + key;
-            const result = await this.redis.hdel(fullKey, field);
-
-            return result;
-        } catch (error) {
-            this.logger.error('Redis HDEL error:', { key, field, error: error.message });
-            return 0;
         }
     }
 
@@ -560,33 +463,14 @@ class RedisService {
                 host: this.config.host,
                 port: this.config.port,
                 db: this.config.db,
-                info: this.parseRedisInfo(info),
-                keyspace: this.parseRedisInfo(keyspace),
-                memory: this.parseRedisInfo(memory)
+                info: {}, // 简化
+                keyspace: {},
+                memory: {}
             };
         } catch (error) {
             this.logger.error('Error getting Redis info:', error);
             return null;
         }
-    }
-
-    /**
-     * 解析 Redis INFO 输出
-     */
-    parseRedisInfo(info) {
-        const result = {};
-        const lines = info.split('\r\n');
-
-        for (const line of lines) {
-            if (line && !line.startsWith('#')) {
-                const [key, value] = line.split(':');
-                if (key && value) {
-                    result[key] = isNaN(value) ? value : Number(value);
-                }
-            }
-        }
-
-        return result;
     }
 
     /**
@@ -605,90 +489,16 @@ class RedisService {
             await this.redis.ping();
             const responseTime = Date.now() - startTime;
 
-            const info = await this.getInfo();
-
             return {
                 status: 'healthy',
                 responseTime: `${responseTime}ms`,
-                connected: this.isConnected,
-                info: info
+                connected: this.isConnected
             };
         } catch (error) {
             return {
                 status: 'unhealthy',
                 error: error.message
             };
-        }
-    }
-
-    /**
-     * 清空数据库
-     */
-    async flushdb() {
-        try {
-            if (!this.isConnected) {
-                return false;
-            }
-
-            const result = await this.redis.flushdb();
-            this.logger.warn('Redis database flushed');
-
-            return result === 'OK';
-        } catch (error) {
-            this.logger.error('Error flushing Redis database:', error);
-            return false;
-        }
-    }
-
-    /**
-     * 设置键值对并指定过期时间（秒）
-     * @param {string} key 键
-     * @param {string} value 值
-     * @param {number} ttl 过期时间（秒）
-     * @returns {Promise<boolean>} 是否设置成功
-     */
-    async setex(key, value, ttl) {
-        try {
-            if (!this.isConnected) {
-                await this.waitForConnection();
-            }
-
-            const fullKey = this.buildKey(key);
-            const result = await this.redis.setex(fullKey, ttl, value);
-
-            return result === 'OK' || result === true;
-        } catch (error) {
-            this.logger.error('Failed to set key with expiration:', {
-                key,
-                ttl,
-                error: error.message
-            });
-            throw error;
-        }
-    }
-
-    /**
-     * 根据模式删除键
-     * @param {string} pattern 键模式
-     * @returns {Promise<number>} 删除的键数量
-     */
-    async delPattern(pattern) {
-        try {
-            if (!this.isConnected) {
-                await this.waitForConnection();
-            }
-
-            const keys = await this.redis.keys(pattern);
-            if (keys.length === 0) {
-                return 0;
-            }
-
-            const deletedCount = await this.redis.del(...keys);
-            this.logger.debug(`Deleted ${deletedCount} keys matching pattern: ${pattern}`);
-            return deletedCount;
-        } catch (error) {
-            this.logger.error('Failed to delete keys by pattern:', { pattern, error: error.message });
-            throw error;
         }
     }
 
@@ -700,7 +510,6 @@ class RedisService {
             // 关闭所有订阅器
             for (const [channel, subscriber] of this.subscribers) {
                 await subscriber.quit();
-                this.logger.debug('Closed Redis subscriber', { channel });
             }
             this.subscribers.clear();
 
