@@ -1,18 +1,7 @@
-const express = require('express');
-const cors = require('cors');
-const helmet = require('helmet');
-const compression = require('compression');
-const morgan = require('morgan');
-const path = require('path');
-require('dotenv').config();
-
 // 导入服务和中间件
 const DatabaseService = require('./services/DatabaseService');
 const RedisService = require('./services/RedisService');
 const LoggerService = require('./services/LoggerService');
-const OAuth2Service = require('./services/OAuth2Service');
-const TokenService = require('./services/TokenService');
-const TokenMappingService = require('./services/TokenMappingService');
 const ServiceAccountManager = require('./services/ServiceAccountManager'); 
 const SyncManager = require('./services/SyncManager');
 const { CacheService } = require('./services/CacheService');
@@ -22,7 +11,6 @@ const { loggingMiddleware } = require('./middleware/logging');
 
 // 导入路由
 const indexRoutes = require('./routes/index');
-const oauth2Routes = require('./routes/oauth2');
 const oauth2MockRoutes = require('./routes/oauth2_mock');
 const adminRoutes = require('./routes/admin/index'); // New Admin Structure
 const healthRoutes = require('./routes/health');
@@ -94,11 +82,6 @@ class OAuth2MockServer {
             }
         });
 
-        this.app.use('/accounts.google.com', (req, res, next) => {
-            req.services = this.services;
-            oauth2Routes(req, res, next);
-        });
-
         // New Admin APIs
         this.app.use(`${apiPrefix}${adminPath}`, adminRoutes);
     }
@@ -126,23 +109,6 @@ class OAuth2MockServer {
 
             this.services.cache = new CacheService();
             await this.services.cache.initialize();
-
-            this.services.token = new TokenService(
-                this.services.database, 
-                this.services.cache
-            );
-
-            this.services.tokenMapping = new TokenMappingService(
-                this.services.redis
-            );
-
-            this.services.oauth2 = new OAuth2Service(
-                this.services.database,
-                this.services.token,
-                this.services.cache,
-                this.services.redis,
-                this.services.tokenMapping
-            );
 
             // --- ServiceAccountManager ---
             ServiceAccountManager.initialize(this.services.redis);
