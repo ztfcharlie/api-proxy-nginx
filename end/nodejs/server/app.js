@@ -1,3 +1,11 @@
+const express = require('express');
+const cors = require('cors');
+const helmet = require('helmet');
+const compression = require('compression');
+const morgan = require('morgan');
+const path = require('path');
+require('dotenv').config();
+
 // 导入服务和中间件
 const DatabaseService = require('./services/DatabaseService');
 const RedisService = require('./services/RedisService');
