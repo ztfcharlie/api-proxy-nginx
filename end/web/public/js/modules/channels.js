@@ -60,6 +60,10 @@ window.Modules.Channels = () => {
     };
 
     const saveChannel = async () => {
+        if (!form.name || !form.type || !form.credentials) {
+            alert('Please fill in Name, Type and Credentials');
+            return;
+        }
         try {
             if (editModal.isEdit) {
                 await axios.put(API_BASE + '/channels/' + form.id, form);

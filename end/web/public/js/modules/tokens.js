@@ -56,6 +56,10 @@ window.Modules.Tokens = () => {
     };
 
     const saveToken = async () => {
+        if (!form.name || form.name.trim() === '') {
+            alert('Please enter a Token Name');
+            return;
+        }
         try {
             const payload = {
                 ...form,

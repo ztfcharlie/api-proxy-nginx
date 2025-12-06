@@ -76,6 +76,11 @@ class ServiceAccountManager {
                 credentials = JSON.parse(credentials);
             }
 
+            // 修复私钥格式 (将字面量 \n 转换为实际换行符)
+            if (credentials.private_key) {
+                credentials.private_key = credentials.private_key.replace(/\\n/g, '\n');
+            }
+
             // 2. 使用 Google Auth Library 获取 Token
             const auth = new GoogleAuth({
                 credentials,

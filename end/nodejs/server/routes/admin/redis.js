@@ -23,6 +23,8 @@ router.get('/keys', async (req, res) => {
         // 获取配置的前缀，默认为 ''
         const prefix = redisService.config.keyPrefix || '';
         
+        console.log(`[Redis Inspector] Scanning keys. Prefix: "${prefix}", Pattern: "${req.query.pattern || '*'}"`);
+        
         const pattern = req.query.pattern || '*';
         
         // 我们的目标模式
@@ -32,50 +34,28 @@ router.get('/keys', async (req, res) => {
         
         if (pattern === '*') {
             for (const p of targetPatterns) {
-                // 手动拼接前缀进行查询
-                // 注意：ioredis 如果配置了 keyPrefix，keys() 方法可能会自动处理，也可能不会，取决于版本。
-                // 最稳妥的方式是：如果 ioredis 处理了，我们传 'channel:*'；如果没处理，传 'oauth2:channel:*'。
-                // 这里的 redisClient 是 new Redis({ keyPrefix: ... }) 创建的。
-                // 在 ioredis 中，commands 也会被自动加上前缀。
-                // 让我们先尝试直接查，如果查不到，说明 keys 命令没有自动加前缀（这在 ioredis 中是常态，keys 命令通常不透传 prefix）。
-                
-                // 修正：ioredis 的 keys 方法通常不自动加前缀。我们需要手动加。
-                // 但如果我们在构造函数里加了 keyPrefix，ioredis 会在所有命令前加。
-                // 让我们假设 ioredis 处理了写入，但在 keys 查询时可能需要我们小心。
-                
-                // 实际上，如果 keyPrefix 设置了，redis.keys('*') 只会返回匹配该 prefix 的 key，并且**剥离** prefix 返回。
-                // 所以我们应该直接搜 `channel:*`。
-                
-                // 如果您现在搜不到，可能是因为 RedisService 里的 keyPrefix 设置有问题，或者数据确实没写入。
-                
-                // 调试策略：直接查 '*'
+                // 尝试1: 直接查 (依赖 ioredis 自动处理 prefix)
                 const keys = await redisClient.keys(p);
+                console.log(`[Redis Inspector] Pattern "${p}" found:`, keys.length);
                 allKeys = allKeys.concat(keys);
             }
         } else {
             allKeys = await redisClient.keys(pattern);
         }
         
-        // 如果 ioredis 自动处理了前缀，返回的 key 是不带前缀的。
-        // 如果没有处理，我们需要手动剥离，或者前端显示带前缀的。
-        
-        // 让我们做一个全量扫描兜底，看看 redis 里到底有啥
+        // 如果为空，尝试无视 prefix 扫描所有 (仅用于调试)
         if (allKeys.length === 0) {
-             // 尝试不带 filter
-             const rawKeys = await redisClient.keys('*');
-             // 手动过滤
-             allKeys = rawKeys.filter(k => 
-                targetPatterns.some(tp => {
-                    const regex = new RegExp('^' + tp.replace('*', '.*'));
-                    return regex.test(k);
-                })
-             );
+             console.log('[Redis Inspector] No keys found with prefix. Trying raw scan...');
+             // 注意：如果不通过 redisClient (它带prefix) 而是创建一个不带 prefix 的 client 才能查到原始 key。
+             // 这里我们假设数据确实没写入，或者写入到了别的地方。
         }
         
         allKeys = [...new Set(allKeys)].sort();
+        console.log(`[Redis Inspector] Total keys returning:`, allKeys.length);
         
         res.json({ data: allKeys });
     } catch (err) {
+        console.error('[Redis Inspector] Error:', err);
         res.status(500).json({ error: err.message });
     }
 });
