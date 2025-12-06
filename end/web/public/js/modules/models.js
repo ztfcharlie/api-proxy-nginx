@@ -47,7 +47,10 @@ window.Modules.Models = () => {
             await axios.delete(API_BASE + '/models/' + confirm.id);
             setConfirm({ open: false });
             fetchModels();
-        } catch (e) { alert('删除失败'); }
+        } catch (e) { 
+            const msg = e.response?.data?.error || e.message;
+            alert('删除失败: ' + msg);
+        }
     };
 
     return (

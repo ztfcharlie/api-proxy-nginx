@@ -75,14 +75,18 @@ module.exports = function(redisService, serviceAccountManager) {
             
             // 3. 查找对应的 Virtual Token
             // Vertex 的 client_email 存储在 token_key 字段
+            // 增强：同时检查用户状态 (u.status = 1)
             const [tokens] = await db.query(
-                "SELECT id, user_id, public_key, limit_config FROM sys_virtual_tokens WHERE token_key = ? AND status = 1 AND type = 'vertex'", 
+                `SELECT t.id, t.user_id, t.public_key, t.limit_config 
+                 FROM sys_virtual_tokens t
+                 JOIN sys_users u ON t.user_id = u.id
+                 WHERE t.token_key = ? AND t.status = 1 AND u.status = 1 AND t.type = 'vertex'`, 
                 [clientEmail]
             );
 
             if (tokens.length === 0) {
-                logger.warn(`Token request for unknown email: ${clientEmail}`);
-                return res.status(401).json({ error: 'invalid_grant', error_description: 'Unknown client email' });
+                logger.warn(`Token request rejected (Invalid email, disabled token, or disabled user): ${clientEmail}`);
+                return res.status(401).json({ error: 'invalid_grant', error_description: 'Invalid or disabled client' });
             }
 
             const vToken = tokens[0];
@@ -132,6 +136,17 @@ module.exports = function(redisService, serviceAccountManager) {
                 JSON.stringify(mappingData), 
                 expiresIn
             );
+
+            // 建立反向索引：记录该用户下的所有活动 Token
+            // 这样在禁用用户时，可以快速找到并删除所有 Token
+            try {
+                const userTokensKey = `user_tokens:${vToken.user_id}`;
+                await redisService.redis.sadd(redisService.config.keyPrefix + userTokensKey, virtualAccessToken);
+                // 刷新过期时间 (至少比 Token 长)
+                await redisService.redis.expire(redisService.config.keyPrefix + userTokensKey, 86400);
+            } catch (err) {
+                logger.warn(`Failed to index user token: ${err.message}`);
+            }
 
             logger.info(`Issued virtual token for user [${vToken.user_id}] mapped to channel [${targetChannel.channel_id}]`);
 

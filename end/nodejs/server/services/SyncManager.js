@@ -218,9 +218,43 @@ class SyncManager {
                 return;
             }
 
+            // 2. 检查用户状态 (级联)
             const [users] = await db.query("SELECT status FROM sys_users WHERE id = ?", [token.user_id]);
             if (users.length === 0 || users[0].status === 0) {
-                if (token.type !== 'vertex') await this.redis.delete(`apikey:${token.token_key}`);
+                if (token.type !== 'vertex') {
+                    await this.redis.delete(`apikey:${token.token_key}`);
+                } else {
+                    // Vertex: 通过反向索引清理所有活动的 Access Token
+                    // Key: user_tokens:{user_id}
+                    const userTokensKey = `user_tokens:${token.user_id}`;
+                    // RedisService.redis 是 ioredis 实例 (无前缀配置), 但我们在 RedisService.js 里把 keyPrefix 删了
+                    // 等等，RedisService 的 config 里还有 keyPrefix ('oauth2:')，只是没传给 ioredis。
+                    // 意味着 RedisService 的方法会自动加。但 ioredis 直接调用不会。
+                    
+                    // 获取前缀
+                    const prefix = this.redis.config.keyPrefix; 
+                    
+                    try {
+                        // 使用 ioredis 直接操作 (因为 RedisService 没有 smembers)
+                        const fullSetKey = prefix + userTokensKey;
+                        const vtokens = await this.redis.redis.smembers(fullSetKey);
+                        
+                        if (vtokens.length > 0) {
+                            const pipeline = this.redis.redis.pipeline();
+                            // 批量删除 vtoken
+                            for (const vt of vtokens) {
+                                pipeline.del(prefix + `vtoken:${vt}`);
+                            }
+                            // 删除索引本身
+                            pipeline.del(fullSetKey);
+                            
+                            await pipeline.exec();
+                            logger.info(`[SyncManager] Revoked ${vtokens.length} active Vertex tokens for disabled user ${token.user_id}`);
+                        }
+                    } catch (err) {
+                        logger.error(`[SyncManager] Failed to revoke Vertex tokens: ${err.message}`);
+                    }
+                }
                 return;
             }
 

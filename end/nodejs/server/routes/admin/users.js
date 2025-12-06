@@ -67,4 +67,24 @@ router.put('/:id', async (req, res) => {
     }
 });
 
+/**
+ * 删除用户
+ */
+router.delete('/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        // 1. 检查是否有关联的 Tokens
+        const [tokens] = await db.query("SELECT id FROM sys_virtual_tokens WHERE user_id = ?", [id]);
+        if (tokens.length > 0) {
+            return res.status(400).json({ error: "Cannot delete user: User has associated tokens. Please delete tokens first." });
+        }
+
+        // 2. 删除用户
+        await db.query("DELETE FROM sys_users WHERE id = ?", [id]);
+        res.json({ message: "User deleted successfully" });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 module.exports = router;
