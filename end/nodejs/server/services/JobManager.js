@@ -104,7 +104,38 @@ class JobManager {
             const duration = Date.now() - startTime;
             job.status = 'idle';
             job.lastRun = new Date();
+            job.lastResult = `Manual Run Success (${duration}ms)`;
+            
             logger.info(`[JobManager] Manual job completed: ${name} in ${duration}ms`);
+
+            // 重置定时器，让下一次自动执行从现在开始计算
+            if (job.timer) clearInterval(job.timer);
+            
+            const run = async () => {
+                job.status = 'running';
+                const t0 = Date.now();
+                logger.info(`[JobManager] Starting job: ${name}`);
+                try {
+                    await job.callback();
+                    const d = Date.now() - t0;
+                    job.status = 'idle';
+                    job.lastRun = new Date();
+                    job.lastResult = `Success (${d}ms)`;
+                    job.nextRun = new Date(Date.now() + job.interval);
+                    logger.info(`[JobManager] Job completed: ${name} in ${d}ms`);
+                } catch (err) {
+                    const d = Date.now() - t0;
+                    job.status = 'failed';
+                    job.lastRun = new Date();
+                    job.lastResult = `Failed: ${err.message}`;
+                    job.nextRun = new Date(Date.now() + job.interval);
+                    logger.error(`[JobManager] Job failed: ${name} in ${d}ms. Error: ${err.message}`);
+                }
+            };
+            
+            job.timer = setInterval(run, job.interval);
+            job.nextRun = new Date(Date.now() + job.interval);
+
         } catch (error) {
             const duration = Date.now() - startTime;
             job.status = 'failed';

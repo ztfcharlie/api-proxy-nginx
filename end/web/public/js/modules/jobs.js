@@ -36,10 +36,27 @@ window.Modules.Jobs = () => {
     };
 
     const editInterval = async (job) => {
-        const newInterval = prompt(`Enter new interval for ${job.name} (ms):`, job.interval);
-        if (newInterval && !isNaN(newInterval)) {
+        const currentMin = Math.round(job.interval / 60000);
+        const input = prompt(`Enter new interval for ${job.name}\nExamples: "5" (5 mins), "30s" (30 secs), "500ms"`, currentMin);
+        
+        if (input) {
+            let ms = 0;
+            const val = parseFloat(input);
+            if (isNaN(val)) return alert('Invalid number');
+
+            if (input.toLowerCase().endsWith('ms')) {
+                ms = val;
+            } else if (input.toLowerCase().endsWith('s')) {
+                ms = val * 1000;
+            } else {
+                // Default to minutes
+                ms = val * 60 * 1000;
+            }
+
+            if (ms < 1000) return alert('Interval too short (min 1s)');
+
             try {
-                await axios.put(`${API_BASE}/${job.name}/interval`, { interval: parseInt(newInterval) });
+                await axios.put(`${API_BASE}/${job.name}/interval`, { interval: ms });
                 fetchJobs();
             } catch (e) { alert('Update failed: ' + e.message); }
         }
