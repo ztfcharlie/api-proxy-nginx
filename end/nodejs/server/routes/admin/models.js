@@ -79,6 +79,25 @@ router.put('/:id', async (req, res) => {
  */
 router.delete('/:id', async (req, res) => {
     try {
+        // 1. 获取模型名称
+        const [models] = await db.query("SELECT name FROM sys_models WHERE id = ?", [req.params.id]);
+        if (models.length === 0) return res.json({ message: "Model not found" });
+        const modelName = models[0].name;
+
+        // 2. 检查引用 (简单 JSON 字符串匹配)
+        // models_config 是一个对象: {"model-name": ...}
+        // 我们查找 key 为 modelName 的情况
+        const searchPattern = `%"${modelName}":%`;
+        const [channels] = await db.query("SELECT name FROM sys_channels WHERE models_config LIKE ?", [searchPattern]);
+
+        if (channels.length > 0) {
+            const channelNames = channels.map(c => c.name).join(', ');
+            return res.status(400).json({ 
+                error: `无法删除: 该模型已被以下渠道绑定: ${channelNames}` 
+            });
+        }
+
+        // 3. 删除
         await db.query("DELETE FROM sys_models WHERE id = ?", [req.params.id]);
         res.json({ message: "Model deleted" });
     } catch (err) {

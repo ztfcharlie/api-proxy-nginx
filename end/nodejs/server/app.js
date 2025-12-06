@@ -127,6 +127,8 @@ class OAuth2MockServer {
             SyncManager.initialize(this.services.redis);
             // 异步执行同步
             SyncManager.performFullSync(); 
+            // 启动一致性看门狗
+            SyncManager.startReconciliationJob();
 
             // Mock Router
             this.mockRouter = oauth2MockRoutes(this.services.redis, ServiceAccountManager);

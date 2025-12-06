@@ -1,6 +1,7 @@
 const { GoogleAuth } = require('google-auth-library');
 const db = require('../config/db').dbPool;
 const logger = require('./LoggerService');
+const jobManager = require('./JobManager');
 
 class ServiceAccountManager {
     constructor() {
@@ -35,13 +36,15 @@ class ServiceAccountManager {
         this.isRunning = true;
         logger.info('Starting Service Account Token Refresh Job...');
 
+        const job = async () => {
+            await this.refreshAllTokens();
+        };
+        
         // 立即执行一次
-        this.refreshAllTokens();
+        job(); // Execute immediately
 
         // 设置定时任务
-        setInterval(() => {
-            this.refreshAllTokens();
-        }, this.REFRESH_INTERVAL);
+        jobManager.schedule('ServiceAccountTokenRefreshJob', this.REFRESH_INTERVAL, job);
     }
 
     /**

@@ -1,6 +1,7 @@
 const db = require('../config/db').dbPool;
 const logger = require('./LoggerService');
 const serviceAccountManager = require('./ServiceAccountManager');
+const jobManager = require('./JobManager');
 
 class SyncManager {
     constructor() {
@@ -9,6 +10,45 @@ class SyncManager {
 
     initialize(redisService) {
         this.redis = redisService;
+    }
+
+    /**
+     * 启动数据一致性校准任务 (Watchdog)
+     */
+    startReconciliationJob() {
+        const job = async () => {
+            if (!this.redis || !this.redis.redis) return;
+
+            // 1. 获取所有 API Keys
+            const prefix = 'oauth2:';
+            const pattern = prefix + 'apikey:*';
+            
+            const keys = await this.redis.redis.keys(pattern);
+            
+            for (const fullKey of keys) {
+                const tokenKey = fullKey.replace(prefix + 'apikey:', '');
+                
+                // 查库验证
+                const [rows] = await db.query("SELECT id, status FROM sys_virtual_tokens WHERE token_key = ?", [tokenKey]);
+                
+                let shouldDelete = false;
+                if (rows.length === 0) {
+                    logger.warn(`[Watchdog] Found orphan token in Redis: ${tokenKey} (Deleted in DB)`);
+                    shouldDelete = true;
+                } else if (rows[0].status === 0) {
+                    logger.warn(`[Watchdog] Found disabled token in Redis: ${tokenKey} (Status=0)`);
+                    shouldDelete = true;
+                }
+                
+                if (shouldDelete) {
+                    await this.redis.redis.del(fullKey);
+                    logger.info(`[Watchdog] Cleaned up invalid key: ${fullKey}`);
+                }
+            }
+        };
+
+        // 注册到 JobManager (5分钟一次)
+        jobManager.schedule('ReconciliationJob', 5 * 60 * 1000, job);
     }
 
     /**

@@ -228,16 +228,27 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
     const { id } = req.params;
     try {
-        // 先获取 Token 信息以便删除缓存
+        // 1. 先获取 Token 信息
         const [tokens] = await db.query("SELECT * FROM sys_virtual_tokens WHERE id = ?", [id]);
         if (tokens.length === 0) return res.json({ message: "Token not found" });
         const token = tokens[0];
 
-        // 删除 DB 记录 (级联删除 routes)
-        await db.query("DELETE FROM sys_virtual_tokens WHERE id = ?", [id]);
+        // 2. 关键：先尝试删除 Redis 缓存
+        // 如果这一步失败（抛出异常），程序会跳到 catch，数据库不会被删除
+        // 从而保证了“缓存不删，数据不丢”的一致性原则
+        try {
+            await SyncManager.deleteTokenCache(token);
+        } catch (redisErr) {
+            logger.error(`[Critical] Failed to delete token cache for ${id}: ${redisErr.message}`);
+            // 策略选择：
+            // A. 强一致性：直接报错返回，不允许删除 DB
+            return res.status(500).json({ error: "Critical Error: Failed to sync with Redis. Delete aborted to prevent leakage." });
+            
+            // B. 最终一致性：继续删除 DB，但记录严重报警 (不推荐用于资损场景)
+        }
 
-        // 删除 Redis 缓存
-        await SyncManager.deleteTokenCache(token);
+        // 3. 缓存删除成功后，再删除 DB 记录
+        await db.query("DELETE FROM sys_virtual_tokens WHERE id = ?", [id]);
 
         res.json({ message: "Token deleted successfully" });
     } catch (err) {
