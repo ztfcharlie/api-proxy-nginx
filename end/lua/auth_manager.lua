@@ -34,6 +34,19 @@ function _M.authenticate_client()
         return nil
     end
 
+    -- [L1 Cache] 检查本地共享内存缓存 (5秒短效缓存，抗 Redis 抖动)
+    local token_cache = ngx.shared.token_cache
+    local l1_cache_key = "auth:" .. client_token
+    local cached_val = token_cache:get(l1_cache_key)
+    
+    if cached_val then
+        local ok, cached_data = pcall(cjson.decode, cached_val)
+        if ok and cached_data then
+            -- 缓存命中，直接返回
+            return client_token, cached_data.real_token, cached_data.metadata
+        end
+    end
+
     -- 2. 连接 Redis
     local red, err = get_redis_connection()
     if not red then
@@ -83,8 +96,6 @@ function _M.authenticate_client()
         
         local mapping_data = cjson.decode(data_str)
         
-        -- 对于 API Key 模式，我们可能需要做简单的负载均衡（Lua端）或者直接取第一个
-        -- 这里的实现假设 mapping_data.routes 包含 channel_id
         -- 简化：直接取第一个可用渠道
         local route = mapping_data.routes[1]
         local channel_id = route.channel_id
@@ -105,7 +116,7 @@ function _M.authenticate_client()
         metadata.channel_id = channel_id
         metadata.channel_type = channel_data.type
         metadata.models_config = channel_data.models_config
-        metadata.extra_config = channel_data.extra_config -- Azure Endpoint
+        metadata.extra_config = channel_data.extra_config 
     end
 
     -- 4. 验证结果
@@ -118,8 +129,14 @@ function _M.authenticate_client()
     -- 5. 释放 Redis 连接 (放回连接池)
     red:set_keepalive(10000, 100)
 
+    -- [L1 Cache] 写入本地缓存 (TTL 5秒)
+    local l1_val = cjson.encode({
+        real_token = real_token,
+        metadata = metadata
+    })
+    token_cache:set(l1_cache_key, l1_val, 5)
+
     -- 6. 返回结果
-    -- 参数对应: client_token, real_access_token, metadata (代替 key_filename)
     return client_token, real_token, metadata
 end
 

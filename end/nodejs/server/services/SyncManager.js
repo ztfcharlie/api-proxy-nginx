@@ -13,101 +13,6 @@ class SyncManager {
     }
 
     /**
-     * 启动数据一致性校准任务 (Watchdog)
-     */
-    startReconciliationJob() {
-        const job = async () => {
-            if (!this.redis || !this.redis.redis) return;
-
-            // 1. 获取所有 API Keys
-            const prefix = 'oauth2:';
-            
-            // --- 扫描 Tokens ---
-            const tokenPattern = prefix + 'apikey:*';
-            const tokenKeys = await this.redis.redis.keys(tokenPattern);
-            
-            for (const fullKey of tokenKeys) {
-                const tokenKey = fullKey.replace(prefix + 'apikey:', '');
-                const [rows] = await db.query("SELECT id, status FROM sys_virtual_tokens WHERE token_key = ?", [tokenKey]);
-                
-                let shouldDelete = false;
-                if (rows.length === 0) {
-                    logger.warn(`[Watchdog] Found orphan token in Redis: ${tokenKey} (Deleted in DB)`);
-                    shouldDelete = true;
-                } else if (rows[0].status === 0) {
-                    logger.warn(`[Watchdog] Found disabled token in Redis: ${tokenKey} (Status=0)`);
-                    shouldDelete = true;
-                }
-                
-                if (shouldDelete) {
-                    await this.redis.redis.del(fullKey);
-                    logger.info(`[Watchdog] Cleaned up invalid token key: ${fullKey}`);
-                }
-            }
-
-            // --- 扫描 Channels ---
-            const channelPattern = prefix + 'channel:*';
-            const channelKeys = await this.redis.redis.keys(channelPattern);
-
-            for (const fullKey of channelKeys) {
-                const channelId = fullKey.replace(prefix + 'channel:', '');
-                
-                // 跳过非数字ID (如果有的话)
-                if (isNaN(parseInt(channelId))) continue;
-
-                const [rows] = await db.query("SELECT id, status FROM sys_channels WHERE id = ?", [channelId]);
-
-                let shouldDelete = false;
-                if (rows.length === 0) {
-                    logger.warn(`[Watchdog] Found orphan channel in Redis: ${channelId} (Deleted in DB)`);
-                    shouldDelete = true;
-                } else if (rows[0].status === 0) {
-                    logger.warn(`[Watchdog] Found disabled channel in Redis: ${channelId} (Status=0)`);
-                    shouldDelete = true;
-                }
-
-                if (shouldDelete) {
-                    await this.redis.redis.del(fullKey);
-                    logger.info(`[Watchdog] Cleaned up invalid channel key: ${fullKey}`);
-                }
-            }
-
-            // --- 3. 补漏：检查 DB 中有但 Redis 中没有的记录 (防止 Redis 数据丢失) ---
-            
-            // 补漏 Channels
-            const [activeChannels] = await db.query("SELECT * FROM sys_channels WHERE status = 1");
-            for (const channel of activeChannels) {
-                const channelKey = `channel:${channel.id}`;
-                // RedisService.exists 自动加前缀，所以这里不加
-                const exists = await this.redis.exists(channelKey);
-                if (!exists) {
-                    logger.warn(`[Watchdog] Restore missing channel cache: ${channelKey}`);
-                    await this.updateChannelCache(channel);
-                }
-            }
-
-            // 补漏 Tokens
-            const [activeTokens] = await db.query("SELECT * FROM sys_virtual_tokens WHERE status = 1 AND type != 'vertex'");
-            for (const token of activeTokens) {
-                const tokenKey = `apikey:${token.token_key}`;
-                const exists = await this.redis.exists(tokenKey);
-                if (!exists) {
-                    logger.warn(`[Watchdog] Restore missing token cache: ${tokenKey}`);
-                    await this.updateVirtualTokenCache(token);
-                }
-            }
-
-        } catch (err) {
-            logger.error('[Watchdog] Reconciliation failed:', err);
-        }
-    };
-        };
-
-        // 注册到 JobManager (5分钟一次)
-        jobManager.schedule('ReconciliationJob', 5 * 60 * 1000, job);
-    }
-
-    /**
      * 全量同步：从 MySQL 恢复 Redis 数据
      */
     async performFullSync() {
@@ -171,11 +76,99 @@ class SyncManager {
     }
 
     /**
+     * 启动数据一致性校准任务 (Watchdog)
+     */
+    startReconciliationJob() {
+        const job = async () => {
+            if (!this.redis || !this.redis.redis) return;
+
+            try {
+                const prefix = 'oauth2:';
+                
+                // --- 1. 清理：删除 Redis 中有但 DB 中无效的 Key ---
+
+                // Tokens
+                const tokenKeys = await this.redis.redis.keys(prefix + 'apikey:*');
+                for (const fullKey of tokenKeys) {
+                    const tokenKey = fullKey.replace(prefix + 'apikey:', '');
+                    const [rows] = await db.query("SELECT id, status FROM sys_virtual_tokens WHERE token_key = ?", [tokenKey]);
+                    
+                    let shouldDelete = false;
+                    if (rows.length === 0) {
+                        logger.warn(`[Watchdog] Found orphan token in Redis: ${tokenKey} (Deleted in DB)`);
+                        shouldDelete = true;
+                    } else if (rows[0].status === 0) {
+                        logger.warn(`[Watchdog] Found disabled token in Redis: ${tokenKey} (Status=0)`);
+                        shouldDelete = true;
+                    }
+                    
+                    if (shouldDelete) {
+                        await this.redis.redis.del(fullKey);
+                        logger.info(`[Watchdog] Cleaned up invalid token key: ${fullKey}`);
+                    }
+                }
+
+                // Channels
+                const channelKeys = await this.redis.redis.keys(prefix + 'channel:*');
+                for (const fullKey of channelKeys) {
+                    const channelId = fullKey.replace(prefix + 'channel:', '');
+                    if (isNaN(parseInt(channelId))) continue;
+
+                    const [rows] = await db.query("SELECT id, status FROM sys_channels WHERE id = ?", [channelId]);
+
+                    let shouldDelete = false;
+                    if (rows.length === 0) {
+                        logger.warn(`[Watchdog] Found orphan channel in Redis: ${channelId} (Deleted in DB)`);
+                        shouldDelete = true;
+                    } else if (rows[0].status === 0) {
+                        logger.warn(`[Watchdog] Found disabled channel in Redis: ${channelId} (Status=0)`);
+                        shouldDelete = true;
+                    }
+
+                    if (shouldDelete) {
+                        await this.redis.redis.del(fullKey);
+                        logger.info(`[Watchdog] Cleaned up invalid channel key: ${fullKey}`);
+                    }
+                }
+
+                // --- 2. 补漏：恢复 DB 中有但 Redis 中缺失的 Key ---
+
+                // Active Channels
+                const [activeChannels] = await db.query("SELECT * FROM sys_channels WHERE status = 1");
+                for (const channel of activeChannels) {
+                    const channelKey = `channel:${channel.id}`;
+                    const exists = await this.redis.exists(channelKey); // RedisService.exists 自动加前缀
+                    if (!exists) {
+                        logger.warn(`[Watchdog] Restore missing channel cache: ${channelKey}`);
+                        await this.updateChannelCache(channel);
+                    }
+                }
+
+                // Active Tokens (Non-Vertex)
+                const [activeTokens] = await db.query("SELECT * FROM sys_virtual_tokens WHERE status = 1 AND type != 'vertex'");
+                for (const token of activeTokens) {
+                    const tokenKey = `apikey:${token.token_key}`;
+                    const exists = await this.redis.exists(tokenKey);
+                    if (!exists) {
+                        logger.warn(`[Watchdog] Restore missing token cache: ${tokenKey}`);
+                        await this.updateVirtualTokenCache(token);
+                    }
+                }
+
+            } catch (err) {
+                logger.error('[Watchdog] Reconciliation failed:', err);
+            }
+        };
+
+        // 注册到 JobManager (5分钟一次)
+        jobManager.schedule('ReconciliationJob', 5 * 60 * 1000, job);
+    }
+
+    /**
      * 更新单个 Channel 的缓存
      */
     async updateChannelCache(channel) {
         try {
-            // 如果渠道被禁用，直接删除缓存
             if (channel.status === 0) {
                 await this.redis.delete(`channel:${channel.id}`);
                 return;
@@ -189,7 +182,6 @@ class SyncManager {
                 models_config: channel.models_config
             };
 
-            // 1. 先写入基础配置 (确保 Lua 能查到路由信息)
             if (channel.type !== 'vertex') {
                 cacheData.key = channel.credentials;
             }
@@ -197,17 +189,12 @@ class SyncManager {
             const redisKey = `channel:${channel.id}`;
             const redisValue = JSON.stringify(cacheData);
             
-            logger.info(`[SyncManager] Attempting to write to Redis. Key: ${redisKey}, Value Length: ${redisValue.length}`);
-            
-            // 无论如何都写入 channel:id
             try {
-                const result = await this.redis.set(redisKey, redisValue);
-                logger.info(`[SyncManager] Redis write result for ${redisKey}: ${result}`);
+                await this.redis.set(redisKey, redisValue);
             } catch (redisErr) {
                 logger.error(`[SyncManager] Redis write FAILED for ${redisKey}: ${redisErr.message}`);
             }
 
-            // 2. 如果是 Vertex，尝试刷新 Token (异步，不阻塞)
             if (channel.type === 'vertex') {
                 try {
                     await serviceAccountManager.refreshSingleChannelToken(channel);
@@ -222,63 +209,52 @@ class SyncManager {
     }
 
     /**
-     * 更新单个 Virtual Token 的缓存 (级联检查用户状态)
+     * 更新单个 Virtual Token 的缓存
      */
     async updateVirtualTokenCache(token) {
         try {
-            // 1. 检查 Token 自身状态
             if (token.status === 0) {
                 if (token.type !== 'vertex') await this.redis.delete(`apikey:${token.token_key}`);
-                // Vertex vtoken is dynamic
                 return;
             }
 
-            // 2. 检查用户状态 (级联)
             const [users] = await db.query("SELECT status FROM sys_users WHERE id = ?", [token.user_id]);
             if (users.length === 0 || users[0].status === 0) {
                 if (token.type !== 'vertex') await this.redis.delete(`apikey:${token.token_key}`);
                 return;
             }
 
-            // 3. 获取路由规则
             const [routes] = await db.query(
                 "SELECT channel_id, weight FROM sys_token_routes WHERE virtual_token_id = ?",
                 [token.id]
             );
 
             if (routes.length === 0) {
-                // 没有路由也视为无效
                 if (token.type !== 'vertex') await this.redis.delete(`apikey:${token.token_key}`);
                 return;
             }
 
-            // 4. 构建 Lua 数据
             const luaData = {
                 user_id: token.user_id,
                 virtual_token_id: token.id,
                 type: token.type,
-                token_key: token.token_key, // 方便 Lua 调试
+                token_key: token.token_key,
                 routes: routes,
                 limits: token.limit_config || {}
             };
 
-            // 5. 写入 Redis
-            // Key: apikey:{token_key}
-            // 仅针对非 Vertex (即 Bearer/API-Key 直接透传模式)
             if (token.type !== 'vertex') {
-                 // 检查过期时间
                  let ttl = null;
                  if (token.expires_at) {
                      const diff = Math.floor((new Date(token.expires_at) - new Date()) / 1000);
                      if (diff <= 0) {
-                         await this.redis.delete(`apikey:${token.token_key}`); // 已过期
+                         await this.redis.delete(`apikey:${token.token_key}`);
                          return;
                      }
                      ttl = diff;
                  }
                  
                  if (ttl) {
-                     // RedisService.set(key, value, ttl)
                      await this.redis.set(`apikey:${token.token_key}`, JSON.stringify(luaData), ttl);
                  } else {
                      await this.redis.set(`apikey:${token.token_key}`, JSON.stringify(luaData));
