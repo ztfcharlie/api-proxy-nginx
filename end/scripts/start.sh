@@ -1,65 +1,84 @@
 #!/bin/bash
 
+# ==============================================
 # API Proxy Service 启动脚本
+# ==============================================
 set -e
 
-echo "Starting API Proxy Service..."
+# 添加 OpenResty 二进制路径到 PATH
+export PATH=$PATH:/usr/local/openresty/bin
 
-# 检查必要的目录
-echo "Checking directories..."
-for dir in "/usr/local/openresty/nginx/data/json" "/usr/local/openresty/nginx/data/jwt" "/usr/local/openresty/nginx/data/map" "/var/log/nginx"; do
+echo "[INFO] Starting API Proxy Service..."
+echo "[INFO] Date: $(date)"
+
+# --- 1. 目录初始化 ---
+echo "[INFO] Checking directory structure..."
+DIRS=(
+    "/var/log/nginx"
+    "/var/run"
+)
+
+for dir in "${DIRS[@]}"; do
     if [ ! -d "$dir" ]; then
-        echo "Creating directory: $dir"
+        echo "[INFO] Creating directory: $dir"
         mkdir -p "$dir"
-        chown nobody:nobody "$dir"
     fi
+    # 确保权限正确 (nobody 是 Nginx 默认运行用户)
+    chown -R nobody:nobody "$dir"
 done
 
-# 检查配置文件
-echo "Checking configuration files..."
+# --- 2. 环境变量默认值设置 ---
+export WORKER_PROCESSES=${WORKER_PROCESSES:-auto}
+export WORKER_CONNECTIONS=${WORKER_CONNECTIONS:-1024}
+export REDIS_PORT=${REDIS_PORT:-6379}
 
+# --- 3. 依赖服务检查 (Redis) ---
+if [ -n "$REDIS_HOST" ]; then
+    echo "[INFO] Redis configuration detected (Host: $REDIS_HOST, Port: $REDIS_PORT)"
+    echo "[INFO] Waiting for Redis connection..."
+    
+    # 使用 resty (Lua CLI) 进行更可靠的连接测试，不依赖 nc
+    MAX_RETRIES=30
+    COUNT=0
+    CONNECTED=0
+
+    while [ $COUNT -lt $MAX_RETRIES ]; do
+        # 尝试连接 Redis
+        if resty -e "local sock = ngx.socket.tcp(); local ok, err = sock:connect('$REDIS_HOST', $REDIS_PORT); if not ok then ngx.say('fail'); ngx.exit(1) end; ngx.say('ok'); sock:close();" > /dev/null 2>&1; then
+            echo "[INFO] Redis connection successful!"
+            CONNECTED=1
+            break
+        fi
+        
+        echo "[WARN] Waiting for Redis... ($((MAX_RETRIES - COUNT)) attempts remaining)"
+        sleep 1
+        COUNT=$((COUNT + 1))
+    done
+
+    if [ $CONNECTED -eq 0 ]; then
+        echo "[ERROR] Timeout waiting for Redis at $REDIS_HOST:$REDIS_PORT"
+        echo "[WARN] Starting OpenResty without verified Redis connection (some features may fail)"
+    fi
+else
+    echo "[INFO] No REDIS_HOST configured, skipping Redis check."
+fi
+
+# --- 4. 配置检查 ---
+echo "[INFO] Testing Nginx configuration..."
 # 检查 nginx 配置语法
-echo "Testing nginx configuration..."
-/usr/local/openresty/bin/openresty -t
+openresty -t -c /usr/local/openresty/nginx/conf/nginx.conf
 
 if [ $? -ne 0 ]; then
-    echo "ERROR: nginx configuration test failed!"
+    echo "[CRITICAL] Nginx configuration test failed!"
     exit 1
 fi
 
-# 设置环境变量默认值
-export WORKER_PROCESSES=${WORKER_PROCESSES:-auto}
-export WORKER_CONNECTIONS=${WORKER_CONNECTIONS:-1024}
+# --- 5. 启动服务 ---
+echo "[INFO] Starting OpenResty..."
+echo "  - Configuration: /usr/local/openresty/nginx/conf/nginx.conf"
+echo "  - Lua modules:   /usr/local/openresty/nginx/lua/"
+echo "  - Data path:     /usr/local/openresty/nginx/data/"
+echo "  - Logs:          /var/log/nginx/"
 
-# 等待 Redis 连接（如果配置了 Redis）
-if [ -n "$REDIS_HOST" ]; then
-    echo "Waiting for Redis connection..."
-    timeout=30
-    while [ $timeout -gt 0 ]; do
-        if nc -z "$REDIS_HOST" "${REDIS_PORT:-6379}" 2>/dev/null; then
-            echo "Redis is available"
-            break
-        fi
-        echo "Waiting for Redis... ($timeout seconds remaining)"
-        sleep 1
-        timeout=$((timeout - 1))
-    done
-
-    if [ $timeout -eq 0 ]; then
-        echo "WARNING: Redis connection timeout, continuing without Redis"
-    fi
-fi
-
-# 创建 PID 目录
-mkdir -p /var/run
-chown nobody:nobody /var/run
-
-# 启动 OpenResty
-echo "Starting OpenResty..."
-echo "Configuration: /usr/local/openresty/nginx/conf/nginx.conf"
-echo "Lua modules: /usr/local/openresty/nginx/lua/"
-echo "Data directory: /usr/local/openresty/nginx/data/"
-echo "Log directory: /var/log/nginx/"
-
-# 使用 exec 确保 OpenResty 成为 PID 1
-exec /usr/local/openresty/bin/openresty -g "daemon off;"
+# 使用 exec 确保 OpenResty 替代当前 shell 成为 PID 1，正确接收信号
+exec openresty -g "daemon off;" -c /usr/local/openresty/nginx/conf/nginx.conf
