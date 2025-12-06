@@ -298,20 +298,52 @@ router.post('/:id/verify', async (req, res) => {
             }
         }
 
+const axios = require('axios'); // Ensure axios is available
+
+// ... inside router.post('/:id/verify' ...
+
         // 3. 类型特定检查
         if (token.type === 'vertex') {
-            // 验证密钥对完整性
             if (token.token_secret && token.public_key) {
                 checks.push("✅ RSA Key Pair: Present");
-                // 尝试自签名验证 (模拟客户端)
+                
                 try {
                     const jwt = require('jsonwebtoken');
-                    const payload = { iss: token.token_key, aud: "test", exp: Math.floor(Date.now()/1000) + 60 };
-                    const signed = jwt.sign(payload, token.token_secret, { algorithm: 'RS256' });
-                    jwt.verify(signed, token.public_key);
-                    checks.push("✅ Crypto Check: Signature/Verify OK");
+                    const tokenUri = `http://localhost:${process.env.PORT || 8889}/accounts.google.com/oauth2/token`;
+                    
+                    // 1. 生成真实 JWT
+                    const now = Math.floor(Date.now() / 1000);
+                    const payload = {
+                        iss: token.token_key, // client_email
+                        scope: "https://www.googleapis.com/auth/cloud-platform",
+                        aud: tokenUri, // 这里的 aud 其实 mock 服务不强校验，但最好写对
+                        exp: now + 3600,
+                        iat: now
+                    };
+                    const assertion = jwt.sign(payload, token.token_secret, { algorithm: 'RS256' });
+                    
+                    // 2. 发起真实 HTTP 请求 (模拟客户端)
+                    checks.push(`ℹ️ Attempting Mock Auth Request...`);
+                    
+                    const res = await axios.post(tokenUri, {
+                        grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+                        assertion: assertion
+                    });
+                    
+                    if (res.data.access_token) {
+                        checks.push(`✅ Full Auth Flow: SUCCESS`);
+                        checks.push(`   -> Generated Token: ${res.data.access_token.substring(0, 15)}...`);
+                        checks.push(`   -> Redis Cache: Written (Expires in ${res.data.expires_in}s)`);
+                    } else {
+                        checks.push(`❌ Full Auth Flow: Failed (No token returned)`);
+                    }
+
                 } catch (e) {
-                    checks.push(`❌ Crypto Check Failed: ${e.message}`);
+                    const errDetail = e.response?.data?.error_description || e.message;
+                    checks.push(`❌ Full Auth Flow: Failed (${errDetail})`);
+                    if (e.code === 'ECONNREFUSED') {
+                        checks.push(`   -> Hint: Service might not be listening on localhost:${process.env.PORT || 8889}`);
+                    }
                 }
             } else {
                 checks.push("❌ RSA Key Pair: Missing/Corrupted");
