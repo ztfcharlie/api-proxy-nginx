@@ -81,7 +81,7 @@ class SyncManager {
         try {
             // 如果渠道被禁用，直接删除缓存
             if (channel.status === 0) {
-                await this.redis.del(`channel:${channel.id}`);
+                await this.redis.delete(`channel:${channel.id}`);
                 return;
             }
 
@@ -113,7 +113,6 @@ class SyncManager {
 
             // 2. 如果是 Vertex，尝试刷新 Token (异步，不阻塞)
             if (channel.type === 'vertex') {
-                // 使用单独的 try-catch，避免刷新失败影响基础缓存
                 try {
                     await serviceAccountManager.refreshSingleChannelToken(channel);
                 } catch (refreshErr) {
@@ -127,28 +126,21 @@ class SyncManager {
     }
 
     /**
-     * 删除 Channel 缓存
-     */
-    async deleteChannelCache(channel) {
-        await this.redis.del(`channel:${channel.id}`);
-    }
-
-    /**
      * 更新单个 Virtual Token 的缓存 (级联检查用户状态)
      */
     async updateVirtualTokenCache(token) {
         try {
             // 1. 检查 Token 自身状态
             if (token.status === 0) {
-                if (token.type !== 'vertex') await this.redis.del(`apikey:${token.token_key}`);
-                // Vertex vtoken is dynamic, but we can block issuance in oauth2_mock
+                if (token.type !== 'vertex') await this.redis.delete(`apikey:${token.token_key}`);
+                // Vertex vtoken is dynamic
                 return;
             }
 
             // 2. 检查用户状态 (级联)
             const [users] = await db.query("SELECT status FROM sys_users WHERE id = ?", [token.user_id]);
             if (users.length === 0 || users[0].status === 0) {
-                if (token.type !== 'vertex') await this.redis.del(`apikey:${token.token_key}`);
+                if (token.type !== 'vertex') await this.redis.delete(`apikey:${token.token_key}`);
                 return;
             }
 
@@ -160,7 +152,7 @@ class SyncManager {
 
             if (routes.length === 0) {
                 // 没有路由也视为无效
-                if (token.type !== 'vertex') await this.redis.del(`apikey:${token.token_key}`);
+                if (token.type !== 'vertex') await this.redis.delete(`apikey:${token.token_key}`);
                 return;
             }
 
@@ -169,30 +161,33 @@ class SyncManager {
                 user_id: token.user_id,
                 virtual_token_id: token.id,
                 type: token.type,
-                token_key: token.token_key,
+                token_key: token.token_key, // 方便 Lua 调试
                 routes: routes,
                 limits: token.limit_config || {}
             };
 
             // 5. 写入 Redis
+            // Key: apikey:{token_key}
+            // 仅针对非 Vertex (即 Bearer/API-Key 直接透传模式)
             if (token.type !== 'vertex') {
                  // 检查过期时间
                  let ttl = null;
                  if (token.expires_at) {
                      const diff = Math.floor((new Date(token.expires_at) - new Date()) / 1000);
                      if (diff <= 0) {
-                         await this.redis.del(`apikey:${token.token_key}`); // 已过期
+                         await this.redis.delete(`apikey:${token.token_key}`); // 已过期
                          return;
                      }
                      ttl = diff;
                  }
                  
                  if (ttl) {
-                     await this.redis.setex(`apikey:${token.token_key}`, ttl, JSON.stringify(luaData));
+                     // RedisService.set(key, value, ttl)
+                     await this.redis.set(`apikey:${token.token_key}`, JSON.stringify(luaData), ttl);
                  } else {
                      await this.redis.set(`apikey:${token.token_key}`, JSON.stringify(luaData));
                  }
-            }
+            } 
 
         } catch (error) {
             logger.error(`Failed to cache virtual token ${token.id}:`, error);
@@ -204,7 +199,7 @@ class SyncManager {
      */
     async deleteTokenCache(token) {
         if (token.type !== 'vertex') {
-            await this.redis.del(`apikey:${token.token_key}`);
+            await this.redis.delete(`apikey:${token.token_key}`);
         }
     }
 }

@@ -72,7 +72,10 @@ window.Modules.Channels = () => {
             }
             setEditModal({ open: false });
             fetchChannels();
-        } catch (e) { alert('Save failed'); }
+        } catch (e) { 
+            const msg = e.response?.data?.error || e.message;
+            alert('保存失败: ' + msg);
+        }
     };
 
     const deleteChannel = async () => {
