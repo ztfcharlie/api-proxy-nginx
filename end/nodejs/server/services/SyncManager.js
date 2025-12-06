@@ -79,7 +79,7 @@ class SyncManager {
      */
     async updateChannelCache(channel) {
         try {
-            // 如果渠道被禁用，直接删除缓存，让 Lua 查不到（或者查不到报错）
+            // 如果渠道被禁用，直接删除缓存
             if (channel.status === 0) {
                 await this.redis.del(`channel:${channel.id}`);
                 return;
@@ -93,11 +93,21 @@ class SyncManager {
                 models_config: channel.models_config
             };
 
-            if (channel.type === 'vertex') {
-                await serviceAccountManager.refreshSingleChannelToken(channel);
-            } else {
+            // 1. 先写入基础配置 (确保 Lua 能查到路由信息)
+            if (channel.type !== 'vertex') {
                 cacheData.key = channel.credentials;
-                await this.redis.set(`channel:${channel.id}`, JSON.stringify(cacheData));
+            }
+            // 无论如何都写入 channel:id
+            await this.redis.set(`channel:${channel.id}`, JSON.stringify(cacheData));
+
+            // 2. 如果是 Vertex，尝试刷新 Token (异步，不阻塞)
+            if (channel.type === 'vertex') {
+                // 使用单独的 try-catch，避免刷新失败影响基础缓存
+                try {
+                    await serviceAccountManager.refreshSingleChannelToken(channel);
+                } catch (refreshErr) {
+                    logger.error(`[SyncManager] Failed to refresh token for channel ${channel.id}, but config cached. Error: ${refreshErr.message}`);
+                }
             }
             
         } catch (error) {
