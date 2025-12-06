@@ -35,11 +35,17 @@ class RedisService {
 
     async initialize() {
         try {
-            // 创建 Redis 实例
-            this.redis = new Redis(this.config);
+            // 尝试连接，但不阻塞启动
+            try {
+                // 创建 Redis 实例时，不传 keyPrefix 给 ioredis，因为我们在方法里手动拼接了
+                // 复制配置并移除 keyPrefix
+                const redisOptions = { ...this.config };
+                delete redisOptions.keyPrefix;
+                
+                this.redis = new Redis(redisOptions);
 
-            // 错误处理
-            this.redis.on('error', (error) => {
+                // 错误处理
+                this.redis.on('error', (error) => {
                 this.isConnected = false;
                 this.logger.error('Redis connection error:', {
                     error: error.message,
