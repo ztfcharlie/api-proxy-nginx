@@ -31,6 +31,29 @@ module.exports = function(redisService, serviceAccountManager) {
         return rules[randomIndex];
     }
 
+    // GET/POST /o/oauth2/auth (Mock Authorization Endpoint)
+    const handleAuth = (req, res) => {
+        const { redirect_uri, state, response_type, client_id } = req.query.redirect_uri ? req.query : req.body;
+        
+        if (!redirect_uri) {
+            return res.status(400).send('Missing redirect_uri');
+        }
+
+        // 生成一个假的授权码
+        const fakeCode = '4/fake-auth-code-' + uuidv4();
+        
+        // 构建重定向 URL
+        const url = new URL(redirect_uri);
+        url.searchParams.set('code', fakeCode);
+        if (state) url.searchParams.set('state', state);
+        
+        logger.info(`Mock Auth: Redirecting to ${url.toString()}`);
+        res.redirect(url.toString());
+    };
+
+    router.get('/o/oauth2/auth', handleAuth);
+    router.post('/o/oauth2/auth', handleAuth);
+
     // POST /token
     router.post('/token', async (req, res) => {
         const grantType = req.body.grant_type;

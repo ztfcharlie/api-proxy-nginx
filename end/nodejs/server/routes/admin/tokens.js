@@ -103,6 +103,16 @@ router.post('/', async (req, res) => {
             token_key = `service-account-${uniqueId}@virtual-project.iam.gserviceaccount.com`;
             
             // 构造 Vertex JSON
+            const domain = process.env.DOMAIN_NAME || 'localhost:8888';
+            const baseUrl = `http://${domain}`; // 使用 http 还是 https 取决于 Nginx 是否配了 SSL，这里假设 http 或由 Nginx 处理跳转
+            // 如果是生产环境，建议在 .env 里 DOMAIN_NAME 直接带协议，或者这里判断
+            // 简单起见，我们统一用 https (如果客户端支持自动降级最好，否则需要 Nginx 配 SSL)
+            // 为了兼容性，我们用 http 除非确定有证书。或者让用户在 .env 里配 PROTOCOL
+            
+            // 修正：Vertex SDK 通常要求 https。如果您的 8888 端口是 HTTP，可能会报错。
+            // 但为了先跑通，我们用 http://47.239.10.174:8888
+            const protocol = 'http'; 
+
             download_payload = {
                 type: "service_account",
                 project_id: "virtual-project",
@@ -110,11 +120,10 @@ router.post('/', async (req, res) => {
                 private_key: token_secret,
                 client_email: token_key,
                 client_id: "1" + Math.random().toString().substring(2, 20),
-                auth_uri: "https://accounts.google.com/o/oauth2/auth",
-                // 关键：Token URI 指向我们的代理
-                token_uri: `https://${process.env.DOMAIN_NAME || 'localhost:8888'}/accounts.google.com/oauth2/token`,
+                auth_uri: `${protocol}://${domain}/accounts.google.com/o/oauth2/auth`,
+                token_uri: `${protocol}://${domain}/oauth2.googleapis.com/token`,
                 auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
-                client_x509_cert_url: `https://www.googleapis.com/robot/v1/metadata/x509/${encodeURIComponent(token_key)}`
+                client_x509_cert_url: `${protocol}://${domain}/www.googleapis.com/robot/v1/metadata/x509/${encodeURIComponent(token_key)}`
             };
             
         } else {
