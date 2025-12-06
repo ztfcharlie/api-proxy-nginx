@@ -34,14 +34,31 @@ router.get('/keys', async (req, res) => {
         
         if (pattern === '*') {
             for (const p of targetPatterns) {
-                // 尝试1: 直接查 (依赖 ioredis 自动处理 prefix)
-                const keys = await redisClient.keys(p);
-                console.log(`[Redis Inspector] Pattern "${p}" found:`, keys.length);
-                allKeys = allKeys.concat(keys);
+                // 手动拼接前缀
+                const searchPattern = prefix + p;
+                console.log(`[Redis Inspector] Searching for: ${searchPattern}`);
+                
+                const keys = await redisClient.keys(searchPattern);
+                console.log(`[Redis Inspector] Found:`, keys.length);
+                
+                // 剥离前缀以便前端显示整洁
+                const strippedKeys = keys.map(k => k.startsWith(prefix) ? k.slice(prefix.length) : k);
+                allKeys = allKeys.concat(strippedKeys);
             }
         } else {
-            allKeys = await redisClient.keys(pattern);
+            // 自定义搜索也需要加前缀
+            const keys = await redisClient.keys(prefix + pattern);
+            const strippedKeys = keys.map(k => k.startsWith(prefix) ? k.slice(prefix.length) : k);
+            allKeys = strippedKeys;
         }
+        
+        // ... (rest of the code)
+        
+        // 这里的 value 获取也需要注意，如果我们传给 get 的是不带 prefix 的 key，
+        // ioredis 会自动加上 prefix，所以这是对的。
+        // 前端传来的 key 是 stripped 的，后端 get(key) -> ioredis -> prefix + key -> OK.
+        
+        allKeys = [...new Set(allKeys)].sort();
         
         // 如果为空，尝试无视 prefix 扫描所有 (仅用于调试)
         if (allKeys.length === 0) {
