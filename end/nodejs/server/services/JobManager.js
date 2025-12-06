@@ -19,9 +19,11 @@ class JobManager {
 
         const job = {
             name,
-            interval,
+            interval: parseInt(interval),
             callback,
             lastRun: null,
+            nextRun: new Date(Date.now() + parseInt(interval)),
+            lastResult: 'Pending',
             status: 'idle',
             timer: null
         };
@@ -47,19 +49,41 @@ class JobManager {
                 const duration = Date.now() - startTime;
                 job.status = 'idle';
                 job.lastRun = new Date();
+                job.lastResult = `Success (${duration}ms)`;
+                job.nextRun = new Date(Date.now() + job.interval);
+                
                 logger.info(`[JobManager] Job completed: ${name} in ${duration}ms`);
             } catch (error) {
                 const duration = Date.now() - startTime;
                 job.status = 'failed';
                 job.lastRun = new Date();
+                job.lastResult = `Failed: ${error.message}`;
+                job.nextRun = new Date(Date.now() + job.interval);
+                
                 logger.error(`[JobManager] Job failed: ${name} in ${duration}ms. Error: ${error.message}`);
             }
         };
 
-        // 立即执行一次 (可选，这里选择不立即执行，等待 interval)
-        // run(); 
-
         job.timer = setInterval(run, job.interval);
+        // 修正 nextRun：如果是 setInterval，下次执行是当前时间 + interval
+        job.nextRun = new Date(Date.now() + job.interval);
+    }
+
+    updateJobInterval(name, newInterval) {
+        const job = this.jobs.get(name);
+        if (!job) throw new Error(`Job ${name} not found`);
+        
+        const interval = parseInt(newInterval);
+        if (isNaN(interval) || interval < 1000) {
+            throw new Error('Invalid interval (min 1000ms)');
+        }
+
+        logger.info(`[JobManager] Updating interval for ${name}: ${job.interval} -> ${interval}ms`);
+        
+        // 保留原有 callback 和状态，重启定时器
+        const callback = job.callback;
+        this.stop(name);
+        this.schedule(name, interval, callback);
     }
 
     async runJob(name) {
@@ -115,6 +139,8 @@ class JobManager {
             name: j.name,
             interval: j.interval,
             lastRun: j.lastRun,
+            nextRun: j.nextRun,
+            lastResult: j.lastResult,
             status: j.status
         }));
     }

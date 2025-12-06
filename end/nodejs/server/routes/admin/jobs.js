@@ -24,4 +24,18 @@ router.post('/:name/run', async (req, res) => {
     }
 });
 
+/**
+ * 更新任务间隔
+ */
+router.put('/:name/interval', (req, res) => {
+    const { name } = req.params;
+    const { interval } = req.body;
+    try {
+        jobManager.updateJobInterval(name, interval);
+        res.json({ message: `Job ${name} interval updated` });
+    } catch (e) {
+        res.status(400).json({ error: e.message });
+    }
+});
+
 module.exports = router;
