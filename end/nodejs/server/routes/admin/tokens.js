@@ -257,4 +257,83 @@ router.delete('/:id', async (req, res) => {
     }
 });
 
+/**
+ * 验证令牌 (Dry Run)
+ */
+router.post('/:id/verify', async (req, res) => {
+    const { id } = req.params;
+    try {
+        const [tokens] = await db.query(`
+            SELECT t.*, u.status as user_status 
+            FROM sys_virtual_tokens t
+            JOIN sys_users u ON t.user_id = u.id
+            WHERE t.id = ?
+        `, [id]);
+
+        if (tokens.length === 0) return res.status(404).json({ error: "Token not found" });
+        const token = tokens[0];
+
+        const checks = [];
+
+        // 1. 基础状态检查
+        if (token.status !== 1) checks.push("❌ Token is Disabled");
+        else checks.push("✅ Token Status: Active");
+
+        if (token.user_status !== 1) checks.push("❌ User is Disabled");
+        else checks.push("✅ User Status: Active");
+
+        // 2. 路由检查
+        const [routes] = await db.query("SELECT * FROM sys_token_routes WHERE virtual_token_id = ?", [id]);
+        if (routes.length === 0) checks.push("❌ No Routes Configured");
+        else {
+            checks.push(`✅ Routes: ${routes.length} channel(s) bound`);
+            // 检查渠道状态
+            for (const r of routes) {
+                const [ch] = await db.query("SELECT status, name FROM sys_channels WHERE id = ?", [r.channel_id]);
+                if (!ch.length || ch[0].status !== 1) {
+                    checks.push(`⚠️ Channel [${r.channel_id}] is Invalid/Disabled`);
+                } else {
+                    checks.push(`✅ Channel [${ch[0].name}] is Active`);
+                }
+            }
+        }
+
+        // 3. 类型特定检查
+        if (token.type === 'vertex') {
+            // 验证密钥对完整性
+            if (token.token_secret && token.public_key) {
+                checks.push("✅ RSA Key Pair: Present");
+                // 尝试自签名验证 (模拟客户端)
+                try {
+                    const jwt = require('jsonwebtoken');
+                    const payload = { iss: token.token_key, aud: "test", exp: Math.floor(Date.now()/1000) + 60 };
+                    const signed = jwt.sign(payload, token.token_secret, { algorithm: 'RS256' });
+                    jwt.verify(signed, token.public_key);
+                    checks.push("✅ Crypto Check: Signature/Verify OK");
+                } catch (e) {
+                    checks.push(`❌ Crypto Check Failed: ${e.message}`);
+                }
+            } else {
+                checks.push("❌ RSA Key Pair: Missing/Corrupted");
+            }
+        } else {
+            // OpenAI: 检查 Redis
+            const exists = await SyncManager.redis.exists(`apikey:${token.token_key}`); // RedisService 自动加前缀? 不，它不加。
+            // 我们的 RedisService 已经去掉了自动前缀。
+            // SyncManager 在写入时是：set(`apikey:${token.token_key}`)
+            // 这里的 exists 方法：const fullKey = this.config.keyPrefix + key; (RedisService.js)
+            // 所以我们应该传 `apikey:${token.token_key}`。
+            
+            if (exists) checks.push("✅ Redis Cache: Present");
+            else checks.push("❌ Redis Cache: MISSING (Try saving token again)");
+        }
+
+        const success = !checks.some(c => c.startsWith('❌'));
+        res.json({ success, messages: checks });
+
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 module.exports = router;

@@ -89,6 +89,16 @@ window.Modules.Tokens = () => {
         } catch (e) { alert('Delete failed'); }
     };
 
+    const verifyToken = async (token) => {
+        try {
+            const res = await axios.post(API_BASE + '/tokens/' + token.id + '/verify');
+            const lines = res.data.messages.join('\n');
+            setResultModal({ open: true, content: lines, title: res.data.success ? 'Verification Passed' : 'Verification Issues' });
+        } catch (e) { 
+            alert('Verify failed: ' + e.message);
+        }
+    };
+
     const toggleStatus = async (row) => {
         const newStatus = row.status ? 0 : 1;
         setTokens(tokens.map(t => t.id === row.id ? { ...t, status: newStatus } : t));
@@ -131,6 +141,7 @@ window.Modules.Tokens = () => {
                                 <td className="px-6 py-4 text-sm"><Switch checked={!!t.status} onChange={() => toggleStatus(t)} /></td>
                                 <td className="px-6 py-4 text-xs text-gray-500">{t.routes && t.routes.map((r, i) => <div key={i}>{r.channel_name} ({r.weight})</div>)}</td>
                                 <td className="px-6 py-4 text-right text-sm font-medium">
+                                    <button onClick={() => verifyToken(t)} className="text-green-600 hover:text-green-900 mr-4" title="Verify Health">⚡</button>
                                     <button onClick={() => openModal(t)} className="text-blue-600 hover:text-blue-900 mr-4">Edit</button>
                                     <button onClick={() => setConfirmModal({ open: true, id: t.id })} className="text-red-600 hover:text-red-900">Delete</button>
                                 </td>
@@ -185,8 +196,10 @@ window.Modules.Tokens = () => {
 
             <ConfirmDialog isOpen={confirmModal.open} title="Confirm Delete" message="Are you sure?" onCancel={() => setConfirmModal({ open: false })} onConfirm={deleteToken} />
 
-            <Modal isOpen={resultModal.open} title="Success" onClose={() => setResultModal({ open: false })}>
-                <div className="bg-green-50 p-4 rounded mb-4"><pre className="text-xs overflow-x-auto">{resultModal.content}</pre></div>
+            <Modal isOpen={resultModal.open} title={resultModal.title || "Success"} onClose={() => setResultModal({ open: false })}>
+                <div className={`p-4 rounded mb-4 ${resultModal.title?.includes('Issue') ? 'bg-yellow-50 text-yellow-800' : 'bg-green-50 text-green-800'}`}>
+                    <pre className="text-xs overflow-x-auto whitespace-pre-wrap font-mono">{resultModal.content}</pre>
+                </div>
                 <div className="flex justify-end gap-3">
                     <Button variant="secondary" onClick={() => navigator.clipboard.writeText(resultModal.content)}>Copy</Button>
                     <Button onClick={() => setResultModal({ open: false })}>Close</Button>
