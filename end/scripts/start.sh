@@ -27,57 +27,6 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# 检查必要的配置文件是否存在
-CONFIG_FILES=(
-    "/usr/local/openresty/nginx/config/app_config.json"
-    "/usr/local/openresty/nginx/data/map/map-config.json"
-)
-
-for config_file in "${CONFIG_FILES[@]}"; do
-    if [ ! -f "$config_file" ]; then
-        echo "WARNING: Configuration file not found: $config_file"
-        echo "Creating default configuration..."
-
-        case "$config_file" in
-            "/usr/local/openresty/nginx/config/app_config.json")
-                cat > "$config_file" << 'EOF'
-{
-    "log_level": "info",
-    "debug_mode": false,
-    "test_output": {
-        "enabled": false,
-        "request_headers": false,
-        "oauth_process": false,
-        "upstream_headers": false
-    },
-    "token_refresh": {
-        "interval": 3000,
-        "early_refresh": 300
-    },
-    "timeouts": {
-        "proxy_read": 300,
-        "proxy_connect": 60,
-        "keepalive": 65
-    }
-}
-EOF
-                ;;
-            "/usr/local/openresty/nginx/data/map/map-config.json")
-                cat > "$config_file" << 'EOF'
-{
-    "clients": [],
-    "key_filename_gemini": [],
-    "key_filename_claude": []
-}
-EOF
-                ;;
-        esac
-
-        chown nobody:nobody "$config_file"
-        echo "Created default configuration: $config_file"
-    fi
-done
-
 # 设置环境变量默认值
 export WORKER_PROCESSES=${WORKER_PROCESSES:-auto}
 export WORKER_CONNECTIONS=${WORKER_CONNECTIONS:-1024}
