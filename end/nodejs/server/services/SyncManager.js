@@ -97,8 +97,19 @@ class SyncManager {
             if (channel.type !== 'vertex') {
                 cacheData.key = channel.credentials;
             }
+            
+            const redisKey = `channel:${channel.id}`;
+            const redisValue = JSON.stringify(cacheData);
+            
+            logger.info(`[SyncManager] Attempting to write to Redis. Key: ${redisKey}, Value Length: ${redisValue.length}`);
+            
             // 无论如何都写入 channel:id
-            await this.redis.set(`channel:${channel.id}`, JSON.stringify(cacheData));
+            try {
+                const result = await this.redis.set(redisKey, redisValue);
+                logger.info(`[SyncManager] Redis write result for ${redisKey}: ${result}`);
+            } catch (redisErr) {
+                logger.error(`[SyncManager] Redis write FAILED for ${redisKey}: ${redisErr.message}`);
+            }
 
             // 2. 如果是 Vertex，尝试刷新 Token (异步，不阻塞)
             if (channel.type === 'vertex') {
