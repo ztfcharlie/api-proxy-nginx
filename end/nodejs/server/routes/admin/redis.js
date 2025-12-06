@@ -136,4 +136,16 @@ router.delete('/key', async (req, res) => {
     }
 });
 
+/**
+ * 手动触发全量同步
+ */
+router.post('/sync', async (req, res) => {
+    try {
+        await SyncManager.performFullSync();
+        res.json({ message: "Full sync triggered" });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 module.exports = router;

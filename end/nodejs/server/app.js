@@ -120,8 +120,8 @@ class OAuth2MockServer {
 
             // --- ServiceAccountManager ---
             ServiceAccountManager.initialize(this.services.redis);
-            ServiceAccountManager.startTokenRefreshJob();
-            LoggerService.info('ServiceAccountManager initialized');
+            // ServiceAccountManager.startTokenRefreshJob();
+            LoggerService.info('ServiceAccountManager initialized (Job Disabled)');
 
             // --- SyncManager ---
             SyncManager.initialize(this.services.redis);

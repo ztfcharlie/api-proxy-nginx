@@ -104,7 +104,9 @@ class SyncManager {
             if (channel.type === 'vertex') {
                 // 使用单独的 try-catch，避免刷新失败影响基础缓存
                 try {
-                    await serviceAccountManager.refreshSingleChannelToken(channel);
+                    // 暂时注释掉，以排查 502 崩溃问题
+                    // await serviceAccountManager.refreshSingleChannelToken(channel);
+                    logger.warn(`[SyncManager] Vertex token refresh skipped for debug.`);
                 } catch (refreshErr) {
                     logger.error(`[SyncManager] Failed to refresh token for channel ${channel.id}, but config cached. Error: ${refreshErr.message}`);
                 }

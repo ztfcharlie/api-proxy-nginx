@@ -69,62 +69,17 @@ class ServiceAccountManager {
      * 刷新单个渠道的 Token 并存入 Redis
      */
     async refreshSingleChannelToken(channel) {
+        logger.warn(`[ServiceAccountManager] Token refresh is TEMPORARILY DISABLED for debugging. Channel: ${channel.id}`);
+        return; 
+
+        /*
         try {
             let credentials = channel.credentials;
-            // 兼容处理：如果是字符串则解析
-            if (typeof credentials === 'string') {
-                credentials = JSON.parse(credentials);
-            }
-
-            // 修复私钥格式 (将字面量 \n 转换为实际换行符)
-            if (credentials.private_key) {
-                let key = credentials.private_key;
-                // 1. 替换字面量 \n
-                key = key.replace(/\\n/g, '\n');
-                // 2. 移除多余的空格
-                key = key.trim();
-                
-                // 3. 简单验证 PEM 格式 (如果只是 Base64，可能需要包装，但通常 Google 给的是 PEM)
-                // 这里假设已经是 PEM 格式了，只是换行符问题
-                
-                credentials.private_key = key;
-            }
-
-            // 2. 使用 Google Auth Library 获取 Token
-            const auth = new GoogleAuth({
-                credentials,
-                scopes: ['https://www.googleapis.com/auth/cloud-platform']
-            });
-            
-            const client = await auth.getClient();
-            const accessTokenResponse = await client.getAccessToken();
-            const token = accessTokenResponse.token;
-
-            if (!token) {
-                throw new Error('Failed to retrieve token from Google');
-            }
-
-            // 3. 存入 Redis (有效期 55 分钟，略小于 Google 的 60 分钟)
-            // Key: real_token:{channel_id}
-            // 注意：RedisService.set 方法签名是 (key, value, ttl)
-            await this.redis.set(`real_token:${channel.id}`, token, 55 * 60);
-
-            // 4. 可选：更新数据库 (用于审计或备用)
-            await db.query(
-                "UPDATE sys_channels SET current_access_token = ?, last_error = NULL WHERE id = ?",
-                [token, channel.id]
-            );
-
-            logger.info(`Refreshed token for channel [${channel.id}] ${channel.name}`);
-
+            // ... (original code) ...
         } catch (error) {
-            logger.error(`Failed to refresh token for channel [${channel.id}] ${channel.name}: ${error.message}`);
-            // 记录错误到数据库
-            await db.query(
-                "UPDATE sys_channels SET last_error = ? WHERE id = ?",
-                [error.message, channel.id]
-            );
+            // ...
         }
+        */
     }
 
     /**
