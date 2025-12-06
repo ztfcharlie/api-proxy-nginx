@@ -6,6 +6,7 @@ const tokenRoutes = require('./tokens');
 const userRoutes = require('./users');
 const modelRoutes = require('./models');
 const redisRoutes = require('./redis');
+const jobRoutes = require('./jobs');
 
 // 挂载子路由
 router.use('/channels', channelRoutes);
@@ -13,5 +14,6 @@ router.use('/tokens', tokenRoutes);
 router.use('/users', userRoutes);
 router.use('/models', modelRoutes);
 router.use('/redis', redisRoutes);
+router.use('/jobs', jobRoutes);
 
 module.exports = router;

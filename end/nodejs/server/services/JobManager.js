@@ -62,6 +62,34 @@ class JobManager {
         job.timer = setInterval(run, job.interval);
     }
 
+    async runJob(name) {
+        const job = this.jobs.get(name);
+        if (!job) throw new Error(`Job ${name} not found`);
+
+        if (job.status === 'running') {
+            logger.warn(`[JobManager] Job ${name} is already running, skipping manual run.`);
+            return;
+        }
+
+        job.status = 'running';
+        const startTime = Date.now();
+        logger.info(`[JobManager] Manually starting job: ${name}`);
+
+        try {
+            await job.callback();
+            const duration = Date.now() - startTime;
+            job.status = 'idle';
+            job.lastRun = new Date();
+            logger.info(`[JobManager] Manual job completed: ${name} in ${duration}ms`);
+        } catch (error) {
+            const duration = Date.now() - startTime;
+            job.status = 'failed';
+            job.lastRun = new Date();
+            logger.error(`[JobManager] Manual job failed: ${name} in ${duration}ms. Error: ${error.message}`);
+            throw error;
+        }
+    }
+
     stop(name) {
         const job = this.jobs.get(name);
         if (job && job.timer) {

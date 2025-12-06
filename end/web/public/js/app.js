@@ -23,8 +23,11 @@ const Sidebar = ({ activeTab, onTabChange }) => (
             <button onClick={() => onTabChange('redis')} className={`w-full flex items-center px-6 py-3 transition-all duration-200 border-l-4 ${activeTab === 'redis' ? 'bg-slate-800 border-blue-500 text-white' : 'border-transparent text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
                 <Icons.Redis /> Redis 观测
             </button>
+            <button onClick={() => onTabChange('jobs')} className={`w-full flex items-center px-6 py-3 transition-all duration-200 border-l-4 ${activeTab === 'jobs' ? 'bg-slate-800 border-blue-500 text-white' : 'border-transparent text-slate-400 hover:bg-slate-800 hover:text-white'}`}>
+                <Icons.Clock /> 任务调度
+            </button>
         </nav>
-        <div className="p-4 bg-slate-950 text-xs text-slate-500 text-center">v4.1.0 Redis</div>
+        <div className="p-4 bg-slate-950 text-xs text-slate-500 text-center">v4.2.0 Jobs</div>
     </div>
 );
 
@@ -44,6 +47,7 @@ const App = () => {
                         {activeTab === 'tokens' && '虚拟令牌 (Virtual Tokens)'}
                         {activeTab === 'users' && '系统用户 (System Users)'}
                         {activeTab === 'redis' && '缓存观测 (Redis Inspector)'}
+                        {activeTab === 'jobs' && '任务调度 (Job Scheduler)'}
                     </h2>
                     <div className="flex items-center gap-4">
                         <div className="text-sm text-gray-500">Admin Console</div>
@@ -58,6 +62,7 @@ const App = () => {
                     {activeTab === 'tokens' && window.Modules && window.Modules.Tokens && <window.Modules.Tokens />}
                     {activeTab === 'users' && window.Modules && window.Modules.Users && <window.Modules.Users />}
                     {activeTab === 'redis' && window.Modules && window.Modules.Redis && <window.Modules.Redis />}
+                    {activeTab === 'jobs' && window.Modules && window.Modules.Jobs && <window.Modules.Jobs />}
                 </div>
             </main>
         </div>
