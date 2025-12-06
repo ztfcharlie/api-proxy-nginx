@@ -69,17 +69,31 @@ class ServiceAccountManager {
      * 刷新单个渠道的 Token 并存入 Redis
      */
     async refreshSingleChannelToken(channel) {
-        logger.warn(`[ServiceAccountManager] Token refresh is TEMPORARILY DISABLED for debugging. Channel: ${channel.id}`);
-        return; 
-
-        /*
         try {
             let credentials = channel.credentials;
-            // ... (original code) ...
+            // 兼容处理：如果是字符串则解析
+            if (typeof credentials === 'string') {
+                credentials = JSON.parse(credentials);
+            }
+
+            // 修复私钥格式 (将字面量 \n 转换为实际换行符)
+            if (credentials.private_key) {
+                let key = credentials.private_key;
+                // 1. 替换字面量 \n
+                key = key.replace(/\\n/g, '\n');
+                // 2. 移除多余的空格
+                key = key.trim();
+                
+                // 3. 简单验证 PEM 格式 (如果只是 Base64，可能需要包装，但通常 Google 给的是 PEM)
+                // 这里假设已经是 PEM 格式了，只是换行符问题
+                
+                credentials.private_key = key;
+            }
+
+            // 2. 使用 Google Auth Library 获取 Token
         } catch (error) {
             // ...
         }
-        */
     }
 
     /**

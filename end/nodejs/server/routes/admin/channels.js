@@ -150,10 +150,10 @@ router.delete('/:id', async (req, res) => {
         
         await db.query("DELETE FROM sys_channels WHERE id = ?", [id]);
         
-        // 清除 Redis 缓存 (SyncManager 暂无 deleteChannelCache 方法，可直接操作 Redis)
-        // 简单起见，触发一次全量同步或忽略（因为 key 不再被路由引用）
-        // 最好是在 SyncManager 加个方法，或者直接删除 key
-        // 这里暂时不做，等待 SyncManager 完善
+        // 清除 Redis 缓存
+        if (SyncManager.redis) {
+            await SyncManager.redis.delete('channel:' + id);
+        }
         
         res.json({ message: "Channel deleted successfully" });
     } catch (err) {
