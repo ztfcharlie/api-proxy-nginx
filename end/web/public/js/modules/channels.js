@@ -246,7 +246,27 @@ window.Modules.Channels = () => {
                     { value: 'qwen', label: 'Qwen' },
                     { value: 'deepseek', label: 'DeepSeek' }
                 ]} />
-                <Input label="Credentials" value={form.credentials} onChange={v => setForm({...form, credentials: v})} multiline rows={6} placeholder="JSON or Key" />
+                
+                <div className="mb-4">
+                    <div className="flex justify-between items-center mb-1">
+                        <label className="block text-sm font-medium text-gray-700">Credentials</label>
+                        <div className="text-xs text-blue-600 cursor-help relative group">
+                            How to fill?
+                            <div className="hidden group-hover:block absolute right-0 bottom-full mb-2 p-3 bg-gray-800 text-white rounded shadow-lg w-80 z-50 whitespace-pre-wrap">
+                                {form.type === 'vertex' 
+                                    ? 'Paste the full content of your Google Service Account JSON file here.\nMust include "private_key", "client_email", etc.' 
+                                    : 'Enter your API Key string here.\n(e.g. sk-..., or Azure Key)'}
+                            </div>
+                        </div>
+                    </div>
+                    <textarea 
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 font-mono"
+                        rows={6}
+                        value={form.credentials}
+                        onChange={e => setForm({...form, credentials: e.target.value})}
+                        placeholder={form.type === 'vertex' ? '{ "type": "service_account", ... }' : 'sk-...'}
+                    ></textarea>
+                </div>
                 
                 {form.type === 'azure' && (
                     <div className="p-4 bg-blue-50 rounded mb-4">
