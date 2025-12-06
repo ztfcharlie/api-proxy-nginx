@@ -82,16 +82,43 @@ function _M.log_request()
     end
 end
 
--- 提取模型名称从 URL
+-- 提取模型名称 (支持 Vertex URL 和 OpenAI Body)
 function _M.extract_model_name(uri)
-    -- 匹配 URL 模式: /v1/projects/{project}/locations/{location}/publishers/google/models/{model}:{operation}
+    -- 1. 尝试从 Vertex URL 提取
     local model_name = uri:match("/models/([^/:]+)")
+    if model_name then return model_name end
 
-    if config.should_test_output("request_headers") then
-        ngx.log(ngx.INFO, "[TEST] Extracted model name: ", model_name or "nil", " from URL: ", uri)
+    -- 2. 尝试从 Request Body 提取 (OpenAI Style)
+    -- 只有在 Content-Type 是 application/json 时才尝试
+    local headers = ngx.req.get_headers()
+    local content_type = headers["content-type"]
+    if not content_type or not string.find(content_type, "application/json") then
+        return "default"
     end
 
-    return model_name
+    -- 强制读取 Body
+    ngx.req.read_body()
+    local body_data = ngx.req.get_body_data()
+
+    if not body_data then
+        -- Body 可能被写入了临时文件 (太大了)
+        return "default"
+    end
+
+    -- 从环境变量获取限制，默认 512KB
+    local limit_str = os.getenv("LUA_BODY_PARSE_LIMIT")
+    local parse_limit = tonumber(limit_str) or 524288
+
+    if #body_data > parse_limit then
+        return "default"
+    end
+
+    local ok, json_body = pcall(cjson.decode, body_data)
+    if ok and json_body and json_body.model then
+        return json_body.model
+    end
+
+    return "default"
 end
 
 -- 提取客户端 Token 从 Authorization 头部

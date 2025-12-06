@@ -9,7 +9,7 @@ window.Modules.Channels = () => {
     const [models, setModels] = useState([]);
 
     const [editModal, setEditModal] = useState({ open: false, isEdit: false });
-    const [bindingModal, setBindingModal] = useState({ open: false, channel: null, list: [] });
+    const [bindingModal, setBindingModal] = useState({ open: false, channel: null, list: [], defaultRpm: 100 });
     const [confirmModal, setConfirmModal] = useState({ open: false, id: null });
 
     const [form, setForm] = useState({});
@@ -114,17 +114,24 @@ window.Modules.Channels = () => {
     const openBindingModal = (channel) => {
         let list = [];
         let raw = channel.models_config;
+        let defaultRpm = 100;
+
         if (typeof raw === 'string') raw = JSON.parse(raw);
         if (raw) {
-            list = Object.entries(raw).map(([name, cfg]) => ({
-                name,
-                rpm: cfg.rpm || 100000000,
-                pricing_mode: cfg.pricing_mode || 'token',
-                region: cfg.region || 'us-central1'
-            }));
+            if (raw['default']) {
+                defaultRpm = raw['default'].rpm || 100;
+            }
+            list = Object.entries(raw)
+                .filter(([name]) => name !== 'default')
+                .map(([name, cfg]) => ({
+                    name,
+                    rpm: cfg.rpm || 100000000,
+                    pricing_mode: cfg.pricing_mode || 'token',
+                    region: cfg.region || 'us-central1'
+                }));
         }
         setSearchTerm('');
-        setBindingModal({ open: true, channel, list });
+        setBindingModal({ open: true, channel, list, defaultRpm });
     };
 
     const addModelToBinding = (model) => {
@@ -165,6 +172,14 @@ window.Modules.Channels = () => {
     const saveBinding = async () => {
         try {
             const configObj = {};
+            
+            // Save Default Config
+            configObj['default'] = {
+                rpm: parseInt(bindingModal.defaultRpm),
+                pricing_mode: 'token',
+                enabled: true
+            };
+
             bindingModal.list.forEach(m => {
                 configObj[m.name] = {
                     rpm: parseInt(m.rpm),
@@ -325,7 +340,19 @@ window.Modules.Channels = () => {
                         </div>
                     </div>
                     <div className="w-2/3 flex flex-col bg-white">
-                        <div className="p-4 border-b bg-gray-50 font-bold text-gray-700">Bound ({bindingModal.list.length})</div>
+                        <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
+                            <div className="font-bold text-gray-700">Bound ({bindingModal.list.length})</div>
+                            <div className="flex items-center gap-2 text-sm">
+                                <span className="text-gray-600 font-medium">Default RPM:</span>
+                                <input 
+                                    type="text" 
+                                    className="w-24 border border-gray-300 rounded px-2 h-9 text-right focus:ring-blue-500 focus:border-blue-500" 
+                                    value={bindingModal.defaultRpm} 
+                                    onChange={e => setBindingModal(prev => ({ ...prev, defaultRpm: e.target.value.replace(/[^0-9]/g, '') }))} 
+                                />
+                                <div className="text-xs text-gray-400 cursor-help" title="Global Rate Limit for unknown models or large requests">(?)</div>
+                            </div>
+                        </div>
                         <div className="flex-1 overflow-y-auto p-4 pb-24">
                             <table className="w-full">
                                 <thead>

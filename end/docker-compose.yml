@@ -45,6 +45,7 @@ services:
       # 代理配置
       - PROXY_READ_TIMEOUT=300
       - PROXY_CONNECT_TIMEOUT=60
+      - LUA_BODY_PARSE_LIMIT=${LUA_BODY_PARSE_LIMIT:-524288}
 
       # 令牌刷新配置
       - TOKEN_REFRESH_INTERVAL=3000

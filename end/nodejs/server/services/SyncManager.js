@@ -174,8 +174,11 @@ class SyncManager {
      */
     async updateChannelCache(channel) {
         try {
+            // 1. 基础处理 (和之前一样)
             if (channel.status === 0) {
                 await this.redis.delete(`channel:${channel.id}`);
+                // 级联更新：通知所有 Token 这个渠道挂了 (虽然只是删了缓存，但最好更新 Token 路由表)
+                await this.updateTokensByChannelId(channel.id);
                 return;
             }
 
@@ -200,13 +203,18 @@ class SyncManager {
                 logger.error(`[SyncManager] Redis write FAILED for ${redisKey}: ${redisErr.message}`);
             }
 
+            // 2. Vertex 刷新 (保持不变)
             if (channel.type === 'vertex') {
                 try {
                     await serviceAccountManager.refreshSingleChannelToken(channel);
                 } catch (refreshErr) {
-                    logger.error(`[SyncManager] Failed to refresh token for channel ${channel.id}, but config cached. Error: ${refreshErr.message}`);
+                    logger.error(`[SyncManager] Failed to refresh token for channel ${channel.id}, but config cached.`);
                 }
             }
+
+            // 3. [关键新增] 级联更新所有引用了该 Channel 的 Token
+            // 因为 Token 的缓存里现在包含了 Channel 的 RPM 配置
+            await this.updateTokensByChannelId(channel.id);
             
         } catch (error) {
             logger.error(`Failed to cache channel ${channel.id}:`, error);
@@ -214,16 +222,41 @@ class SyncManager {
     }
 
     /**
-     * 更新单个 Virtual Token 的缓存
+     * 级联更新：当 Channel 变更时，刷新所有引用它的 Token
+     */
+    async updateTokensByChannelId(channelId) {
+        try {
+            // 查出所有引用了该渠道的有效 Token
+            const query = `
+                SELECT t.* 
+                FROM sys_virtual_tokens t
+                JOIN sys_token_routes r ON t.id = r.virtual_token_id
+                WHERE r.channel_id = ? AND t.status = 1
+            `;
+            const [tokens] = await db.query(query, [channelId]);
+            
+            if (tokens.length > 0) {
+                logger.info(`[SyncManager] Channel ${channelId} changed. Updating ${tokens.length} dependent tokens.`);
+                for (const token of tokens) {
+                    await this.updateVirtualTokenCache(token);
+                }
+            }
+        } catch (e) {
+            logger.error(`[SyncManager] Failed to cascade update tokens for channel ${channelId}:`, e);
+        }
+    }
+
+    /**
+     * 更新单个 Virtual Token 的缓存 (数据异构版)
      */
     async updateVirtualTokenCache(token) {
         try {
+            // ... (状态检查逻辑保持不变) ...
             if (token.status === 0) {
                 if (token.type !== 'vertex') await this.redis.delete(`apikey:${token.token_key}`);
                 return;
             }
 
-            // 2. 检查用户状态 (级联)
             const [users] = await db.query("SELECT status FROM sys_users WHERE id = ?", [token.user_id]);
             if (users.length === 0 || users[0].status === 0) {
                 if (token.type !== 'vertex') {
@@ -263,14 +296,41 @@ class SyncManager {
                 return;
             }
 
-            const [routes] = await db.query(
-                "SELECT channel_id, weight FROM sys_token_routes WHERE virtual_token_id = ?",
-                [token.id]
-            );
+            // [关键修改] 查询路由时，联查 Channel 信息
+            const [routes] = await db.query(`
+                SELECT r.channel_id, r.weight, c.type as channel_type, c.models_config, c.status as channel_status
+                FROM sys_token_routes r
+                JOIN sys_channels c ON r.channel_id = c.id
+                WHERE r.virtual_token_id = ?
+            `, [token.id]);
 
             if (routes.length === 0) {
                 if (token.type !== 'vertex') await this.redis.delete(`apikey:${token.token_key}`);
                 return;
+            }
+
+            // 处理路由数据
+            const processedRoutes = routes
+                .filter(r => r.channel_status === 1) // 只包含活跃渠道
+                .map(r => {
+                    let modelsConfig = {};
+                    try {
+                        // 解析 JSON 配置
+                        modelsConfig = typeof r.models_config === 'string' ? JSON.parse(r.models_config) : r.models_config;
+                    } catch (e) {}
+
+                    return {
+                        channel_id: r.channel_id,
+                        weight: r.weight,
+                        type: r.channel_type, // 给 Lua 用来判断是否需要 Real Token
+                        models_config: modelsConfig // 包含 RPM
+                    };
+                });
+
+            if (processedRoutes.length === 0) {
+                // 所有渠道都挂了
+                logger.warn(`Token ${token.id} has routes but all channels are disabled.`);
+                // 依然可以写入，但 routes 为空，Lua 处理时会报错或 503
             }
 
             const luaData = {
@@ -278,10 +338,11 @@ class SyncManager {
                 virtual_token_id: token.id,
                 type: token.type,
                 token_key: token.token_key,
-                routes: routes,
+                routes: processedRoutes, // 注入了 RPM 的路由表
                 limits: token.limit_config || {}
             };
 
+            // 写入 Redis (保持不变)
             if (token.type !== 'vertex') {
                  let ttl = null;
                  if (token.expires_at) {
