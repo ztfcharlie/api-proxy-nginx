@@ -4,6 +4,7 @@ local cjson = require "cjson"
 local utils = require "utils"
 
 local _M = {}
+local KEY_PREFIX = "oauth2:"
 
 -- 初始化 Redis 连接
 local function get_redis_connection()
@@ -13,17 +14,13 @@ local function get_redis_connection()
     -- 从环境变量或配置获取 Redis 地址
     local host = "api-proxy-redis"
     local port = 6379
-    local password = nil -- 如果有密码需设置，这里假设内部网络无密码或默认
+    local password = nil -- 如果有密码需设置
 
     local ok, err = red:connect(host, port)
     if not ok then
         ngx.log(ngx.ERR, "failed to connect to redis: ", err)
         return nil, err
     end
-
-    -- 如果有密码认证
-    -- local res, err = red:auth("123456")
-    -- if not res then ... end
 
     return red
 end
@@ -50,7 +47,7 @@ function _M.authenticate_client()
     -- 3. 区分 Token 类型并查表
     if string.sub(client_token, 1, 12) == "ya29.virtual" then
         -- Case A: Vertex Mock Token
-        local cache_key = "vtoken:" .. client_token
+        local cache_key = KEY_PREFIX .. "vtoken:" .. client_token
         local data_str, err = red:get(cache_key)
 
         if not data_str or data_str == ngx.null then
@@ -64,7 +61,7 @@ function _M.authenticate_client()
         metadata = mapping_data
 
         -- 增强：获取 Channel 的详细配置 (包含 models_config)
-        local channel_key = "channel:" .. tostring(metadata.channel_id)
+        local channel_key = KEY_PREFIX .. "channel:" .. tostring(metadata.channel_id)
         local channel_data_str, _ = red:get(channel_key)
         if channel_data_str and channel_data_str ~= ngx.null then
             local channel_data = cjson.decode(channel_data_str)
@@ -75,7 +72,7 @@ function _M.authenticate_client()
     else
         -- Case B: Static API Key (OpenAI/Azure)
         -- 实现 apikey:xxx 查找
-        local cache_key = "apikey:" .. client_token
+        local cache_key = KEY_PREFIX .. "apikey:" .. client_token
         local data_str, err = red:get(cache_key)
         
         if not data_str or data_str == ngx.null then
@@ -93,7 +90,7 @@ function _M.authenticate_client()
         local channel_id = route.channel_id
         
         -- 获取 Channel 详情 (获取真实 Key)
-        local channel_key = "channel:" .. tostring(channel_id)
+        local channel_key = KEY_PREFIX .. "channel:" .. tostring(channel_id)
         local channel_data_str, _ = red:get(channel_key)
         
         if not channel_data_str or channel_data_str == ngx.null then
@@ -122,6 +119,7 @@ function _M.authenticate_client()
     red:set_keepalive(10000, 100)
 
     -- 6. 返回结果
+    -- 参数对应: client_token, real_access_token, metadata (代替 key_filename)
     return client_token, real_token, metadata
 end
 
@@ -167,9 +165,13 @@ function _M.get_api_host(metadata, model_name)
     -- 尝试从 models_config 获取 region，默认 us-central1
     local region = "us-central1"
     if metadata and metadata.models_config then
+        -- 尝试直接匹配
         local model_cfg = metadata.models_config[model_name]
-        if model_cfg and model_cfg.region and model_cfg.region ~= "" then
-            region = model_cfg.region
+        
+        if model_cfg then
+            if model_cfg.region and model_cfg.region ~= "" then
+                region = model_cfg.region
+            end
         end
     end
     return region .. "-aiplatform.googleapis.com"
