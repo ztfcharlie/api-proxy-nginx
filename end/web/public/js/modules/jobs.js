@@ -80,7 +80,10 @@ window.Modules.Jobs = () => {
                     <tbody className="bg-white divide-y divide-gray-200">
                         {jobs.map(job => (
                             <tr key={job.name} className="hover:bg-gray-50">
-                                <td className="px-6 py-4 text-sm font-bold text-gray-900 font-mono">{job.name}</td>
+                                <td className="px-6 py-4 text-sm text-gray-900">
+                                    <div className="font-bold font-mono">{job.name}</div>
+                                    {job.description && <div className="text-xs text-gray-500 mt-1">{job.description}</div>}
+                                </td>
                                 <td className="px-6 py-4 text-sm text-blue-600 cursor-pointer hover:underline" onClick={() => editInterval(job)}>
                                     {Math.round(job.interval / 1000 / 60)}m ({job.interval}ms) ✎
                                 </td>

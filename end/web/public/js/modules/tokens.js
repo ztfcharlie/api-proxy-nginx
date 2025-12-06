@@ -201,7 +201,14 @@ window.Modules.Tokens = () => {
                     <pre className="text-xs overflow-x-auto whitespace-pre-wrap font-mono">{resultModal.content}</pre>
                 </div>
                 <div className="flex justify-end gap-3">
-                    <Button variant="secondary" onClick={() => navigator.clipboard.writeText(resultModal.content)}>Copy</Button>
+                    <Button variant="secondary" onClick={() => {
+                        if (navigator.clipboard && navigator.clipboard.writeText) {
+                            navigator.clipboard.writeText(resultModal.content);
+                            alert('Copied to clipboard');
+                        } else {
+                            alert('Clipboard API not available (Non-HTTPS?). Please copy manually.');
+                        }
+                    }}>Copy</Button>
                     <Button onClick={() => setResultModal({ open: false })}>Close</Button>
                 </div>
             </Modal>

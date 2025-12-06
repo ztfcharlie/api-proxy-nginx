@@ -48,21 +48,27 @@ router.get('/', async (req, res) => {
         
         const [tokens] = await db.query(query, params);
         
-        // 统计总数
-        // (省略 total 查询以简化代码，实际项目应加上)
-        
-        // 补充路由信息
-        for (const token of tokens) {
-            const [routes] = await db.query(`
-                SELECT r.channel_id, r.weight, c.name as channel_name 
+        if (tokens.length > 0) {
+            const tokenIds = tokens.map(t => t.id);
+            // 批量查询路由信息，避免 N+1 问题
+            const [allRoutes] = await db.query(`
+                SELECT r.virtual_token_id, r.channel_id, r.weight, c.name as channel_name 
                 FROM sys_token_routes r
                 JOIN sys_channels c ON r.channel_id = c.id
-                WHERE r.virtual_token_id = ?
-            `, [token.id]);
-            token.routes = routes;
-            
-            // 移除私钥，避免泄露 (私钥只在创建时返回一次，或者下载时返回)
-            delete token.token_secret; 
+                WHERE r.virtual_token_id IN (?)
+            `, [tokenIds]);
+
+            // 内存组装
+            const routesMap = {};
+            allRoutes.forEach(r => {
+                if (!routesMap[r.virtual_token_id]) routesMap[r.virtual_token_id] = [];
+                routesMap[r.virtual_token_id].push(r);
+            });
+
+            for (const token of tokens) {
+                token.routes = routesMap[token.id] || [];
+                delete token.token_secret; 
+            }
         }
         
         res.json({ data: tokens });

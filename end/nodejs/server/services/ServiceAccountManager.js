@@ -18,12 +18,23 @@ class ServiceAccountManager {
      * 启动定时刷新任务 (Watchdog 模式: 每 5 分钟检查一次)
      */
     startTokenRefreshJob() {
+        logger.info('[DEBUG] Entering startTokenRefreshJob...');
         const job = async () => {
             await this.refreshAllTokens();
         };
         
-        // 每 5 分钟执行一次检查
-        jobManager.schedule('TokenRefreshJob', 5 * 60 * 1000, job);
+        try {
+            // 每 5 分钟执行一次检查
+            jobManager.schedule(
+                'TokenRefreshJob', 
+                5 * 60 * 1000, 
+                job,
+                'Watchdog: Monitors Vertex token TTL and refreshes if < 15m or missing.'
+            );
+            logger.info('[DEBUG] TokenRefreshJob scheduled successfully.');
+        } catch (e) {
+            logger.error('[DEBUG] Failed to schedule TokenRefreshJob:', e);
+        }
         
         // 启动时立即执行一次检查，防止前5分钟空窗期
         this.refreshAllTokens().catch(err => logger.error('Initial token refresh failed:', err));

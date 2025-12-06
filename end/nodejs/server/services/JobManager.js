@@ -12,13 +12,14 @@ class JobManager {
      * @param {string|number} interval 时间间隔 (ms) 或 cron 表达式 (暂仅支持 ms)
      * @param {function} callback 任务回调函数
      */
-    schedule(name, interval, callback) {
+    schedule(name, interval, callback, description = '') {
         if (this.jobs.has(name)) {
             this.stop(name);
         }
 
         const job = {
             name,
+            description,
             interval: parseInt(interval),
             callback,
             lastRun: null,
@@ -168,6 +169,7 @@ class JobManager {
     getAllJobs() {
         return Array.from(this.jobs.values()).map(j => ({
             name: j.name,
+            description: j.description,
             interval: j.interval,
             lastRun: j.lastRun,
             nextRun: j.nextRun,

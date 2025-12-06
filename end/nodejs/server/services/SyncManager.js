@@ -161,7 +161,12 @@ class SyncManager {
         };
 
         // 注册到 JobManager (5分钟一次)
-        jobManager.schedule('ReconciliationJob', 5 * 60 * 1000, job);
+        jobManager.schedule(
+            'ReconciliationJob', 
+            5 * 60 * 1000, 
+            job, 
+            'Syncs DB & Redis state: Cleans orphan keys and restores missing cache.'
+        );
     }
 
     /**
