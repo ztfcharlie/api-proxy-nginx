@@ -71,6 +71,36 @@ class SyncManager {
                     logger.info(`[Watchdog] Cleaned up invalid channel key: ${fullKey}`);
                 }
             }
+
+            // --- 3. 补漏：检查 DB 中有但 Redis 中没有的记录 (防止 Redis 数据丢失) ---
+            
+            // 补漏 Channels
+            const [activeChannels] = await db.query("SELECT * FROM sys_channels WHERE status = 1");
+            for (const channel of activeChannels) {
+                const channelKey = `channel:${channel.id}`;
+                // RedisService.exists 自动加前缀，所以这里不加
+                const exists = await this.redis.exists(channelKey);
+                if (!exists) {
+                    logger.warn(`[Watchdog] Restore missing channel cache: ${channelKey}`);
+                    await this.updateChannelCache(channel);
+                }
+            }
+
+            // 补漏 Tokens
+            const [activeTokens] = await db.query("SELECT * FROM sys_virtual_tokens WHERE status = 1 AND type != 'vertex'");
+            for (const token of activeTokens) {
+                const tokenKey = `apikey:${token.token_key}`;
+                const exists = await this.redis.exists(tokenKey);
+                if (!exists) {
+                    logger.warn(`[Watchdog] Restore missing token cache: ${tokenKey}`);
+                    await this.updateVirtualTokenCache(token);
+                }
+            }
+
+        } catch (err) {
+            logger.error('[Watchdog] Reconciliation failed:', err);
+        }
+    };
         };
 
         // 注册到 JobManager (5分钟一次)
