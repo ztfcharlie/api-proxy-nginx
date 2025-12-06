@@ -1,5 +1,5 @@
 const { useState, useEffect, useMemo } = React;
-const { Button, Input, Select, Switch, Modal, Icons } = window.UI;
+const { Button, Input, Select, Switch, Modal, Icons, ConfirmDialog } = window.UI;
 
 window.Modules = window.Modules || {};
 
@@ -8,8 +8,9 @@ window.Modules.Tokens = () => {
     const [users, setUsers] = useState([]);
     const [channels, setChannels] = useState([]);
     
-    const [modal, setModal] = useState({ open: false });
+    const [modal, setModal] = useState({ open: false, isEdit: false });
     const [resultModal, setResultModal] = useState({ open: false, content: '' });
+    const [confirmModal, setConfirmModal] = useState({ open: false, id: null });
     const [form, setForm] = useState({ routes: [] });
 
     const API_BASE = '/api/admin';
@@ -31,30 +32,57 @@ window.Modules.Tokens = () => {
         } catch (e) { console.error(e); }
     };
 
-    const openModal = () => {
-        setForm({
-            user_id: users.length > 0 ? users[0].id : '',
-            name: '',
-            type: 'vertex',
-            routes: [{ channel_id: '', weight: 10 }],
-            expires_at: ''
-        });
-        setModal({ open: true });
+    const openModal = (token = null) => {
+        if (token) {
+            setForm({
+                id: token.id,
+                user_id: token.user_id,
+                name: token.name,
+                type: token.type,
+                routes: token.routes ? token.routes.map(r => ({ channel_id: r.channel_id, weight: r.weight })) : [],
+                expires_at: token.expires_at ? token.expires_at.slice(0, 16) : '',
+            });
+            setModal({ open: true, isEdit: true });
+        } else {
+            setForm({
+                user_id: users.length > 0 ? users[0].id : '',
+                name: '',
+                type: 'vertex',
+                routes: [{ channel_id: '', weight: 10 }],
+                expires_at: ''
+            });
+            setModal({ open: true, isEdit: false });
+        }
     };
 
-    const createToken = async () => {
+    const saveToken = async () => {
         try {
             const payload = {
                 ...form,
                 routes: form.routes.filter(r => r.channel_id).map(r => ({...r, weight: parseInt(r.weight)})),
                 expires_at: form.expires_at || null,
-                limit_config: {} // No whitelist
+                limit_config: {} 
             };
-            const res = await axios.post(API_BASE + '/tokens', payload);
-            setModal({ open: false });
-            setResultModal({ open: true, content: JSON.stringify(res.data.credentials, null, 2) });
+
+            if (modal.isEdit) {
+                await axios.put(API_BASE + '/tokens/' + form.id, payload);
+                setModal({ open: false });
+                fetchData();
+            } else {
+                const res = await axios.post(API_BASE + '/tokens', payload);
+                setModal({ open: false });
+                setResultModal({ open: true, content: JSON.stringify(res.data.credentials, null, 2) });
+                fetchData();
+            }
+        } catch (e) { alert('Operation failed'); }
+    };
+
+    const deleteToken = async () => {
+        try {
+            await axios.delete(API_BASE + '/tokens/' + confirmModal.id);
+            setConfirmModal({ open: false });
             fetchData();
-        } catch (e) { alert('Create failed'); }
+        } catch (e) { alert('Delete failed'); }
     };
 
     const toggleStatus = async (row) => {
@@ -67,13 +95,12 @@ window.Modules.Tokens = () => {
         if (!form.type) return [];
         if (form.type === 'vertex') return channels.filter(c => c.type === 'vertex');
         if (form.type === 'azure' || form.type === 'openai') return channels.filter(c => c.type === 'azure' || c.type === 'openai');
-        // Strict match for others
         return channels.filter(c => c.type === form.type);
     }, [channels, form.type]);
 
     return (
         <div className="space-y-6">
-            <div className="flex justify-end"><Button onClick={openModal}>+ New Token</Button></div>
+            <div className="flex justify-end"><Button onClick={() => openModal()}>+ New Token</Button></div>
             
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                 <table className="min-w-full divide-y divide-gray-200">
@@ -86,6 +113,7 @@ window.Modules.Tokens = () => {
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Expires</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Routes</th>
+                            <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Action</th>
                         </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
@@ -98,15 +126,19 @@ window.Modules.Tokens = () => {
                                 <td className="px-6 py-4 text-sm text-gray-500">{t.expires_at ? new Date(t.expires_at).toLocaleString() : 'Never'}</td>
                                 <td className="px-6 py-4 text-sm"><Switch checked={!!t.status} onChange={() => toggleStatus(t)} /></td>
                                 <td className="px-6 py-4 text-xs text-gray-500">{t.routes && t.routes.map((r, i) => <div key={i}>{r.channel_name} ({r.weight})</div>)}</td>
+                                <td className="px-6 py-4 text-right text-sm font-medium">
+                                    <button onClick={() => openModal(t)} className="text-blue-600 hover:text-blue-900 mr-4">Edit</button>
+                                    <button onClick={() => setConfirmModal({ open: true, id: t.id })} className="text-red-600 hover:text-red-900">Delete</button>
+                                </td>
                             </tr>
                         ))}
-                        {tokens.length === 0 && <tr><td colSpan="7" className="p-8 text-center text-gray-400">No Data</td></tr>}
+                        {tokens.length === 0 && <tr><td colSpan="8" className="p-8 text-center text-gray-400">No Data</td></tr>}
                     </tbody>
                 </table>
             </div>
 
-            <Modal isOpen={modal.open} title="Create Token" onClose={() => setModal({ open: false })} footer={
-                <div className="flex justify-end gap-3"><Button variant="secondary" onClick={() => setModal({ open: false })}>Cancel</Button><Button onClick={createToken}>Create</Button></div>
+            <Modal isOpen={modal.open} title={modal.isEdit ? "Edit Token" : "Create Token"} onClose={() => setModal({ open: false })} footer={
+                <div className="flex justify-end gap-3"><Button variant="secondary" onClick={() => setModal({ open: false })}>Cancel</Button><Button onClick={saveToken}>Save</Button></div>
             }>
                 <div className="space-y-6 pb-20">
                     <Select label="User" value={form.user_id} onChange={v => setForm({ ...form, user_id: v })} options={users.map(u => ({ value: u.id, label: u.username }))} className="relative z-30" />
@@ -146,6 +178,8 @@ window.Modules.Tokens = () => {
                     </div>
                 </div>
             </Modal>
+
+            <ConfirmDialog isOpen={confirmModal.open} title="Confirm Delete" message="Are you sure?" onCancel={() => setConfirmModal({ open: false })} onConfirm={deleteToken} />
 
             <Modal isOpen={resultModal.open} title="Success" onClose={() => setResultModal({ open: false })}>
                 <div className="bg-green-50 p-4 rounded mb-4"><pre className="text-xs overflow-x-auto">{resultModal.content}</pre></div>

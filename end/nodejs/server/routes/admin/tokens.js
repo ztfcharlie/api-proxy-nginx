@@ -169,25 +169,79 @@ router.post('/', async (req, res) => {
 });
 
 /**
- * 更新令牌 (主要用于状态切换)
+ * 更新令牌 (状态、路由、配置)
  */
 router.put('/:id', async (req, res) => {
     const { id } = req.params;
-    const { status } = req.body;
+    const { status, name, expires_at, routes, limit_config } = req.body;
     
+    const connection = await db.getConnection();
     try {
-        if (status !== undefined) {
-            await db.query("UPDATE sys_virtual_tokens SET status = ? WHERE id = ?", [status, id]);
-            
-            // 触发缓存同步
-            const [token] = await db.query("SELECT * FROM sys_virtual_tokens WHERE id = ?", [id]);
-            await SyncManager.updateVirtualTokenCache(token[0]);
-            
-            return res.json({ message: "Token status updated" });
+        await connection.beginTransaction();
+
+        // 1. 更新基本信息
+        let updateFields = [];
+        let params = [];
+        if (status !== undefined) { updateFields.push("status = ?"); params.push(status); }
+        if (name !== undefined) { updateFields.push("name = ?"); params.push(name); }
+        if (expires_at !== undefined) { updateFields.push("expires_at = ?"); params.push(expires_at || null); }
+        if (limit_config !== undefined) { updateFields.push("limit_config = ?"); params.push(JSON.stringify(limit_config)); }
+        
+        if (updateFields.length > 0) {
+            params.push(id);
+            await connection.query(`UPDATE sys_virtual_tokens SET ${updateFields.join(", ")} WHERE id = ?`, params);
         }
-        res.json({ message: "No changes" });
+
+        // 2. 更新路由 (先删后加)
+        if (routes) {
+            await connection.query("DELETE FROM sys_token_routes WHERE virtual_token_id = ?", [id]);
+            for (const route of routes) {
+                await connection.query(
+                    "INSERT INTO sys_token_routes (virtual_token_id, channel_id, weight) VALUES (?, ?, ?)",
+                    [id, route.channel_id, route.weight || 10]
+                );
+            }
+        }
+
+        await connection.commit();
+
+        // 3. 同步缓存
+        const [token] = await db.query("SELECT * FROM sys_virtual_tokens WHERE id = ?", [id]);
+        if (token.length > 0) {
+            await SyncManager.updateVirtualTokenCache(token[0]);
+        }
+
+        res.json({ message: "Token updated successfully" });
+
     } catch (err) {
+        await connection.rollback();
         logger.error('Update token failed:', err);
+        res.status(500).json({ error: err.message });
+    } finally {
+        connection.release();
+    }
+});
+
+/**
+ * 删除令牌
+ */
+router.delete('/:id', async (req, res) => {
+    const { id } = req.params;
+    try {
+        // 先获取 Token 信息以便删除缓存
+        const [tokens] = await db.query("SELECT * FROM sys_virtual_tokens WHERE id = ?", [id]);
+        if (tokens.length === 0) return res.json({ message: "Token not found" });
+        const token = tokens[0];
+
+        // 删除 DB 记录 (级联删除 routes)
+        await db.query("DELETE FROM sys_virtual_tokens WHERE id = ?", [id]);
+
+        // 删除 Redis 缓存
+        await SyncManager.deleteTokenCache(token);
+
+        res.json({ message: "Token deleted successfully" });
+    } catch (err) {
+        logger.error('Delete token failed:', err);
         res.status(500).json({ error: err.message });
     }
 });
