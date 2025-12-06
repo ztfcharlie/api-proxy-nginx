@@ -21,8 +21,8 @@ class RedisService {
             connectTimeout: 10000,
             commandTimeout: 5000,
             family: 4,
-            // 缓存配置 (手动管理前缀)
-            keyPrefix: process.env.REDIS_KEY_PREFIX || 'oauth2:',
+            // [HARDCODED] 强制统一前缀，防止多语言服务不一致
+            keyPrefix: 'oauth2:',
             enableOfflineQueue: true,
             retryDelayOnClusterDown: 300,
             maxRetriesPerRequestOnClusterDown: 3

@@ -79,6 +79,8 @@ class SyncManager {
      * 启动数据一致性校准任务 (Watchdog)
      */
     startReconciliationJob() {
+        logger.info('[DEPRECATED] Node.js ReconciliationJob is disabled. This task is now handled by the Go Core Service.');
+        /*
         const job = async () => {
             if (!this.redis || !this.redis.redis) return;
 
@@ -86,80 +88,7 @@ class SyncManager {
                 const prefix = 'oauth2:';
                 
                 // --- 1. 清理：删除 Redis 中有但 DB 中无效的 Key ---
-
-                // Tokens
-                const tokenKeys = await this.redis.redis.keys(prefix + 'apikey:*');
-                for (const fullKey of tokenKeys) {
-                    const tokenKey = fullKey.replace(prefix + 'apikey:', '');
-                    const [rows] = await db.query("SELECT id, status FROM sys_virtual_tokens WHERE token_key = ?", [tokenKey]);
-                    
-                    let shouldDelete = false;
-                    if (rows.length === 0) {
-                        logger.warn(`[Watchdog] Found orphan token in Redis: ${tokenKey} (Deleted in DB)`);
-                        shouldDelete = true;
-                    } else if (rows[0].status === 0) {
-                        logger.warn(`[Watchdog] Found disabled token in Redis: ${tokenKey} (Status=0)`);
-                        shouldDelete = true;
-                    }
-                    
-                    if (shouldDelete) {
-                        await this.redis.redis.del(fullKey);
-                        logger.info(`[Watchdog] Cleaned up invalid token key: ${fullKey}`);
-                    }
-                }
-
-                // Channels
-                const channelKeys = await this.redis.redis.keys(prefix + 'channel:*');
-                for (const fullKey of channelKeys) {
-                    const channelId = fullKey.replace(prefix + 'channel:', '');
-                    if (isNaN(parseInt(channelId))) continue;
-
-                    const [rows] = await db.query("SELECT id, status FROM sys_channels WHERE id = ?", [channelId]);
-
-                    let shouldDelete = false;
-                    if (rows.length === 0) {
-                        logger.warn(`[Watchdog] Found orphan channel in Redis: ${channelId} (Deleted in DB)`);
-                        shouldDelete = true;
-                    } else if (rows[0].status === 0) {
-                        logger.warn(`[Watchdog] Found disabled channel in Redis: ${channelId} (Status=0)`);
-                        shouldDelete = true;
-                    }
-
-                    if (shouldDelete) {
-                        await this.redis.redis.del(fullKey);
-                        logger.info(`[Watchdog] Cleaned up invalid channel key: ${fullKey}`);
-                    }
-                }
-
-                // --- 2. 补漏：恢复 DB 中有但 Redis 中缺失的 Key ---
-
-                // Active Channels
-                const [activeChannels] = await db.query("SELECT * FROM sys_channels WHERE status = 1");
-                for (const channel of activeChannels) {
-                    const channelKey = `channel:${channel.id}`;
-                    const exists = await this.redis.exists(channelKey); // RedisService.exists 自动加前缀
-                    if (!exists) {
-                        logger.warn(`[Watchdog] Restore missing channel cache: ${channelKey}`);
-                        await this.updateChannelCache(channel);
-                    }
-                }
-
-                // Active Tokens (Non-Vertex)
-                const [activeTokens] = await db.query("SELECT * FROM sys_virtual_tokens WHERE status = 1 AND type != 'vertex'");
-                for (const token of activeTokens) {
-                    const tokenKey = `apikey:${token.token_key}`;
-                    const exists = await this.redis.exists(tokenKey);
-                    if (!exists) {
-                        logger.warn(`[Watchdog] Restore missing token cache: ${tokenKey}`);
-                        await this.updateVirtualTokenCache(token);
-                    }
-                }
-
-            } catch (err) {
-                logger.error('[Watchdog] Reconciliation failed:', err);
-            }
-        };
-
+        // ... (rest of the logic) ...
         // 注册到 JobManager (5分钟一次)
         jobManager.schedule(
             'ReconciliationJob', 
@@ -167,6 +96,7 @@ class SyncManager {
             job, 
             'Syncs DB & Redis state: Cleans orphan keys and restores missing cache.'
         );
+        */
     }
 
     /**

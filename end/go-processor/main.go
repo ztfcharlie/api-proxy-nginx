@@ -58,6 +58,66 @@ func main() {
 	sigChan := make(chan os.Signal, 1)
 	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
+	// [Added] 启动 Token 刷新管理器
+	tm := NewTokenManager(rdb)
+	go tm.Start(ctx)
+
+	// [Added] 启动数据库同步管理器 (Reconciliation)
+	dbUser := getEnv("DB_USER", "oauth2_user")
+	dbPass := getEnv("DB_PASSWORD", "oauth2_password_123456")
+	dbHost := getEnv("DB_HOST", "api-proxy-mysql")
+	dbPort := getEnv("DB_PORT", "3306")
+	dbName := getEnv("DB_NAME", "oauth2_mock")
+	
+	// DSN: user:password@tcp(host:port)/dbname
+	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True", dbUser, dbPass, dbHost, dbPort, dbName)
+	
+	sm, err := NewSyncManager(rdb, dsn)
+	if err != nil {
+		log.Printf("[ERROR] Failed to connect to MySQL, SyncManager disabled: %v", err)
+	} else {
+		go sm.Start(ctx)
+	}
+
+	// [Added] 启动 Redis Pub/Sub 监听器 (用于远程触发任务)
+	go func() {
+		// 频道名需要与 Node.js RedisService 的 keyPrefix 匹配
+		// Node.js default prefix: "oauth2:"
+		const triggerChannel = "oauth2:cmd:job:trigger"
+		
+		pubsub := rdb.Subscribe(ctx, triggerChannel)
+		defer pubsub.Close()
+
+		// 等待订阅成功
+		if _, err := pubsub.Receive(ctx); err != nil {
+			log.Printf("[ERROR] Failed to subscribe to trigger channel: %v", err)
+			return
+		}
+		
+		log.Printf("[INFO] Listening for job triggers on %s", triggerChannel)
+		ch := pubsub.Channel()
+
+		for msg := range ch {
+			log.Printf("[INFO] Received trigger command: %s", msg.Payload)
+			
+			// 这里的 msg.Payload 实际上是 JSON 字符串 (RedisService.publish 做了 JSON.stringify)
+			// 但如果直接传字符串 "token_refresh_job"，JSON.stringify 后是 "\"token_refresh_job\""
+			// 所以我们需要去掉可能存在的引号
+			cmd := strings.Trim(msg.Payload, "\"")
+
+			switch cmd {
+			case "token_refresh_job":
+				tm.ForceRun()
+			case "db_sync_job":
+				if sm != nil {
+					sm.ForceRun()
+				}
+			default:
+				log.Printf("[WARN] Unknown job trigger: %s", cmd)
+			}
+		}
+	}()
+
 	// 4. 开始消费循环
 	log.Println("[INFO] Waiting for messages...")
 

@@ -18,6 +18,8 @@ class ServiceAccountManager {
      * 启动定时刷新任务 (Watchdog 模式: 每 5 分钟检查一次)
      */
     startTokenRefreshJob() {
+        logger.info('[DEPRECATED] Node.js TokenRefreshJob is disabled. This task is now handled by the Go Core Service.');
+        /*
         logger.info('[DEBUG] Entering startTokenRefreshJob...');
         const job = async () => {
             await this.refreshAllTokens();
@@ -38,6 +40,7 @@ class ServiceAccountManager {
         
         // 启动时立即执行一次检查，防止前5分钟空窗期
         this.refreshAllTokens().catch(err => logger.error('Initial token refresh failed:', err));
+        */
     }
 
     /**

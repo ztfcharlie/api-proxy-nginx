@@ -86,8 +86,16 @@ services:
       - REDIS_PORT=6379
       - REDIS_PASSWORD=123456
       - TZ=Asia/Shanghai
+      # MySQL 配置 (用于 SyncManager)
+      - DB_HOST=api-proxy-mysql
+      - DB_PORT=3306
+      - DB_NAME=oauth2_mock
+      - DB_USER=oauth2_user
+      - DB_PASSWORD=oauth2_password_123456
     depends_on:
       api-proxy-redis:
+        condition: service_healthy
+      api-proxy-mysql:
         condition: service_healthy
     networks:
       - api-proxy-network

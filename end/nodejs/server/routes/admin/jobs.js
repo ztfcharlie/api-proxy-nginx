@@ -5,9 +5,13 @@ const jobManager = require('../../services/JobManager');
 /**
  * 获取所有任务状态
  */
-router.get('/', (req, res) => {
-    const jobs = jobManager.getAllJobs();
-    res.json({ data: jobs });
+router.get('/', async (req, res) => {
+    try {
+        const jobs = await jobManager.getAllJobs();
+        res.json({ data: jobs });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
 });
 
 /**
