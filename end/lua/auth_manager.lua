@@ -127,41 +127,51 @@ end
 
 -- 获取 API 主机
 function _M.get_api_host(metadata, model_name)
-    -- 默认值
-    local region = "us-central1"
+    local type = metadata.channel_type
     
-    -- 尝试从 models_config 中获取特定模型的 region 配置
-    if metadata and metadata.models_config then
-        -- 尝试直接匹配
-        local model_cfg = metadata.models_config[model_name]
-        
-        -- 如果没找到，可能需要处理版本号 (e.g. gpt-4-0314 -> gpt-4)
-        -- 这里先只做精确匹配
-        
-        if model_cfg then
-            if model_cfg.region and model_cfg.region ~= "" then
-                region = model_cfg.region
-            end
-        end
-    end
-
-    -- 针对不同类型构建 Host
-    if metadata.channel_type == "azure" then
-        -- Azure: 从 extra_config 获取 endpoint
+    -- 1. Azure: 从 extra_config 获取 endpoint
+    if type == "azure" then
         if metadata.extra_config and metadata.extra_config.endpoint then
-            -- 移除 https:// 前缀
             local host = metadata.extra_config.endpoint
             host = string.gsub(host, "https://", "")
             host = string.gsub(host, "http://", "")
-            -- 移除尾部 slash
             if string.sub(host, -1) == "/" then
                 host = string.sub(host, 1, -2)
             end
             return host
         end
+        return "api.openai.com" -- Fallback
     end
 
-    -- 默认 Vertex
+    -- 2. OpenAI
+    if type == "openai" then
+        return "api.openai.com"
+    end
+
+    -- 3. DeepSeek
+    if type == "deepseek" then
+        return "api.deepseek.com"
+    end
+
+    -- 4. Anthropic
+    if type == "anthropic" then
+        return "api.anthropic.com"
+    end
+
+    -- 5. Qwen (Aliyun Dashscope)
+    if type == "qwen" then
+        return "dashscope.aliyuncs.com"
+    end
+
+    -- 6. Vertex (Google) - 默认处理
+    -- 尝试从 models_config 获取 region，默认 us-central1
+    local region = "us-central1"
+    if metadata and metadata.models_config then
+        local model_cfg = metadata.models_config[model_name]
+        if model_cfg and model_cfg.region and model_cfg.region ~= "" then
+            region = model_cfg.region
+        end
+    end
     return region .. "-aiplatform.googleapis.com"
 end
 

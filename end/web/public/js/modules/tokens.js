@@ -64,8 +64,11 @@ window.Modules.Tokens = () => {
     };
 
     const availableChannels = useMemo(() => {
+        if (!form.type) return [];
         if (form.type === 'vertex') return channels.filter(c => c.type === 'vertex');
-        return channels.filter(c => c.type !== 'vertex');
+        if (form.type === 'azure' || form.type === 'openai') return channels.filter(c => c.type === 'azure' || c.type === 'openai');
+        // Strict match for others
+        return channels.filter(c => c.type === form.type);
     }, [channels, form.type]);
 
     return (
@@ -110,7 +113,14 @@ window.Modules.Tokens = () => {
                     <Input label="Name" value={form.name} onChange={v => setForm({ ...form, name: v })} />
                     
                     <div className="grid grid-cols-2 gap-4">
-                        <Select label="Type" value={form.type} onChange={v => setForm({ ...form, type: v })} options={[{ value: 'vertex', label: 'Vertex' }, { value: 'azure', label: 'OpenAI/Azure' }]} className="relative z-20" />
+                        <Select label="Type" value={form.type} onChange={v => setForm({ ...form, type: v })} options={[
+                            { value: 'vertex', label: 'Vertex AI (OAuth2)' },
+                            { value: 'azure', label: 'Azure OpenAI' },
+                            { value: 'openai', label: 'OpenAI' },
+                            { value: 'anthropic', label: 'Anthropic' },
+                            { value: 'qwen', label: 'Qwen' },
+                            { value: 'deepseek', label: 'DeepSeek' }
+                        ]} className="relative z-20" />
                         <div className="mb-4">
                             <label className="block text-sm font-medium text-gray-700 mb-1">Expires At</label>
                             <input type="datetime-local" className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm" value={form.expires_at} onChange={e => setForm({ ...form, expires_at: e.target.value })} />
