@@ -183,9 +183,18 @@ window.Modules.Tokens = () => {
                                         const nr = [...form.routes]; nr[i].channel_id = v; setForm({ ...form, routes: nr });
                                     }} options={availableChannels.map(c => ({ value: c.id, label: c.name }))} className="mb-0" />
                                 </div>
-                                <input type="number" className="w-20 px-3 py-2 border rounded-lg text-sm" value={r.weight} onChange={e => {
-                                    const nr = [...form.routes]; nr[i].weight = e.target.value; setForm({ ...form, routes: nr });
-                                }} />
+                                <input 
+                                    type="text" 
+                                    className="w-20 px-3 py-2 border border-gray-300 rounded-lg text-sm text-center focus:ring-blue-500 focus:border-blue-500" 
+                                    value={r.weight} 
+                                    placeholder="Weight"
+                                    onChange={e => {
+                                        const val = e.target.value.replace(/[^0-9]/g, '');
+                                        const nr = [...form.routes]; 
+                                        nr[i].weight = val; 
+                                        setForm({ ...form, routes: nr });
+                                    }} 
+                                />
                                 <button onClick={() => { const nr = [...form.routes]; nr.splice(i, 1); setForm({ ...form, routes: nr }); }} className="text-red-500 p-2">×</button>
                             </div>
                         ))}

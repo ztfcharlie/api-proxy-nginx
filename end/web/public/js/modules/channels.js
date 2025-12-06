@@ -70,7 +70,7 @@ window.Modules.Channels = () => {
             } else {
                 await axios.post(API_BASE + '/channels', form);
             }
-            setEditModal({ open: false });
+            setEditModal({ open: false, isEdit: false });
             fetchChannels();
         } catch (e) { 
             const msg = e.response?.data?.error || e.message;
@@ -83,7 +83,10 @@ window.Modules.Channels = () => {
             await axios.delete(API_BASE + '/channels/' + confirmModal.id);
             setConfirmModal({ open: false });
             fetchChannels();
-        } catch (e) { alert('Delete failed'); }
+        } catch (e) { 
+            const msg = e.response?.data?.error || e.message;
+            alert('删除失败: ' + msg);
+        }
     };
 
     const toggleStatus = async (row) => {
@@ -91,14 +94,21 @@ window.Modules.Channels = () => {
         setChannels(channels.map(c => c.id === row.id ? { ...c, status: newStatus } : c));
         try {
             await axios.put(API_BASE + '/channels/' + row.id, { status: newStatus });
-        } catch (e) { fetchChannels(); }
+        } catch (e) { 
+            fetchChannels(); 
+            const msg = e.response?.data?.error || e.message;
+            alert('状态更新失败: ' + msg);
+        }
     };
 
     const testConnection = async () => {
         try {
             const res = await axios.post(API_BASE + '/channels/test-connection', form);
-            if (res.data.success) alert('Connection successful'); else alert('Connection failed: ' + res.data.message);
-        } catch (e) { alert('Test error'); }
+            if (res.data.success) alert('连接成功'); else alert('连接失败: ' + res.data.message);
+        } catch (e) { 
+            const msg = e.response?.data?.error || e.message;
+            alert('测试出错: ' + msg);
+        }
     };
 
     const openBindingModal = (channel) => {
@@ -138,6 +148,20 @@ window.Modules.Channels = () => {
         setBindingModal(prev => ({ ...prev, list: newList }));
     };
 
+    const testModel = async (modelName) => {
+        try {
+            const res = await axios.post(API_BASE + '/channels/' + bindingModal.channel.id + '/test-model', { model: modelName });
+            if (res.data.skipped) {
+                alert('Test skipped: ' + res.data.message);
+            } else {
+                alert(`✅ Test Passed! (${res.data.duration}ms)`);
+            }
+        } catch (e) {
+            const msg = e.response?.data?.error || e.message;
+            alert('❌ Test Failed: ' + msg);
+        }
+    };
+
     const saveBinding = async () => {
         try {
             const configObj = {};
@@ -150,9 +174,12 @@ window.Modules.Channels = () => {
                 };
             });
             await axios.put(API_BASE + '/channels/' + bindingModal.channel.id, { models_config: configObj });
-            setBindingModal({ open: false, channel: null, list: [] }); // Reset to full initial state
+            setBindingModal({ open: false, channel: null, list: [] }); 
             fetchChannels();
-        } catch (e) { alert('Save config failed'); }
+        } catch (e) { 
+            const msg = e.response?.data?.error || e.message;
+            alert('保存配置失败: ' + msg);
+        }
     };
 
     const getAvailableModels = () => {
@@ -274,8 +301,6 @@ window.Modules.Channels = () => {
                         <Input label="API Version" value={form.extra_config && form.extra_config.api_version} onChange={v => setForm({...form, extra_config: {...form.extra_config, api_version: v}})} />
                     </div>
                 )}
-                
-                <Button onClick={testConnection} variant="secondary" className="w-full justify-center border-dashed">Test Connection</Button>
             </Modal>
 
             <Modal size="xl" isOpen={bindingModal.open} title="Bind Models" onClose={() => setBindingModal({ open: false, channel: null, list: [] })} footer={
@@ -304,22 +329,6 @@ window.Modules.Channels = () => {
                         <div className="flex-1 overflow-y-auto p-4 pb-24">
                             <table className="w-full">
                                 <thead>
-    const testModel = async (modelName) => {
-        try {
-            const res = await axios.post(API_BASE + '/channels/' + bindingModal.channel.id + '/test-model', { model: modelName });
-            if (res.data.skipped) {
-                alert('Test skipped: ' + res.data.message);
-            } else {
-                alert(`✅ Test Passed! (${res.data.duration}ms)`);
-            }
-        } catch (e) {
-            const msg = e.response?.data?.error || e.message;
-            alert('❌ Test Failed: ' + msg);
-        }
-    };
-
-    const saveBinding = async () => {
-// ...
                                     <tr className="text-left text-xs text-gray-500 uppercase">
                                         <th className="pb-2">Name</th>
                                         {bindingModal.channel && bindingModal.channel.type === 'vertex' && <th className="pb-2">Region</th>}
