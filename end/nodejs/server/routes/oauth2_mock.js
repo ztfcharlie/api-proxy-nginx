@@ -117,6 +117,11 @@ module.exports = function(redisService, serviceAccountManager) {
                 return res.status(503).json({ error: 'service_unavailable', error_description: 'Upstream token error' });
             }
 
+            if (!realToken) {
+                logger.error(`Real token is null for channel ${targetChannel.channel_id}. Upstream refresh likely failed.`);
+                return res.status(503).json({ error: 'service_unavailable', error_description: 'Upstream token unavailable' });
+            }
+
             // 7. 生成虚拟 Access Token
             // 格式模拟 Google: ya29.virtual.<uuid>
             const virtualAccessToken = 'ya29.virtual.' + uuidv4().replace(/-/g, '') + uuidv4().replace(/-/g, '');

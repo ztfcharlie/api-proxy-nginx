@@ -70,8 +70,22 @@ function _M.authenticate_client()
         end
 
         local mapping_data = cjson.decode(data_str)
-        real_token = mapping_data.real_token
+        -- real_token = mapping_data.real_token -- 旧逻辑：使用快照（可能过期）
         metadata = mapping_data
+
+        -- 关键修复：实时获取最新的 Real Token
+        -- 因为 Channel 的 Token 是由后台 Job 独立刷新的，vtoken 里的 snapshot 可能已过期
+        local rt_key = KEY_PREFIX .. "real_token:" .. tostring(metadata.channel_id)
+        local fresh_token, _ = red:get(rt_key)
+        
+        if fresh_token and fresh_token ~= ngx.null then
+            real_token = fresh_token
+        else
+            -- 降级：如果 Redis 里居然没有 real_token (罕见)，尝试用快照
+            -- 这种情况通常发生在该渠道被禁用但 Token 还没过期时
+            ngx.log(ngx.WARN, "Real token missing in Redis for channel ", metadata.channel_id, ", using snapshot.")
+            real_token = mapping_data.real_token
+        end
 
         -- 增强：获取 Channel 的详细配置 (包含 models_config)
         local channel_key = KEY_PREFIX .. "channel:" .. tostring(metadata.channel_id)

@@ -202,7 +202,17 @@ window.Modules.Channels = () => {
                                     </span>
                                 </td>
                                 <td className="px-6 py-4 text-sm">
-                                    <Switch checked={!!row.status} onChange={() => toggleStatus(row)} />
+                                    <div className="flex items-center gap-3">
+                                        <Switch checked={!!row.status} onChange={() => toggleStatus(row)} />
+                                        {row.last_error && (
+                                            <div className="group relative">
+                                                <span className="text-red-500 cursor-help text-lg">⚠️</span>
+                                                <div className="hidden group-hover:block absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-red-800 text-white text-xs rounded shadow-lg w-64 z-50 break-words">
+                                                    {row.last_error}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
                                 </td>
                                 <td className="px-6 py-4 text-right text-sm font-medium">
                                     <button onClick={() => openBindingModal(row)} className="text-indigo-600 hover:text-indigo-900 mr-4 border border-indigo-200 px-3 py-1 rounded bg-indigo-50">⚡ Models</button>
