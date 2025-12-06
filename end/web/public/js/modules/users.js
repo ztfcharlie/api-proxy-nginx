@@ -1,5 +1,5 @@
 const { useState, useEffect } = React;
-const { Button, Input, Modal, Switch } = window.UI;
+const { Button, Input, Modal, Switch, ConfirmDialog } = window.UI;
 
 window.Modules = window.Modules || {};
 
@@ -10,6 +10,14 @@ window.Modules.Users = () => {
     const [form, setForm] = useState({});
 
     const API_BASE = '/api/admin';
+
+    // 定义 fetchUsers，确保它在 useEffect 和其他函数之前
+    const fetchUsers = async () => {
+        try {
+            const res = await axios.get(API_BASE + '/users');
+            setUsers(res.data.data);
+        } catch (e) { console.error(e); }
+    };
 
     useEffect(() => {
         fetchUsers();
@@ -57,7 +65,13 @@ window.Modules.Users = () => {
     const toggleStatus = async (row) => {
         const newStatus = row.status ? 0 : 1;
         setUsers(users.map(u => u.id === row.id ? { ...u, status: newStatus } : u));
-        try { await axios.put(API_BASE + '/users/' + row.id, { status: newStatus }); } catch (e) { fetchUsers(); }
+        try { 
+            await axios.put(API_BASE + '/users/' + row.id, { status: newStatus }); 
+        } catch (e) { 
+            fetchUsers(); // Revert on error
+            const msg = e.response?.data?.error || e.message;
+            alert('状态更新失败: ' + msg);
+        }
     };
 
     return (
