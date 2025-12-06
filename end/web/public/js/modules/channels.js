@@ -304,11 +304,28 @@ window.Modules.Channels = () => {
                         <div className="flex-1 overflow-y-auto p-4 pb-24">
                             <table className="w-full">
                                 <thead>
+    const testModel = async (modelName) => {
+        try {
+            const res = await axios.post(API_BASE + '/channels/' + bindingModal.channel.id + '/test-model', { model: modelName });
+            if (res.data.skipped) {
+                alert('Test skipped: ' + res.data.message);
+            } else {
+                alert(`✅ Test Passed! (${res.data.duration}ms)`);
+            }
+        } catch (e) {
+            const msg = e.response?.data?.error || e.message;
+            alert('❌ Test Failed: ' + msg);
+        }
+    };
+
+    const saveBinding = async () => {
+// ...
                                     <tr className="text-left text-xs text-gray-500 uppercase">
                                         <th className="pb-2">Name</th>
                                         {bindingModal.channel && bindingModal.channel.type === 'vertex' && <th className="pb-2">Region</th>}
                                         <th className="pb-2 w-24">RPM</th>
                                         <th className="pb-2 w-24">Pricing</th>
+                                        <th className="pb-2 w-16">Test</th>
                                         <th className="pb-2 w-8"></th>
                                     </tr>
                                 </thead>
@@ -324,6 +341,9 @@ window.Modules.Channels = () => {
                                                 <Select value={item.pricing_mode} onChange={v => updateBindingConfig(idx, 'pricing_mode', v)} className="mb-0" options={[
                                                     { value: 'token', label: 'Token' }, { value: 'request', label: 'Request' }, { value: 'second', label: 'Second' }
                                                 ]} />
+                                            </td>
+                                            <td className="py-2 pr-2">
+                                                <button onClick={() => testModel(item.name)} className="text-blue-600 hover:underline text-xs">Test</button>
                                             </td>
                                             <td className="py-2 text-right">
                                                 <button onClick={() => removeModelFromBinding(item.name)} className="text-red-500"><Icons.Close /></button>

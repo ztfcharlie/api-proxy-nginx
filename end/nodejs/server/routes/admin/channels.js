@@ -196,4 +196,77 @@ router.post('/test-connection', async (req, res) => {
     }
 });
 
+const axios = require('axios');
+
+// ... existing code ...
+
+/**
+ * 测试指定模型的连通性
+ */
+router.post('/:id/test-model', async (req, res) => {
+    const { id } = req.params;
+    const { model } = req.body;
+    
+    try {
+        const [channels] = await db.query("SELECT * FROM sys_channels WHERE id = ?", [id]);
+        if (channels.length === 0) return res.status(404).json({ error: "Channel not found" });
+        const channel = channels[0];
+
+        let url = '';
+        let headers = {};
+        let body = {};
+
+        // 通用构造逻辑
+        if (channel.type === 'openai' || channel.type === 'deepseek' || channel.type === 'qwen' || channel.type === 'azure') {
+            // 基础配置
+            headers['Authorization'] = `Bearer ${channel.credentials}`;
+            headers['Content-Type'] = 'application/json';
+            body = {
+                model: model,
+                messages: [{ role: 'user', content: 'Hi' }],
+                max_tokens: 1
+            };
+
+            // 厂商特定 URL
+            if (channel.type === 'openai') url = 'https://api.openai.com/v1/chat/completions';
+            else if (channel.type === 'deepseek') url = 'https://api.deepseek.com/v1/chat/completions';
+            else if (channel.type === 'qwen') url = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
+            else if (channel.type === 'azure') {
+                const extra = typeof channel.extra_config === 'string' ? JSON.parse(channel.extra_config) : channel.extra_config;
+                // Azure URL: https://{resource}.openai.azure.com/openai/deployments/{model}/chat/completions?api-version={version}
+                // 这里比较复杂，需要 deployment name。通常 model name = deployment name
+                if (!extra || !extra.endpoint) throw new Error("Azure endpoint missing");
+                const apiVersion = extra.api_version || '2023-05-15';
+                url = `${extra.endpoint}/openai/deployments/${model}/chat/completions?api-version=${apiVersion}`;
+                headers['api-key'] = channel.credentials;
+                delete headers['Authorization'];
+            }
+        } else if (channel.type === 'anthropic') {
+            url = 'https://api.anthropic.com/v1/messages';
+            headers['x-api-key'] = channel.credentials;
+            headers['anthropic-version'] = '2023-06-01';
+            headers['content-type'] = 'application/json';
+            body = {
+                model: model,
+                messages: [{ role: 'user', content: 'Hi' }],
+                max_tokens: 1
+            };
+        } else {
+            return res.json({ skipped: true, message: "Test not supported for this type yet" });
+        }
+
+        const start = Date.now();
+        await axios.post(url, body, { headers, timeout: 10000 });
+        const duration = Date.now() - start;
+
+        res.json({ success: true, duration });
+
+    } catch (err) {
+        const errMsg = err.response ? 
+            (err.response.data?.error?.message || err.response.statusText) : 
+            err.message;
+        res.status(400).json({ error: errMsg });
+    }
+});
+
 module.exports = router;
