@@ -21,14 +21,13 @@ class SyncManager {
 
             // 1. 获取所有 API Keys
             const prefix = 'oauth2:';
-            const pattern = prefix + 'apikey:*';
             
-            const keys = await this.redis.redis.keys(pattern);
+            // --- 扫描 Tokens ---
+            const tokenPattern = prefix + 'apikey:*';
+            const tokenKeys = await this.redis.redis.keys(tokenPattern);
             
-            for (const fullKey of keys) {
+            for (const fullKey of tokenKeys) {
                 const tokenKey = fullKey.replace(prefix + 'apikey:', '');
-                
-                // 查库验证
                 const [rows] = await db.query("SELECT id, status FROM sys_virtual_tokens WHERE token_key = ?", [tokenKey]);
                 
                 let shouldDelete = false;
@@ -42,7 +41,34 @@ class SyncManager {
                 
                 if (shouldDelete) {
                     await this.redis.redis.del(fullKey);
-                    logger.info(`[Watchdog] Cleaned up invalid key: ${fullKey}`);
+                    logger.info(`[Watchdog] Cleaned up invalid token key: ${fullKey}`);
+                }
+            }
+
+            // --- 扫描 Channels ---
+            const channelPattern = prefix + 'channel:*';
+            const channelKeys = await this.redis.redis.keys(channelPattern);
+
+            for (const fullKey of channelKeys) {
+                const channelId = fullKey.replace(prefix + 'channel:', '');
+                
+                // 跳过非数字ID (如果有的话)
+                if (isNaN(parseInt(channelId))) continue;
+
+                const [rows] = await db.query("SELECT id, status FROM sys_channels WHERE id = ?", [channelId]);
+
+                let shouldDelete = false;
+                if (rows.length === 0) {
+                    logger.warn(`[Watchdog] Found orphan channel in Redis: ${channelId} (Deleted in DB)`);
+                    shouldDelete = true;
+                } else if (rows[0].status === 0) {
+                    logger.warn(`[Watchdog] Found disabled channel in Redis: ${channelId} (Status=0)`);
+                    shouldDelete = true;
+                }
+
+                if (shouldDelete) {
+                    await this.redis.redis.del(fullKey);
+                    logger.info(`[Watchdog] Cleaned up invalid channel key: ${fullKey}`);
                 }
             }
         };
