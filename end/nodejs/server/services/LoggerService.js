@@ -84,24 +84,22 @@ class LoggerService {
             ]
         });
 
-        // 控制台输出（开发环境）
-        if (process.env.NODE_ENV !== 'production') {
-            this.logger.add(new winston.transports.Console({
-                format: winston.format.combine(
-                    winston.format.colorize(),
-                    winston.format.timestamp({
-                        format: 'HH:mm:ss.SSS'
-                    }),
-                    winston.format.printf(({ timestamp, level, message, ...meta }) => {
-                        let msg = `${timestamp} [${level}]: ${message}`;
-                        if (Object.keys(meta).length > 0) {
-                            msg += ` ${JSON.stringify(meta)}`;
-                        }
-                        return msg;
-                    })
-                )
-            }));
-        }
+        // 控制台输出（始终启用，方便Docker查看）
+        this.logger.add(new winston.transports.Console({
+            format: winston.format.combine(
+                winston.format.colorize(),
+                winston.format.timestamp({
+                    format: 'HH:mm:ss.SSS'
+                }),
+                winston.format.printf(({ timestamp, level, message, ...meta }) => {
+                    let msg = `${timestamp} [${level}]: ${message}`;
+                    if (Object.keys(meta).length > 0) {
+                        msg += ` ${JSON.stringify(meta)}`;
+                    }
+                    return msg;
+                })
+            )
+        }));
 
         // 监听日志轮换事件
         this.logger.on('rotate', (oldFilename, newFilename) => {
