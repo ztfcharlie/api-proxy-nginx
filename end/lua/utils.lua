@@ -1,6 +1,33 @@
 local cjson = require "cjson"
 local config = require "config"
+local redis = require "resty.redis"
 local _M = {}
+
+-- 获取 Redis 连接 (复用逻辑)
+local function get_redis_connection()
+    local red = redis:new()
+    red:set_timeout(1000) -- 1秒超时，日志不应阻塞太久
+
+    local redis_conf = config.get_redis_config()
+    
+    local ok, err = red:connect(redis_conf.host, redis_conf.port)
+    if not ok then
+        return nil, err
+    end
+
+    if redis_conf.password and redis_conf.password ~= "" then
+        local res, err = red:auth(redis_conf.password)
+        if not res then
+            return nil, err
+        end
+    end
+    
+    if redis_conf.db and redis_conf.db ~= 0 then
+        red:select(redis_conf.db)
+    end
+
+    return red
+end
 
 -- 生成请求ID
 function _M.generate_request_id()
@@ -59,13 +86,18 @@ function _M.clean_response_headers()
     end
 end
 
--- 记录请求日志
+-- [Log] 异步发送日志到 Redis Stream
 function _M.log_request()
-    local app_config = config.get_app_config()
+    -- 仅在后台运行，防止错误中断请求
+    local ok, err = pcall(function()
+        local red, err = get_redis_connection()
+        if not red then
+            ngx.log(ngx.ERR, "[LOG] Failed to connect to Redis for logging: ", err)
+            return
+        end
 
-    if config.should_log("info") then
-        local log_data = {
-            request_id = ngx.var.request_id,
+        -- 1. 收集元数据
+        local metadata = {
             client_token = ngx.var.client_token,
             key_filename = ngx.var.key_filename,
             model_name = ngx.var.model_name,
@@ -75,10 +107,64 @@ function _M.log_request()
             status = ngx.status,
             request_time = ngx.var.request_time,
             upstream_status = ngx.var.upstream_status,
-            upstream_response_time = ngx.var.upstream_response_time
+            upstream_response_time = ngx.var.upstream_response_time or 0,
+            ip = ngx.var.remote_addr
         }
 
-        ngx.log(ngx.INFO, "[REQUEST] ", cjson.encode(log_data))
+        -- 2. 获取 Request Body
+        -- ngx.req.get_body_data() 在内存中，get_body_file() 在磁盘中
+        local req_body = ngx.req.get_body_data()
+        if not req_body then
+            local req_file = ngx.req.get_body_file()
+            if req_file then
+                -- 暂时不读取大文件，标记为文件路径
+                req_body = "[FILE]: " .. req_file
+            else
+                req_body = ""
+            end
+        end
+
+        -- 3. 获取 Response Body
+        -- 优先使用 stream_handler 拼接的完整 buffer
+        -- 如果没有 buffer (非流式请求且没经过 body_filter)，尝试 ngx.arg (这在 log_by_lua 无效)
+        -- 注意：对于非流式普通请求，Nginx 默认不保留 Body 给 log_by_lua。
+        -- 但因为我们有 body_filter_by_lua 并在 stream_handler 里统一做了处理，理论上 buffered_response 应该有值。
+        -- 如果是普通请求但没触发 stream 逻辑，可能需要检查。
+        local res_body = ngx.ctx.buffered_response or ""
+        
+        -- 截断超大 Body 防止 Redis 拒绝
+        if #req_body > 100000 then req_body = string.sub(req_body, 1, 100000) .. "...(truncated)" end
+        if #res_body > 100000 then res_body = string.sub(res_body, 1, 100000) .. "...(truncated)" end
+
+        -- 4. 429 频率监测 (即时计数)
+        if ngx.status == 429 then
+            local token_prefix = string.sub(ngx.var.client_token or "unknown", 1, 10)
+            -- 增加计数: alert:429:token:xxx
+            red:incr("alert:429:token:" .. token_prefix)
+            red:expire("alert:429:token:" .. token_prefix, 3600) -- 1小时过期
+        end
+
+        -- 5. 发送 Stream 消息 (XADD)
+        -- Stream Key: stream:api_logs
+        -- MAXLEN ~ 100000
+        local res, err = red:xadd("stream:api_logs", "MAXLEN", "~", "100000", "*",
+            "req_id", ngx.var.my_request_id or ngx.var.request_id,
+            "ts", ngx.time(),
+            "meta", cjson.encode(metadata),
+            "req_body", req_body,
+            "res_body", res_body
+        )
+
+        if not res then
+            ngx.log(ngx.ERR, "[LOG] Failed to XADD to stream: ", err)
+        end
+
+        -- 连接池归还
+        red:set_keepalive(10000, 10)
+    end)
+
+    if not ok then
+        ngx.log(ngx.ERR, "[LOG] Lua error in log_request: ", err)
     end
 end
 

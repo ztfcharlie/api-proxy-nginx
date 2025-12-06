@@ -121,6 +121,21 @@ function _M.handle_streaming_response()
     local chunk = ngx.arg[1]
     local eof = ngx.arg[2]
 
+    -- [Added] 缓冲响应体用于日志记录 (最大 1MB)
+    if chunk and chunk ~= "" then
+        local current_len = ngx.ctx.response_len or 0
+        local chunk_len = #chunk
+        
+        -- 仅当缓冲区未满时追加
+        if current_len < 1048576 then -- 1MB
+            ngx.ctx.buffered_response = (ngx.ctx.buffered_response or "") .. chunk
+            ngx.ctx.response_len = current_len + chunk_len
+        elseif not ngx.ctx.buffer_overflow then
+            ngx.ctx.buffer_overflow = true
+            ngx.log(ngx.WARN, "[STREAM] Response buffer overflow (>1MB), logging truncated.")
+        end
+    end
+
     -- [调试侦听] 记录 Google 返回的原始数据块
     if chunk and #chunk > 0 then
         -- 使用 truncate_string 防止日志过长，但保留足够长度以看清格式

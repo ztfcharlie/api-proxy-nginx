@@ -74,6 +74,26 @@ services:
       - "com.api-proxy.service=redis"
       - "com.api-proxy.version=7-alpine"
 
+  # Go 日志处理服务 (Consumer)
+  api-proxy-log-processor:
+    build:
+      context: ./go-processor
+      dockerfile: Dockerfile
+    container_name: api-proxy-log-processor
+    restart: unless-stopped
+    environment:
+      - REDIS_HOST=api-proxy-redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=123456
+      - TZ=Asia/Shanghai
+    depends_on:
+      api-proxy-redis:
+        condition: service_healthy
+    networks:
+      - api-proxy-network
+    labels:
+      - "com.api-proxy.service=log-processor"
+
 # 网络配置
 networks:
   api-proxy-network:
