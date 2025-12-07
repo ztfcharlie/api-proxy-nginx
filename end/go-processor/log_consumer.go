@@ -260,7 +260,7 @@ func (lc *LogConsumer) calculateCost(ctx context.Context, channelID int, model s
 		val, err := lc.rdb.Get(ctx, key).Result()
 		
 		var chConfig ChannelConfigRedis
-		var loadedFromDB bool
+		// var loadedFromDB bool // Unused
 		
 		if err == nil {
 			json.Unmarshal([]byte(val), &chConfig)
@@ -269,7 +269,7 @@ func (lc *LogConsumer) calculateCost(ctx context.Context, channelID int, model s
 			var modelsConfigStr string
 			if lc.db.QueryRowContext(ctx, "SELECT models_config FROM sys_channels WHERE id = ?", channelID).Scan(&modelsConfigStr) == nil && modelsConfigStr != "" {
 				json.Unmarshal([]byte(modelsConfigStr), &chConfig.ModelsConfig)
-				loadedFromDB = true
+				// loadedFromDB = true
 			}
 		}
 

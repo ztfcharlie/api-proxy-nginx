@@ -85,7 +85,44 @@ func (tm *TokenManager) scanAndRefresh(ctx context.Context) {
 	tm.ReportJobStatus(ctx, "running", "Scanning...")
 
 	// 1. 扫描所有 Channel Keys
-	// ...
+	var keys []string
+	iter := tm.rdb.Scan(ctx, 0, KeyPrefixChannel+"*", 0).Iterator()
+	for iter.Next(ctx) {
+		keys = append(keys, iter.Val())
+	}
+
+	if err := iter.Err(); err != nil {
+		log.Printf("[ERROR] Failed to scan channels: %v", err)
+		tm.ReportJobStatus(ctx, "failed", fmt.Sprintf("Redis scan error: %v", err))
+		return
+	}
+
+	var wg sync.WaitGroup
+	// 限制并发数为 5，防止瞬间发起太多 HTTP 请求
+	sem := make(chan struct{}, 5) 
+	
+	var refreshCount int
+	// simple mutex for counter if we want to be strict, or just atomic, or ignore race for simple logging
+	var mu sync.Mutex
+
+	for _, key := range keys {
+		wg.Add(1)
+		go func(k string) {
+			defer wg.Done()
+			sem <- struct{}{} // Acquire
+			defer func() { <-sem }() // Release
+
+			if tm.processChannel(ctx, k) {
+				mu.Lock()
+				refreshCount++
+				mu.Unlock()
+			}
+		}(key)
+	}
+	wg.Wait()
+	
+	resultMsg := fmt.Sprintf("Scanned %d channels, refreshed %d", len(keys), refreshCount)
+	tm.ReportJobStatus(ctx, "idle", resultMsg)
 }
 
 // ForceRun 手动触发刷新 (供 Pub/Sub 调用)
@@ -97,39 +134,6 @@ func (tm *TokenManager) ForceRun() {
 
 // 返回 true 表示执行了刷新
 func (tm *TokenManager) processChannel(ctx context.Context, key string) bool {
-	if err != nil {
-		log.Printf("[ERROR] Failed to scan channels: %v", err)
-		tm.ReportJobStatus(ctx, "failed", fmt.Sprintf("Redis scan error: %v", err))
-		return
-	}
-
-	var wg sync.WaitGroup
-	// 限制并发数为 5，防止瞬间发起太多 HTTP 请求
-	sem := make(chan struct{}, 5) 
-	
-	refreshCount := 0
-
-	for _, key := range keys {
-		wg.Add(1)
-		go func(k string) {
-			defer wg.Done()
-			sem <- struct{}{} // Acquire
-			defer func() { <-sem }() // Release
-
-			if tm.processChannel(ctx, k) {
-				// 简单统计，不做严格原子操作
-				refreshCount++
-			}
-		}(key)
-	}
-	wg.Wait()
-	
-	resultMsg := fmt.Sprintf("Scanned %d channels, refreshed %d", len(keys), refreshCount)
-	tm.ReportJobStatus(ctx, "idle", resultMsg)
-}
-
-// 返回 true 表示执行了刷新
-func (tm *TokenManager) processChannel(ctx context.Context, key string) bool {
 	// 获取 Channel ID
 	// Key format: oauth2:channel:123
 	parts := strings.Split(key, ":")
@@ -137,6 +141,7 @@ func (tm *TokenManager) processChannel(ctx context.Context, key string) bool {
 		return false
 	}
 	channelID := parts[2]
+
 
 	// 1. 读取 Channel 配置
 	val, err := tm.rdb.Get(ctx, key).Result()
