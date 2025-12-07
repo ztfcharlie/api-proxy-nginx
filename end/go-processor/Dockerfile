@@ -3,9 +3,9 @@ FROM golang:1.21-alpine AS builder
 
 WORKDIR /app
 
-# 预先复制 go.mod 以利用缓存
-COPY go.mod ./
-# 下载依赖 (如果有 go.sum 也应该复制，目前没有)
+# 预先复制 go.mod 和 go.sum 以利用缓存
+COPY go.mod go.sum ./
+# 下载依赖
 RUN go mod download
 
 # 复制源码
