@@ -30,7 +30,6 @@ func (s *VertexProvider) Calculate(model string, reqBody, resBody []byte, status
 		return u, nil
 	}
 
-	bodyStr := string(resBody)
 	// Vertex AI 即使是 stream 模式，返回的也是 JSON 数组或者连续的 JSON 对象，而不是 SSE data:
 	// 但如果是 HTTP/1.1 chunked transfer, 这里的 resBody 已经是拼接好的完整 body
 	
