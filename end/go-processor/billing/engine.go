@@ -1,9 +1,5 @@
 package billing
 
-import (
-	"fmt"
-)
-
 type Engine struct {
 	strategies []Strategy
 }
