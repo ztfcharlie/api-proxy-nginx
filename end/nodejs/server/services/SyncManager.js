@@ -42,17 +42,23 @@ class SyncManager {
     async syncModelPrices() {
         logger.info('Syncing Model Prices...');
         try {
-            const [models] = await db.query("SELECT model_id, type, input_price, output_price, request_price FROM sys_models WHERE status = 1");
+            // Updated to match new schema v3.2
+            const [models] = await db.query("SELECT id, provider, name, price_input, price_output, price_request FROM sys_models WHERE status = 1");
             
             const priceMap = {};
             for (const m of models) {
-                // 统一单位：假设数据库存的是每 1k 或 1M 的价格，这里原样存入
-                // Go 端会统一除以 1000 或 1000000
-                priceMap[m.model_id] = {
-                    type: m.type === 2 ? 'request' : 'token', // 假设 db type 1=token, 2=request
-                    input: parseFloat(m.input_price || 0),
-                    output: parseFloat(m.output_price || 0),
-                    price: parseFloat(m.request_price || 0)
+                // Determine billing mode based on prices
+                let mode = 'token';
+                if (parseFloat(m.price_request || 0) > 0) {
+                    mode = 'request';
+                }
+
+                // Key is model name (e.g. "gpt-4") to match log consumer lookup
+                priceMap[m.name] = {
+                    mode: mode,
+                    input: parseFloat(m.price_input || 0),
+                    output: parseFloat(m.price_output || 0),
+                    price: parseFloat(m.price_request || 0)
                 };
             }
             

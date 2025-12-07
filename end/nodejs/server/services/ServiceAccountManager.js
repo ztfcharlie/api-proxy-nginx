@@ -109,15 +109,26 @@ class ServiceAccountManager {
                 credentials.private_key = key;
             }
 
-            // 2. 使用 Google Auth Library 获取 Token
-            const auth = new GoogleAuth({
-                credentials,
-                scopes: ['https://www.googleapis.com/auth/cloud-platform']
-            });
+            let token;
             
-            const client = await auth.getClient();
-            const accessTokenResponse = await client.getAccessToken();
-            const token = accessTokenResponse.token;
+            // [Modified] Check for Mock Mode or Dummy Key
+            const isMockMode = process.env.ENABLE_MOCK_MODE === 'true';
+            const isDummyKey = credentials.private_key && credentials.private_key.includes('MOCK_PRIVATE_KEY');
+
+            if (isMockMode || isDummyKey) {
+                logger.info(`[Mock] Generating dummy token for channel ${channel.id}`);
+                token = `ya29.mock.token.${Date.now()}`;
+            } else {
+                // 2. 使用 Google Auth Library 获取 Token
+                const auth = new GoogleAuth({
+                    credentials,
+                    scopes: ['https://www.googleapis.com/auth/cloud-platform']
+                });
+                
+                const client = await auth.getClient();
+                const accessTokenResponse = await client.getAccessToken();
+                token = accessTokenResponse.token;
+            }
 
             if (!token) {
                 throw new Error('Failed to retrieve token from Google');
