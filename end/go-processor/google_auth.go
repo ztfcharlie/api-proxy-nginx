@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/json"
@@ -11,7 +10,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"

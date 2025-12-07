@@ -162,7 +162,8 @@ func (tm *TokenManager) processChannel(ctx context.Context, key string) bool {
 
 	// 2. 检查现有的 Real Token
 	realTokenKey := KeyPrefixRealToken + channelID
-	tokenVal, err := tm.rdb.Get(ctx, realTokenKey).Result()
+	// We only need the error to check existence, not the value
+	_, err = tm.rdb.Get(ctx, realTokenKey).Result()
 	
 	needsRefresh := false
 	

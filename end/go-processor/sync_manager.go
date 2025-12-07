@@ -138,6 +138,12 @@ func (sm *SyncManager) performSync(ctx context.Context) {
 	log.Printf("[INFO] Full sync completed in %v", duration)
 }
 
+// ForceRun 手动触发同步 (供 Pub/Sub 调用)
+func (sm *SyncManager) ForceRun() {
+	log.Println("[INFO] Force running DB Sync Job...")
+	go sm.performSync(context.Background())
+}
+
 // syncChannels 同步渠道配置 (DB -> Redis)
 func (sm *SyncManager) syncChannels(ctx context.Context) error {
 	// 1. 从 DB 读取所有有效渠道
