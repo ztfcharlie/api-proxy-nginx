@@ -27,12 +27,48 @@ class SyncManager {
         try {
             await this.syncChannels();
             await this.syncVirtualTokens();
+            await this.syncModelPrices(); // [Added]
             
             const duration = Date.now() - startTime;
             logger.info(`Full synchronization completed in ${duration}ms`);
         } catch (error) {
             logger.error('Full synchronization failed:', error);
         }
+    }
+
+    /**
+     * 同步所有模型价格配置
+     */
+    async syncModelPrices() {
+        logger.info('Syncing Model Prices...');
+        try {
+            const [models] = await db.query("SELECT model_id, type, input_price, output_price, request_price FROM sys_models WHERE status = 1");
+            
+            const priceMap = {};
+            for (const m of models) {
+                // 统一单位：假设数据库存的是每 1k 或 1M 的价格，这里原样存入
+                // Go 端会统一除以 1000 或 1000000
+                priceMap[m.model_id] = {
+                    type: m.type === 2 ? 'request' : 'token', // 假设 db type 1=token, 2=request
+                    input: parseFloat(m.input_price || 0),
+                    output: parseFloat(m.output_price || 0),
+                    price: parseFloat(m.request_price || 0)
+                };
+            }
+            
+            // 使用 set 覆盖，而不是 hash set，因为 Go 读取 json 更方便
+            await this.redis.set('model_prices', JSON.stringify(priceMap));
+            logger.info(`Synced ${models.length} model prices.`);
+        } catch (error) {
+            logger.error('Error syncing model prices:', error);
+        }
+    }
+
+    /**
+     * 触发模型缓存更新 (当管理后台修改模型时调用)
+     */
+    async updateModelCache() {
+        return this.syncModelPrices();
     }
 
     /**

@@ -52,6 +52,21 @@ func NewSyncManager(rdb *redis.Client, dbDSN string) (*SyncManager, error) {
 	}, nil
 }
 
+// OpenNewDB 辅助方法：创建新的数据库连接 (供 LogConsumer 使用)
+func (sm *SyncManager) OpenNewDB(dsn string) (*sql.DB, error) {
+	db, err := sql.Open("mysql", dsn)
+	if err != nil {
+		return nil, err
+	}
+	if err := db.Ping(); err != nil {
+		return nil, err
+	}
+	// 独立的连接池配置
+	db.SetMaxOpenConns(20) 
+	db.SetMaxIdleConns(5)
+	return db, nil
+}
+
 // Start 启动同步任务
 func (sm *SyncManager) Start(ctx context.Context) {
 	log.Println("[INFO] Sync Manager (Reconciliation) started.")

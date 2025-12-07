@@ -108,7 +108,8 @@ function _M.log_request()
             request_time = ngx.var.request_time,
             upstream_status = ngx.var.upstream_status,
             upstream_response_time = ngx.var.upstream_response_time or 0,
-            ip = ngx.var.remote_addr
+            ip = ngx.var.remote_addr,
+            user_agent = ngx.var.http_user_agent
         }
 
         -- 2. 获取 Request Body

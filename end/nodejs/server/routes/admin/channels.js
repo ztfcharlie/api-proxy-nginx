@@ -6,6 +6,50 @@ const SyncManager = require('../../services/SyncManager');
 const serviceAccountManager = require('../../services/ServiceAccountManager');
 const { GoogleAuth } = require('google-auth-library');
 
+// [Added] 模型配置校验辅助函数
+async function validateModelsConfig(modelsConfig) {
+    if (!modelsConfig || Object.keys(modelsConfig).length === 0) return;
+
+    // 1. 获取所有相关模型的全局价格
+    // 为了性能，可以只查 modelsConfig 里涉及的模型 ID
+    const modelIds = Object.keys(modelsConfig).filter(k => k !== 'default');
+    if (modelIds.length === 0) return;
+
+    // 这里的 modelIds 必须对应 sys_models 里的 model_id (varchar)
+    // 注意 SQL IN 查询的处理
+    const placeholders = modelIds.map(() => '?').join(',');
+    const [models] = await db.query(
+        `SELECT model_id, input_price, output_price, request_price FROM sys_models WHERE model_id IN (${placeholders})`, 
+        modelIds
+    );
+    
+    const modelMap = {};
+    models.forEach(m => modelMap[m.model_id] = m);
+
+    // 2. 逐个检查
+    for (const [modelId, config] of Object.entries(modelsConfig)) {
+        if (modelId === 'default') continue; // 默认配置暂不强校验，或需要查默认策略
+
+        const globalModel = modelMap[modelId];
+        if (!globalModel) {
+            throw new Error(`Model '${modelId}' does not exist in Model Management. Please add it first.`);
+        }
+
+        // 检查模式与价格的匹配
+        if (config.mode === 'token') {
+            // 允许 input 或 output 其中一个为 0 (有些模型只收输出费)，但不能全为 0
+            if (parseFloat(globalModel.input_price) <= 0 && parseFloat(globalModel.output_price) <= 0) {
+                throw new Error(`Model '${modelId}' is set to 'Token Billing', but global Input/Output prices are not set (or 0).`);
+            }
+        } else if (config.mode === 'request') {
+            if (parseFloat(globalModel.request_price) <= 0) {
+                throw new Error(`Model '${modelId}' is set to 'Request Billing', but global Request Price is not set (or 0).`);
+            }
+        }
+        // 未来扩展: mode === 'time' check time_price
+    }
+}
+
 /**
  * 获取渠道列表
  */
@@ -82,6 +126,9 @@ router.post('/', async (req, res) => {
     }
 
     try {
+        // [Added] 校验计费配置完整性
+        await validateModelsConfig(models_config);
+
         const [result] = await db.query(
             "INSERT INTO sys_channels (name, type, credentials, extra_config, models_config) VALUES (?, ?, ?, ?, ?)",
             [name, type, credentials, JSON.stringify(extra_config || {}), JSON.stringify(models_config || {})]
@@ -96,7 +143,7 @@ router.post('/', async (req, res) => {
         res.status(201).json({ id: newId, message: "Channel created successfully" });
     } catch (err) {
         logger.error('Create channel failed:', err);
-        res.status(500).json({ error: err.message });
+        res.status(500).json({ error: err.message }); // 这里会返回具体的校验错误信息
     }
 });
 
@@ -108,6 +155,11 @@ router.put('/:id', async (req, res) => {
     const { name, type, credentials, extra_config, models_config, status } = req.body;
     
     try {
+        // [Added] 校验计费配置完整性 (仅当更新了 models_config 时)
+        if (models_config) {
+            await validateModelsConfig(models_config);
+        }
+
         let updateFields = [];
         let params = [];
         

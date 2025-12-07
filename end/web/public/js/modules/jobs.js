@@ -3,6 +3,59 @@ const { Button, Icons } = window.UI;
 
 window.Modules = window.Modules || {};
 
+// [Added] 系统状态组件
+const SystemStatus = () => {
+    const [status, setStatus] = useState(null);
+
+    useEffect(() => {
+        fetchStatus();
+        const timer = setInterval(fetchStatus, 5000);
+        return () => clearInterval(timer);
+    }, []);
+
+    const fetchStatus = async () => {
+        try {
+            const res = await axios.get('/api/admin/system/status');
+            setStatus(res.data.data);
+        } catch (e) {}
+    };
+
+    if (!status) return <div className="p-4 text-gray-400 animate-pulse">Loading system status...</div>;
+
+    const Card = ({ title, data, icon }) => {
+        const isHealthy = data.status === 'healthy';
+        const isWarning = data.status === 'warning';
+        const color = isHealthy ? 'bg-green-50 border-green-200' : (isWarning ? 'bg-orange-50 border-orange-200' : 'bg-red-50 border-red-200');
+        const textColor = isHealthy ? 'text-green-700' : (isWarning ? 'text-orange-700' : 'text-red-700');
+
+        return (
+            <div className={`p-4 rounded-xl border ${color} flex items-center gap-4 flex-1 transition-all hover:shadow-md`}>
+                <div className={`p-3 rounded-full bg-white shadow-sm text-2xl`}>{icon}</div>
+                <div>
+                    <div className="text-xs text-gray-500 uppercase font-bold tracking-wider">{title}</div>
+                    <div className={`text-lg font-bold ${textColor} flex items-center gap-2`}>
+                        {data.status.toUpperCase()}
+                        {isHealthy && <span className="text-xs font-normal bg-white px-2 py-0.5 rounded border opacity-75 font-mono">
+                            {data.latency ? `${data.latency}ms` : (data.lag !== undefined ? `Lag: ${data.lag}s` : 'OK')}
+                        </span>}
+                    </div>
+                    {data.error && <div className="text-xs text-red-600 mt-1 font-mono break-words max-w-[150px]">{data.error}</div>}
+                    {data.last_heartbeat && <div className="text-[10px] text-gray-400 mt-1">Last Beat: {new Date(data.last_heartbeat).toLocaleTimeString()}</div>}
+                </div>
+            </div>
+        );
+    };
+
+    return (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+            <Card title="Go Core Service" data={status.go_core} icon="⚙️" />
+            <Card title="Redis Cache" data={status.redis} icon="🔥" />
+            <Card title="MySQL Database" data={status.mysql} icon="🐬" />
+            <Card title="Nginx Gateway" data={status.nginx} icon="🌐" />
+        </div>
+    );
+};
+
 window.Modules.Jobs = () => {
     const [jobs, setJobs] = useState([]);
     const [loading, setLoading] = useState(false);
@@ -64,6 +117,9 @@ window.Modules.Jobs = () => {
 
     return (
         <div className="space-y-6">
+            {/* 系统状态面板 */}
+            <SystemStatus />
+
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
                 <table className="min-w-full divide-y divide-gray-200">
                     <thead className="bg-gray-50">
@@ -83,6 +139,7 @@ window.Modules.Jobs = () => {
                                 <td className="px-6 py-4 text-sm text-gray-900">
                                     <div className="font-bold font-mono">{job.name}</div>
                                     {job.description && <div className="text-xs text-gray-500 mt-1">{job.description}</div>}
+                                    {job.isRemote && <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">Go Service</span>}
                                 </td>
                                 <td className="px-6 py-4 text-sm text-blue-600 cursor-pointer hover:underline" onClick={() => editInterval(job)}>
                                     {Math.round(job.interval / 1000 / 60)}m ({job.interval}ms) ✎

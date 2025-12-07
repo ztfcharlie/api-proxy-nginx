@@ -151,6 +151,29 @@ window.Modules.Channels = () => {
 
     const updateBindingConfig = (idx, field, val) => {
         const newList = [...bindingModal.list];
+        const item = newList[idx];
+
+        // [Added] 前端计费模式校验
+        if (field === 'pricing_mode') {
+            const globalModel = models.find(m => m.model_id === item.name); // 注意: models API 返回的 id 是 model_id
+            
+            if (globalModel) {
+                if (val === 'request') {
+                    if (!globalModel.request_price || parseFloat(globalModel.request_price) <= 0) {
+                        alert(`❌ Cannot select 'Request Billing' for ${item.name}:\nGlobal Request Price is not set (0). Please configure it in Models Management first.`);
+                        return;
+                    }
+                } else if (val === 'token') {
+                    const input = parseFloat(globalModel.input_price || 0);
+                    const output = parseFloat(globalModel.output_price || 0);
+                    if (input <= 0 && output <= 0) {
+                        alert(`❌ Cannot select 'Token Billing' for ${item.name}:\nGlobal Input/Output Prices are not set (0). Please configure them in Models Management first.`);
+                        return;
+                    }
+                }
+            }
+        }
+
         newList[idx][field] = val;
         setBindingModal(prev => ({ ...prev, list: newList }));
     };

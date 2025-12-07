@@ -4,8 +4,9 @@ services:
     image: mysql:8.0
     container_name: api-proxy-mysql
     restart: unless-stopped
-    ports:
-      - "3306:3306"   # MySQL 端口（开发时访问）
+    # [Security] 仅限内部网络访问，不暴露端口到宿主机
+    # ports:
+    #   - "3306:3306"
     volumes:
       - ./mysql-data:/var/lib/mysql
       - ./database:/docker-entrypoint-initdb.d:ro
@@ -47,8 +48,9 @@ services:
     image: redis:7-alpine
     container_name: api-proxy-redis
     restart: unless-stopped
-    ports:
-      - "6379:6379"   # Redis 端口（开发时访问）
+    # [Security] 仅限内部网络访问
+    # ports:
+    #   - "6379:6379"
     volumes:
       - ./redis-data:/data
     command: >
@@ -95,6 +97,12 @@ services:
       
       # Mock 开关
       - ENABLE_MOCK_MODE=${ENABLE_MOCK_MODE:-false}
+      
+      # 隐私开关
+      - LOG_SAVE_BODY=${LOG_SAVE_BODY:-false}
+      
+    volumes:
+      - ./logs:/app/logs
       
     depends_on:
       api-proxy-redis:

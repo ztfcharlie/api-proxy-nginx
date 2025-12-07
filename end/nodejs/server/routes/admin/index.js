@@ -7,13 +7,23 @@ const userRoutes = require('./users');
 const modelRoutes = require('./models');
 const redisRoutes = require('./redis');
 const jobRoutes = require('./jobs');
+const logRoutes = require('./logs');
+const systemRoutes = require('./system');
+const { authenticate, requireAdmin } = require('../../middleware/authCheck');
 
-// 挂载子路由
-router.use('/channels', channelRoutes);
-router.use('/tokens', tokenRoutes);
-router.use('/users', userRoutes);
-router.use('/models', modelRoutes);
-router.use('/redis', redisRoutes);
-router.use('/jobs', jobRoutes);
+// 全局鉴权拦截
+router.use(authenticate);
+
+// 仅限管理员访问的模块
+router.use('/channels', requireAdmin, channelRoutes);
+router.use('/tokens', requireAdmin, tokenRoutes);
+router.use('/users', requireAdmin, userRoutes);
+router.use('/models', requireAdmin, modelRoutes);
+router.use('/redis', requireAdmin, redisRoutes);
+router.use('/jobs', requireAdmin, jobRoutes);
+router.use('/system', requireAdmin, systemRoutes);
+
+// 普通用户可访问 (但内容受限)
+router.use('/logs', logRoutes);
 
 module.exports = router;

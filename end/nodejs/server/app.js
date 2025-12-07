@@ -71,6 +71,8 @@ class OAuth2MockServer {
         const adminPath = process.env.ADMIN_PATH || '/admin';
 
         this.app.use('/', indexRoutes);
+        this.app.use('/health', healthRoutes);
+        this.app.use('/api/auth', require('./routes/auth')); // [Added] Auth Routes
 // 路由
 app.use('/api/config', require('./routes/config'));
 app.use('/api/health', require('./routes/health'));

@@ -1,0 +1,50 @@
+# --- Environment Variables ---
+.env
+.env.local
+*.env
+
+# --- Data & Logs (Runtime) ---
+mysql-data/
+mysql-files/
+redis-data/
+logs/
+nodejs/logs/
+nodejs/tmp/
+nginx/oauth2_certs/
+
+# --- Certificates ---
+ssl/
+*.pem
+*.key
+*.crt
+!nginx/ssl/.gitkeep
+
+# --- Node.js ---
+node_modules/
+npm-debug.log
+yarn-debug.log
+yarn-error.log
+nodejs/node_modules/
+
+# --- Go ---
+go-processor/log-processor
+go-processor/main
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# --- IDEs & OS ---
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# --- Temporary ---
+tmp/
+temp/

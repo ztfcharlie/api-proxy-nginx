@@ -13,7 +13,7 @@ router.get('/', (req, res) => {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>OAuth2 Mock Service</title>
+    <title>Universal AI Gateway</title>
     <style>
         * {
             margin: 0;
@@ -118,8 +118,8 @@ router.get('/', (req, res) => {
 <body>
     <div class="container">
         <div class="header">
-            <h1>🔐 OAuth2 Mock Service</h1>
-            <p>模拟 Google OAuth2 API 的本地服务</p>
+            <h1>🔐 Universal AI Gateway</h1>
+            <p>API Endpoint & OAuth2 Service</p>
             <div class="status">✅ 服务运行中</div>
         </div>
 
@@ -154,7 +154,7 @@ router.get('/', (req, res) => {
         </div>
 
         <div class="footer">
-            <p>版本: 1.0.0 | 时间: ${new Date().toISOString()}</p>
+            <p>版本: 3.0.0 | 时间: ${new Date().toISOString()}</p>
         </div>
     </div>
 </body>
