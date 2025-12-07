@@ -206,7 +206,7 @@ backup_database() {
 }
 
 # 8. 数据库恢复/初始化 (支持指定文件)
-exec_database_sql() {
+exec_sql() {
     local sql_file=$1
     
     # 默认值
@@ -267,14 +267,14 @@ case "$1" in
     backupdb)
         backup_database
         ;;
-    exec_database_sql)
-        exec_database_sql "$2"
+    exec_sql)
+        exec_sql "$2"
         ;;
     update_schema)
         update_schema
         ;;
     help|*)
-        echo "用法: $0 {init|start|stop|restart|status|logs|backupdb|exec_database_sql}"
+        echo "用法: $0 {init|start|stop|restart|status|logs|backupdb|exec_sql}"
         echo "----------------------------------------------------------------"
         echo "  init                 - 初始化目录结构和权限"
         echo "  start [service]      - 启动服务 (可选: base, node, nginx, all)"
@@ -283,7 +283,7 @@ case "$1" in
         echo "  status               - 查看服务状态"
         echo "  logs [name]          - 查看日志"
         echo "  backupdb             - 备份 MySQL 数据库"
-        echo "  exec_database_sql [file] - 从 SQL 文件恢复数据库"
+        echo "  exec_sql [file] - 从 SQL 文件恢复数据库"
         echo "----------------------------------------------------------------"
         exit 1
         ;;
