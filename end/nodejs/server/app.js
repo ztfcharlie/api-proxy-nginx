@@ -73,18 +73,19 @@ class OAuth2MockServer {
         this.app.use('/', indexRoutes);
         this.app.use('/health', healthRoutes);
         this.app.use('/api/auth', require('./routes/auth')); // [Added] Auth Routes
-// 路由
-app.use('/api/config', require('./routes/config'));
-app.use('/api/health', require('./routes/health'));
-app.use('/api/oauth2', require('./routes/oauth2')); // 内部调用
-app.use('/api/oauth2_mock', require('./routes/oauth2_mock')); // 管理端模拟配置
-
-// [Added] Mock API 服务
-app.use('/mock', require('./routes/mock'));
-
-// OAuth2 端点 (模拟 Google)
-app.use('/', require('./routes/index')); // 处理根路径或其他
-app.use('/accounts.google.com', require('./routes/index')); // 兼容旧路径
+        
+        // 路由
+        this.app.use('/api/config', require('./routes/config'));
+        this.app.use('/api/health', require('./routes/health'));
+        this.app.use('/api/oauth2', require('./routes/oauth2')); // 内部调用
+        this.app.use('/api/oauth2_mock', require('./routes/oauth2_mock')); // 管理端模拟配置
+        
+        // [Added] Mock API 服务
+        this.app.use('/mock', require('./routes/mock'));
+        
+        // OAuth2 端点 (模拟 Google)
+        // this.app.use('/', require('./routes/index')); // 已在上方包含，注释掉避免冲突
+        this.app.use('/accounts.google.com', require('./routes/index')); // 兼容旧路径
 
 
         if (process.env.ENABLE_SWAGGER === 'true') {
