@@ -10,16 +10,29 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 )
 
-const (
+var (
 	GoogleTokenURL = "https://oauth2.googleapis.com/token"
 	GoogleScope    = "https://www.googleapis.com/auth/cloud-platform"
 )
+
+func init() {
+	// 优先检查全局 Mock 开关
+	if os.Getenv("ENABLE_MOCK_MODE") == "true" {
+		// 指向 Node.js 内部 Mock 接口
+		GoogleTokenURL = "http://api-proxy-nodejs:8889/mock/oauth2/token"
+		fmt.Println("[MOCK-MODE] Go Service is using internal Mock Token URL")
+	} else if url := os.Getenv("GOOGLE_TOKEN_URL"); url != "" {
+		// 允许单独覆盖
+		GoogleTokenURL = url
+	}
+}
 
 // ServiceAccountKey 定义 GCP 服务账号 JSON 结构
 type ServiceAccountKey struct {

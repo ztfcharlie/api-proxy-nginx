@@ -272,8 +272,19 @@ function _M.authenticate_client()
     end
 
     if not target_channel then
-        utils.error_response(429, "Rate limit exceeded or upstream unavailable")
-        return nil
+        -- [Global Mock Override]
+        if os.getenv("ENABLE_MOCK_MODE") == "true" then
+            ngx.log(ngx.WARN, "[MOCK] No valid upstream found, but Mock Mode is ON. Using fake channel.")
+            target_channel = {
+                channel_id = 0,
+                type = "mock",
+                models_config = {}
+            }
+            target_real_token = "mock-token-fallback"
+        else
+            utils.error_response(429, "Rate limit exceeded or upstream unavailable")
+            return nil
+        end
     end
 
     -- 3. 构造最终 Metadata
@@ -295,7 +306,21 @@ end
 
 -- 获取 API 主机 (保持不变)
 function _M.get_api_host(metadata, model_name)
+    -- [Global Mock Override]
+    if os.getenv("ENABLE_MOCK_MODE") == "true" then
+        if config.should_log("info") then
+            ngx.log(ngx.INFO, "[MOCK] Redirecting request to internal Mock Service")
+        end
+        return "api-proxy-nodejs:8889"
+    end
+
     local type = metadata.channel_type
+    
+    -- [Added] Mock Channel Support
+    if type == "mock" then
+        return "api-proxy-nodejs:8889" -- 内部 Docker DNS
+    end
+    
     if type == "azure" then
         if metadata.extra_config and metadata.extra_config.endpoint then
             local host = metadata.extra_config.endpoint

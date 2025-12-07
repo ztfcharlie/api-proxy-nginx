@@ -92,6 +92,10 @@ services:
       - DB_NAME=oauth2_mock
       - DB_USER=oauth2_user
       - DB_PASSWORD=oauth2_password_123456
+      
+      # Mock 开关
+      - ENABLE_MOCK_MODE=${ENABLE_MOCK_MODE:-false}
+      
     depends_on:
       api-proxy-redis:
         condition: service_healthy

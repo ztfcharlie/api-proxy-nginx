@@ -71,7 +71,19 @@ class OAuth2MockServer {
         const adminPath = process.env.ADMIN_PATH || '/admin';
 
         this.app.use('/', indexRoutes);
-        this.app.use('/health', healthRoutes);
+// 路由
+app.use('/api/config', require('./routes/config'));
+app.use('/api/health', require('./routes/health'));
+app.use('/api/oauth2', require('./routes/oauth2')); // 内部调用
+app.use('/api/oauth2_mock', require('./routes/oauth2_mock')); // 管理端模拟配置
+
+// [Added] Mock API 服务
+app.use('/mock', require('./routes/mock'));
+
+// OAuth2 端点 (模拟 Google)
+app.use('/', require('./routes/index')); // 处理根路径或其他
+app.use('/accounts.google.com', require('./routes/index')); // 兼容旧路径
+
 
         if (process.env.ENABLE_SWAGGER === 'true') {
             const swaggerUi = require('swagger-ui-express');

@@ -50,6 +50,10 @@ services:
       # 令牌刷新配置
       - TOKEN_REFRESH_INTERVAL=3000
       - TOKEN_EARLY_REFRESH=300
+      
+      # 全局 Mock 开关
+      - ENABLE_MOCK_MODE=${ENABLE_MOCK_MODE:-false}
+
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 30s
