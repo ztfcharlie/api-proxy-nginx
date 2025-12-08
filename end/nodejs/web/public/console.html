@@ -320,6 +320,9 @@
             };
 
             const ModelConfigForm = ({ channel, allModels, onSubmit, onCancel }) => {
+                // Debug log
+                // console.log('ModelConfigForm init:', { channel, modelCount: allModels.length });
+
                 let initialConfig = {}; try { initialConfig = (typeof channel.models_config === 'string') ? JSON.parse(channel.models_config) : (channel.models_config || {}); } catch (e) {}
                 const [enabledModels, setEnabledModels] = useState([]);
                 const [filteredAvailable, setFilteredAvailable] = useState([]);
@@ -327,14 +330,27 @@
                 useEffect(() => {
                     const selected = [], available = [];
                     allModels.forEach(m => {
-                        let isCompatible = (channel.type==='azure'&&m.provider==='openai') || (channel.type==='aws_bedrock'&&(m.provider==='anthropic'||m.provider==='aws')) || m.provider===channel.type;
+                        // Relaxed compatibility check:
+                        // 1. Exact match
+                        // 2. Azure supports OpenAI
+                        // 3. Bedrock supports Anthropic/AWS
+                        // 4. If model provider is empty, assume generic/compatible
+                        let isCompatible = false;
+                        if (!m.provider) isCompatible = true;
+                        else if (m.provider === channel.type) isCompatible = true;
+                        else if (channel.type === 'azure' && m.provider === 'openai') isCompatible = true;
+                        else if (channel.type === 'aws_bedrock' && (m.provider === 'anthropic' || m.provider === 'aws')) isCompatible = true;
+                        else if (channel.type === 'vertex' && m.provider === 'google') isCompatible = true; // Vertex usually means Google models
+
                         const configEntry = initialConfig[m.name];
                         if (configEntry !== undefined) {
                             let conf = { name: m.name, mapTo: '', rpm: '', mode: 'token' };
                             if (typeof configEntry === 'string') conf.mapTo = configEntry;
                             else if (typeof configEntry === 'object' && configEntry !== null) conf = { ...conf, ...configEntry };
                             selected.push(conf);
-                        } else if (isCompatible) available.push(m);
+                        } else if (isCompatible) {
+                            available.push(m);
+                        }
                     });
                     setEnabledModels(selected); setFilteredAvailable(available);
                 }, [allModels, channel.type]);
@@ -347,28 +363,56 @@
                 return (
                     <div className="flex flex-col h-full">
                         <div className="flex-1 flex gap-4 overflow-hidden">
-                            <div className="w-1/3 border rounded p-2 overflow-y-auto">
-                                <div className="font-bold mb-2">Available</div>
-                                {filteredAvailable.map(m => <div key={m.id} onClick={()=>addModel(m)} className="p-2 border mb-1 rounded cursor-pointer hover:bg-blue-50 flex justify-between"><span>{m.name}</span><span>+</span></div>)}
+                            <div className="w-1/3 border rounded-lg bg-gray-50 flex flex-col">
+                                <div className="p-3 border-b bg-white font-bold text-sm text-gray-700 flex justify-between items-center">
+                                    <span>Available</span>
+                                    <span className="text-xs bg-blue-100 text-blue-600 px-2 rounded-full">{filteredAvailable.length}</span>
+                                </div>
+                                <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                                    {filteredAvailable.map(m => (
+                                        <div key={m.id} onClick={()=>addModel(m)} className="flex justify-between items-center p-2 bg-white border rounded cursor-pointer hover:bg-blue-50 group transition-colors">
+                                            <span className="text-sm font-medium text-gray-700">{m.name}</span>
+                                            <i className="fas fa-plus text-gray-300 group-hover:text-blue-500"></i>
+                                        </div>
+                                    ))}
+                                    {filteredAvailable.length === 0 && <div className="p-4 text-center text-xs text-gray-400">No compatible models found for {channel.type}</div>}
+                                </div>
                             </div>
-                            <div className="flex-1 border rounded p-0 overflow-y-auto">
-                                <table className="w-full text-left border-collapse">
-                                    <thead className="bg-gray-50 text-xs sticky top-0"><tr><th className="p-2">Model</th><th className="p-2">Map To</th><th className="p-2 w-32">RPM</th><th className="p-2 w-32">Mode</th><th className="p-2"></th></tr></thead>
-                                    <tbody>
-                                        {enabledModels.map(m => (
-                                            <tr key={m.name} className="border-b">
-                                                <td className="p-2 text-xs">{m.name}</td>
-                                                <td className="p-2"><input className="border rounded w-full px-1 text-xs min-w-[150px]" value={m.mapTo} onChange={e=>updateModel(m.name,'mapTo',e.target.value)} placeholder="Optional" /></td>
-                                                <td className="p-2"><input type="number" className="border rounded w-full px-1 text-xs min-w-[100px]" value={m.rpm} onChange={e=>updateModel(m.name,'rpm',e.target.value)} placeholder="1000" /></td>
-                                                <td className="p-2"><select className="border rounded w-full px-1 text-xs" value={m.mode} onChange={e=>updateModel(m.name,'mode',e.target.value)}><option value="token">Token</option><option value="request">Request</option><option value="time">Time</option><option value="param">Param</option></select></td>
-                                                <td className="p-2"><button onClick={()=>removeModel(m.name)} className="text-red-500">x</button></td>
+                            <div className="flex-1 border rounded-lg bg-white flex flex-col">
+                                <div className="p-3 border-b bg-gray-100 font-bold text-sm text-gray-700 flex justify-between">
+                                    <span>Selected ({enabledModels.length})</span>
+                                </div>
+                                <div className="flex-1 overflow-y-auto p-0">
+                                    <table className="w-full text-left border-collapse">
+                                        <thead className="bg-gray-50 text-xs text-gray-500 uppercase sticky top-0 z-10">
+                                            <tr>
+                                                <th className="p-3 border-b">Model</th>
+                                                <th className="p-3 border-b">Rename To</th>
+                                                <th className="p-3 border-b w-32">RPM</th>
+                                                <th className="p-3 border-b w-32">Billing</th>
+                                                <th className="p-3 border-b w-10"></th>
                                             </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                        </thead>
+                                        <tbody className="text-sm">
+                                            {enabledModels.map(m => (
+                                                <tr key={m.name} className="border-b hover:bg-gray-50 group">
+                                                    <td className="p-3 font-medium text-gray-700">{m.name}</td>
+                                                    <td className="p-3"><input className="border rounded w-full px-2 py-1 text-xs min-w-[150px]" value={m.mapTo} onChange={e=>updateModel(m.name,'mapTo',e.target.value)} placeholder="Optional" /></td>
+                                                    <td className="p-3"><input type="number" className="border rounded w-full px-2 py-1 text-xs min-w-[100px]" value={m.rpm} onChange={e=>updateModel(m.name,'rpm',e.target.value)} placeholder="1000" /></td>
+                                                    <td className="p-3"><select className="border rounded w-full px-1 py-1 text-xs" value={m.mode} onChange={e=>updateModel(m.name,'mode',e.target.value)}><option value="token">Token</option><option value="request">Request</option><option value="time">Time</option><option value="param">Param</option></select></td>
+                                                    <td className="p-3 text-center"><button onClick={()=>removeModel(m.name)} className="text-gray-400 hover:text-red-500"><i className="fas fa-times"></i></button></td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                    {enabledModels.length === 0 && <div className="p-8 text-center text-gray-400 text-sm">Select models from the left to add</div>}
+                                </div>
                             </div>
                         </div>
-                        <div className="pt-4 flex justify-end gap-2"><button onClick={onCancel} className="px-4 py-2 border rounded">Cancel</button><button onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white rounded">Save</button></div>
+                        <div className="pt-4 flex justify-end gap-2 border-t mt-4 bg-white">
+                            <button onClick={onCancel} className="px-4 py-2 border rounded-lg hover:bg-gray-50">Cancel</button>
+                            <button onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Save Configuration</button>
+                        </div>
                     </div>
                 );
             };

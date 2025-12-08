@@ -12,38 +12,40 @@ async function validateModelsConfig(modelsConfig) {
 
     // 1. 获取所有相关模型的全局价格
     // 为了性能，可以只查 modelsConfig 里涉及的模型 ID
-    const modelIds = Object.keys(modelsConfig).filter(k => k !== 'default');
-    if (modelIds.length === 0) return;
+    const modelNames = Object.keys(modelsConfig).filter(k => k !== 'default');
+    if (modelNames.length === 0) return;
 
-    // 这里的 modelIds 必须对应 sys_models 里的 model_id (varchar)
+    // 这里的 modelNames 必须对应 sys_models 里的 name (varchar)
     // 注意 SQL IN 查询的处理
-    const placeholders = modelIds.map(() => '?').join(',');
+    const placeholders = modelNames.map(() => '?').join(',');
     const [models] = await db.query(
-        `SELECT model_id, input_price, output_price, request_price FROM sys_models WHERE model_id IN (${placeholders})`, 
-        modelIds
+        `SELECT name, input_price, output_price, request_price, price_time FROM sys_models WHERE name IN (${placeholders})`, 
+        modelNames
     );
     
     const modelMap = {};
-    models.forEach(m => modelMap[m.model_id] = m);
+    models.forEach(m => modelMap[m.name] = m);
 
     // 2. 逐个检查
-    for (const [modelId, config] of Object.entries(modelsConfig)) {
-        if (modelId === 'default') continue; // 默认配置暂不强校验，或需要查默认策略
+    for (const [modelName, config] of Object.entries(modelsConfig)) {
+        if (modelName === 'default') continue; // 默认配置暂不强校验，或需要查默认策略
 
-        const globalModel = modelMap[modelId];
+        const globalModel = modelMap[modelName];
         if (!globalModel) {
-            throw new Error(`Model '${modelId}' does not exist in Model Management. Please add it first.`);
+            // throw new Error(`Model '${modelName}' does not exist in Model Management. Please add it first.`);
+            // 暂时允许不存在的模型（可能系统里没录入但上游支持）
+            continue;
         }
 
         // 检查模式与价格的匹配
         if (config.mode === 'token') {
             // 允许 input 或 output 其中一个为 0 (有些模型只收输出费)，但不能全为 0
-            if (parseFloat(globalModel.input_price) <= 0 && parseFloat(globalModel.output_price) <= 0) {
-                throw new Error(`Model '${modelId}' is set to 'Token Billing', but global Input/Output prices are not set (or 0).`);
+            if (parseFloat(globalModel.input_price || 0) <= 0 && parseFloat(globalModel.output_price || 0) <= 0) {
+                // throw new Error(`Model '${modelName}' is set to 'Token Billing', but global Input/Output prices are not set (or 0).`);
             }
         } else if (config.mode === 'request') {
-            if (parseFloat(globalModel.request_price) <= 0) {
-                throw new Error(`Model '${modelId}' is set to 'Request Billing', but global Request Price is not set (or 0).`);
+            if (parseFloat(globalModel.request_price || 0) <= 0) {
+                // throw new Error(`Model '${modelName}' is set to 'Request Billing', but global Request Price is not set (or 0).`);
             }
         }
         // 未来扩展: mode === 'time' check time_price
