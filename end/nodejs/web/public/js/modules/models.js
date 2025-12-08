@@ -109,23 +109,49 @@ window.ModelManager = ({ setNotify }) => {
                                 </div>
                             </div>
                             
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Input Price ($/1k tokens)</label>
-                                    <input type="number" step="0.000001" name="price_input" defaultValue={editingModel?.price_input || 0} className="w-full border rounded-lg px-3 py-2" />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Output Price ($/1k tokens)</label>
-                                    <input type="number" step="0.000001" name="price_output" defaultValue={editingModel?.price_output || 0} className="w-full border rounded-lg px-3 py-2" />
-                                </div>
-                            </div>
-
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Request Price ($/req)</label>
-                                <input type="number" step="0.000001" name="price_request" defaultValue={editingModel?.price_request || 0} className="w-full border rounded-lg px-3 py-2" />
-                            </div>
-
-                            {editingModel && (
+                                                                <div className="grid grid-cols-2 gap-4">
+                                                                    <div>
+                                                                        <label className="block text-sm font-medium text-gray-700 mb-1">Input Price ($/1k tokens)</label>
+                                                                        <input type="number" step="0.000001" name="price_input" defaultValue={editingModel?.price_input || 0} className="w-full border rounded-lg px-3 py-2" />
+                                                                    </div>
+                                                                    <div>
+                                                                        <label className="block text-sm font-medium text-gray-700 mb-1">Output Price ($/1k tokens)</label>
+                                                                        <input type="number" step="0.000001" name="price_output" defaultValue={editingModel?.price_output || 0} className="w-full border rounded-lg px-3 py-2" />
+                                                                    </div>
+                                                                </div>
+                            
+                                                                <div className="grid grid-cols-2 gap-4">
+                                                                    <div>
+                                                                        <label className="block text-sm font-medium text-gray-700 mb-1">Cache Price ($/1k tokens)</label>
+                                                                        <input type="number" step="0.000001" name="price_cache" defaultValue={editingModel?.price_cache || 0} className="w-full border rounded-lg px-3 py-2" />
+                                                                    </div>
+                                                                    <div>
+                                                                        <label className="block text-sm font-medium text-gray-700 mb-1">Time Price ($/sec)</label>
+                                                                        <input type="number" step="0.000001" name="price_time" defaultValue={editingModel?.price_time || 0} className="w-full border rounded-lg px-3 py-2" />
+                                                                    </div>
+                                                                </div>
+                            
+                                                                                                    <div>
+                            
+                                                                                                        <label className="block text-sm font-medium text-gray-700 mb-1">Request Price ($/req)</label>
+                            
+                                                                                                        <input type="number" step="0.000001" name="price_request" defaultValue={editingModel?.price_request || 0} className="w-full border rounded-lg px-3 py-2" />
+                            
+                                                                                                    </div>
+                            
+                                                                
+                            
+                                                                                                    <div>
+                            
+                                                                                                        <label className="block text-sm font-medium text-gray-700 mb-1">Default RPM</label>
+                            
+                                                                                                        <input type="number" name="default_rpm" defaultValue={editingModel?.default_rpm || 1000} className="w-full border rounded-lg px-3 py-2" placeholder="1000" />
+                            
+                                                                                                    </div>
+                            
+                                                                
+                            
+                                                                                                    {editingModel && (
                                 <div className="flex items-center space-x-2 pt-2">
                                     <input type="checkbox" name="status" id="statusCheck" defaultChecked={editingModel.status === 1} className="w-4 h-4 text-blue-600 rounded" />
                                     <label htmlFor="statusCheck" className="text-sm font-medium text-gray-700">Model Active</label>

@@ -29,15 +29,15 @@ router.get('/', async (req, res) => {
  * 创建模型
  */
 router.post('/', async (req, res) => {
-    const { provider, name, price_input, price_output, price_cache, price_time, price_request } = req.body;
+    const { provider, name, price_input, price_output, price_cache, price_time, price_request, default_rpm } = req.body;
     if (!provider || !name) return res.status(400).json({ error: "Missing provider or name" });
     
     try {
         await db.query(
             `INSERT INTO sys_models 
-            (provider, name, price_input, price_output, price_cache, price_time, price_request) 
-            VALUES (?, ?, ?, ?, ?, ?, ?)`,
-            [provider, name, price_input||0, price_output||0, price_cache||0, price_time||0, price_request||0]
+            (provider, name, price_input, price_output, price_cache, price_time, price_request, default_rpm) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            [provider, name, price_input||0, price_output||0, price_cache||0, price_time||0, price_request||0, default_rpm||1000]
         );
         res.status(201).json({ message: "Model created" });
     } catch (err) {
@@ -114,7 +114,7 @@ router.put('/:id', async (req, res) => {
         }
 
         // 4. 执行更新
-        const allowed = ['price_input', 'price_output', 'price_cache', 'price_time', 'price_request', 'status', 'name', 'provider'];
+        const allowed = ['price_input', 'price_output', 'price_cache', 'price_time', 'price_request', 'default_rpm', 'status', 'name', 'provider'];
         const updates = [];
         const params = [];
         

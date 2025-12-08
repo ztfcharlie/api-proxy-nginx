@@ -11,12 +11,13 @@ window.ChannelsManager = ({ setNotify }) => {
     const [configTargetChannel, setConfigTargetChannel] = useState(null);
     const [availableModels, setAvailableModels] = useState([]);
 
-    // 加载数据
+    // Load initial data
     const load = async () => {
         setLoading(true);
         try {
             const res = await window.api.channels.list({ limit: 100 });
             setChannels(res.data.data || []);
+            // 预加载所有可用模型，供配置时使用
             const modelRes = await window.api.models.list();
             setAvailableModels(modelRes.data.data || []);
         } catch (e) {
@@ -28,12 +29,13 @@ window.ChannelsManager = ({ setNotify }) => {
 
     useEffect(() => { load(); }, []);
 
-    // --- 渠道表单提交 ---
+    // --- Channel CRUD Handlers ---
     const handleSubmit = async (e) => {
         e.preventDefault();
         const formData = new FormData(e.target);
         const data = Object.fromEntries(formData.entries());
         
+        // 处理状态复选框
         data.status = data.status === 'on' ? 1 : 0;
 
         // 动态构建 extra_config 和 credentials
@@ -109,7 +111,7 @@ window.ChannelsManager = ({ setNotify }) => {
         }
     };
 
-    // --- 模型配置保存 ---
+    // --- Model Config Handlers ---
     const handleSaveModels = async (newConfig) => {
         try {
             const payload = {
@@ -127,7 +129,8 @@ window.ChannelsManager = ({ setNotify }) => {
         }
     };
 
-    // --- 渠道基础信息表单 ---
+    // --- Render Helpers ---
+    
     const ChannelForm = ({ channel, onSubmit, onCancel }) => {
         const [type, setType] = useState(channel?.type || 'openai');
         const extra = channel?.extra_config ? (typeof channel.extra_config === 'string' ? JSON.parse(channel.extra_config) : channel.extra_config) : {};
@@ -218,7 +221,7 @@ window.ChannelsManager = ({ setNotify }) => {
         );
     };
 
-    // --- 左右穿梭框组件 (Shuttle Box) ---
+    // --- Shuttle Box ---
     const ModelConfigForm = ({ channel, allModels, onSubmit, onCancel }) => {
         let initialConfig = {};
         try {
@@ -229,11 +232,11 @@ window.ChannelsManager = ({ setNotify }) => {
         const [filteredAvailable, setFilteredAvailable] = useState([]);
 
         useEffect(() => {
+            if (!allModels) return;
             const selected = [];
             const available = [];
 
             allModels.forEach(m => {
-                // 兼容性检查
                 let isCompatible = false;
                 if (!m.provider) isCompatible = true;
                 else if (m.provider === channel.type) isCompatible = true;
@@ -261,7 +264,8 @@ window.ChannelsManager = ({ setNotify }) => {
         }, [allModels, channel.type]);
 
         const addModel = (model) => {
-            setEnabledModels([...enabledModels, { name: model.name, mapTo: '', rpm: '', mode: 'token' }]);
+            const defaultRpm = model.default_rpm || 5000; // Default RPM 5000
+            setEnabledModels([...enabledModels, { name: model.name, mapTo: '', rpm: defaultRpm, mode: 'token' }]);
             setFilteredAvailable(filteredAvailable.filter(m => m.name !== model.name));
         };
 
@@ -332,81 +336,50 @@ window.ChannelsManager = ({ setNotify }) => {
                                 <thead className="bg-gray-50 text-xs text-gray-500 uppercase sticky top-0 z-10">
                                     <tr>
                                         <th className="p-3 border-b">Model Name</th>
-                                        <th className="p-3 border-b">Rename To</th>
+                                        {/* <th className="p-3 border-b">Rename To</th> */}
                                         <th className="p-3 border-b w-32">RPM</th>
                                         <th className="p-3 border-b w-32">Billing</th>
                                         <th className="p-3 border-b w-10"></th>
                                     </tr>
                                 </thead>
                                 <tbody className="text-sm">
-                                    {enabledModels.map(m => (
+                                    {enabledModels.map(m => {
+                                        const modelInfo = allModels.find(x => x.name === m.name);
+                                        const canToken = (modelInfo?.price_input > 0 || modelInfo?.price_output > 0);
+                                        const canRequest = (modelInfo?.price_request > 0);
+                                        const canTime = (modelInfo?.price_time > 0); 
+                                        const canParam = true; 
+                                        const isCurrentInvalid = (m.mode === 'token' && !canToken) || 
+                                                               (m.mode === 'request' && !canRequest) ||
+                                                               (m.mode === 'time' && !canTime);
+
+                                        return (
                                         <tr key={m.name} className="border-b hover:bg-gray-50 group">
                                             <td className="p-3 font-medium text-gray-700">{m.name}</td>
-                                            <td className="p-3">
+                                            {/* <td className="p-3">
                                                 <input className="w-full border rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-500 outline-none min-w-[150px]"
                                                     placeholder="Optional"
                                                     value={m.mapTo}
                                                     onChange={(e) => updateModelConfig(m.name, 'mapTo', e.target.value)} />
-                                            </td>
+                                            </td> */}
                                             <td className="p-3">
                                                 <input type="number" className="w-full border rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-500 outline-none min-w-[100px]"
-                                                    placeholder="1000"
+                                                    placeholder={modelInfo?.default_rpm || 5000}
                                                     value={m.rpm}
                                                     onChange={(e) => updateModelConfig(m.name, 'rpm', e.target.value)} />
                                             </td>
                                             <td className="p-3">
-                                                {(() => {
-                                                    const modelInfo = allModels.find(x => x.name === m.name);
-                                                    // Check pricing availability
-                                                    const canToken = (modelInfo?.price_input > 0 || modelInfo?.price_output > 0);
-                                                    const canRequest = (modelInfo?.price_request > 0);
-                                                    // Assuming price_time exists in model object, otherwise default false
-                                                    const canTime = (modelInfo?.price_time > 0); 
-                                                    // Param mode might not have a specific price field yet, keep enabled or bind to something? 
-                                                    // Let's keep Param enabled for now or bind to request price? 
-                                                    // Requirement says "if no price set, cannot select". Let's assume Param is special or free if not defined.
-                                                    // But to be safe and strict:
-                                                    const canParam = true; // TODO: Define pricing field for Param
-
-                                                    // Check if current selection is valid
-                                                    const isCurrentInvalid = (m.mode === 'token' && !canToken) || 
-                                                                           (m.mode === 'request' && !canRequest) ||
-                                                                           (m.mode === 'time' && !canTime);
-
-                                                    return (
-                                                        <select className={`border rounded w-full px-1 py-1 text-xs ${isCurrentInvalid ? 'border-red-500 bg-red-50 text-red-700' : 'bg-white'} focus:ring-1 focus:ring-blue-500 outline-none`}
-                                                            value={m.mode}
-                                                            title={isCurrentInvalid ? "Current mode is invalid (no price set)" : ""}
-                                                            onChange={(e) => updateModelConfig(m.name, 'mode', e.target.value)}>
-                                                            
-                                                            {(canToken || m.mode === 'token') && (
-                                                                <option value="token" disabled={!canToken}>
-                                                                    Token {!canToken ? '(Invalid - No Price)' : ''}
-                                                                </option>
-                                                            )}
-                                                            
-                                                            {(canRequest || m.mode === 'request') && (
-                                                                <option value="request" disabled={!canRequest}>
-                                                                    Request {!canRequest ? '(Invalid - No Price)' : ''}
-                                                                </option>
-                                                            )}
-                                                            
-                                                            {(canTime || m.mode === 'time') && (
-                                                                <option value="time" disabled={!canTime}>
-                                                                    Time {!canTime ? '(Invalid - No Price)' : ''}
-                                                                </option>
-                                                            )}
-                                                            
-                                                            {(canParam || m.mode === 'param') && (
-                                                                <option value="param" disabled={!canParam}>Param</option>
-                                                            )}
-
-                                                            {!canToken && !canRequest && !canTime && !canParam && (
-                                                                <option disabled>No Pricing Configured</option>
-                                                            )}
-                                                        </select>
-                                                    );
-                                                })()}
+                                                <select className={`w-full border rounded px-1 py-1 text-xs focus:ring-1 focus:ring-blue-500 outline-none ${isCurrentInvalid ? 'border-red-500 bg-red-50' : 'bg-white'}`}
+                                                    value={m.mode}
+                                                    onChange={(e) => updateModelConfig(m.name, 'mode', e.target.value)}>
+                                                    
+                                                    {(canToken || m.mode === 'token') && <option value="token" disabled={!canToken}>Token {!canToken?'(Invalid)':''}</option>}
+                                                    {(canRequest || m.mode === 'request') && <option value="request" disabled={!canRequest}>Request {!canRequest?'(Invalid)':''}</option>}
+                                                    {(canTime || m.mode === 'time') && <option value="time" disabled={!canTime}>Time {!canTime?'(Invalid)':''}</option>}
+                                                    {(canParam || m.mode === 'param') && <option value="param" disabled={!canParam}>Param</option>}
+                                                    
+                                                    {!canToken && !canRequest && !canTime && !canParam && <option disabled>No Pricing</option>}
+                                                </select>
                                             </td>
                                             <td className="p-3 text-center">
                                                 <button onClick={() => removeModel(m.name)} className="text-gray-400 hover:text-red-500 transition-colors" title="Remove">
@@ -414,7 +387,7 @@ window.ChannelsManager = ({ setNotify }) => {
                                                 </button>
                                             </td>
                                         </tr>
-                                    ))}
+                                    )})}
                                 </tbody>
                             </table>
                             {enabledModels.length === 0 && <div className="p-8 text-center text-gray-400 text-sm">Click models on the left to add them here</div>}
@@ -452,7 +425,7 @@ window.ChannelsManager = ({ setNotify }) => {
                             <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Type</th>
                             <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Models</th>
                             <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Status</th>
-                            <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Actions</th>
+                            <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase tracking-wider">Operations</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-200 bg-white">
@@ -472,9 +445,8 @@ window.ChannelsManager = ({ setNotify }) => {
                                     </td>
                                     <td className="px-6 py-4 text-sm">
                                         <button onClick={() => { setConfigTargetChannel(ch); setShowModelConfig(true); }}
-                                            className="flex items-center space-x-1 text-gray-600 hover:text-blue-600 bg-gray-100 hover:bg-blue-50 px-3 py-1 rounded-full transition-colors text-xs font-medium">
-                                            <i className="fas fa-cubes"></i>
-                                            <span>{modelCount} Models</span>
+                                            className="bg-blue-50 text-blue-600 hover:bg-blue-100 px-3 py-1.5 rounded-md text-xs font-medium transition-colors border border-blue-200 inline-flex items-center">
+                                            <i className="fas fa-cubes mr-1"></i> {modelCount} Models
                                         </button>
                                     </td>
                                     <td className="px-6 py-4 text-sm">
