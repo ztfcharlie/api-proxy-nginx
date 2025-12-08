@@ -247,11 +247,28 @@
                 const type = data.type;
                 let extra = {};
                 let creds = data.credentials_input; 
+
                 try {
-                    if (type === 'azure') { extra = { endpoint: data.azure_endpoint, api_version: data.azure_api_version }; data.credentials = creds; } 
-                    else if (type === 'aws_bedrock') { extra = { region: data.aws_region, access_key_id: data.aws_ak, secret_access_key: data.aws_sk }; data.credentials = ''; } 
-                    else if (type === 'vertex') { data.credentials = creds; JSON.parse(creds); } 
-                    else { data.credentials = creds; }
+                    if (type === 'azure') { extra = { endpoint: data.azure_endpoint, api_version: data.azure_api_version }; } 
+                    else if (type === 'aws_bedrock') { extra = { region: data.aws_region, access_key_id: data.aws_ak, secret_access_key: data.aws_sk }; } 
+                    
+                    // Handle Credentials Logic
+                    if (creds && creds.trim() !== '') {
+                        if (type === 'vertex') { 
+                            JSON.parse(creds); // Validate JSON
+                            data.credentials = creds;
+                        } else if (type !== 'aws_bedrock') {
+                            data.credentials = creds;
+                        }
+                    } else {
+                        // Credentials field is empty
+                        if (!editingChannel && type !== 'aws_bedrock') {
+                            return setNotify({ msg: 'Credentials are required for new channels', type: 'error' });
+                        }
+                        // If editing and empty, remove field to prevent overwriting with empty string
+                        delete data.credentials;
+                    }
+
                     data.extra_config = JSON.stringify(extra);
                     ['azure_endpoint', 'azure_api_version', 'aws_region', 'aws_ak', 'aws_sk', 'credentials_input'].forEach(k => delete data[k]);
                 } catch (err) { return setNotify({ msg: 'Config Error: ' + err.message, type: 'error' }); }
@@ -263,27 +280,40 @@
                 } catch (err) { setNotify({ msg: err.response?.data?.error || 'Error', type: 'error' }); }
             };
 
-            const handleDelete = async (id) => { if (!confirm('Delete?')) return; try { await api.channels.delete(id); setNotify({ msg: 'Deleted', type: 'success' }); load(); } catch (err) { setNotify({ msg: 'Error', type: 'error' }); } };
-
-            const handleSaveModels = async (newConfig) => {
-                try {
-                    await api.channels.update(configTargetChannel.id, { ...configTargetChannel, models_config: newConfig });
-                    setNotify({ msg: 'Models saved', type: 'success' }); setShowModelConfig(false); load();
-                } catch (err) { setNotify({ msg: 'Error saving models: ' + (err.response?.data?.error || err.message), type: 'error' }); }
-            };
+            // ... (handleDelete, handleSaveModels) ...
 
             const ChannelForm = ({ channel, onSubmit, onCancel }) => {
                 const [type, setType] = useState(channel?.type || 'openai');
                 const extra = channel?.extra_config ? (typeof channel.extra_config === 'string' ? JSON.parse(channel.extra_config) : channel.extra_config) : {};
+                
                 return (
                     <form id="channelForm" onSubmit={onSubmit} className="space-y-4">
                         <div className="grid grid-cols-2 gap-4">
                             <div><label className="block text-sm font-medium mb-1">Name</label><input name="name" defaultValue={channel?.name} required className="w-full border rounded p-2" /></div>
                             <div><label className="block text-sm font-medium mb-1">Type</label><select name="type" value={type} onChange={(e) => setType(e.target.value)} className="w-full border rounded p-2 bg-white"><option value="openai">OpenAI</option><option value="azure">Azure</option><option value="vertex">Vertex</option><option value="anthropic">Anthropic</option><option value="aws_bedrock">Bedrock</option><option value="deepseek">DeepSeek</option><option value="qwen">Qwen</option></select></div>
                         </div>
-                        {type !== 'aws_bedrock' && <div><label className="block text-sm font-medium mb-1">{type === 'vertex' ? 'JSON Key' : 'API Key'}</label><textarea name="credentials_input" rows="3" required defaultValue={channel?.credentials} className="w-full border rounded p-2 font-mono text-xs" /></div>}
+                        {type !== 'aws_bedrock' && (
+                            <div>
+                                <label className="block text-sm font-medium mb-1">
+                                    {type === 'vertex' ? 'JSON Key' : 'API Key'} 
+                                    {channel && <span className="text-gray-400 font-normal ml-2">(Leave blank to keep unchanged)</span>}
+                                </label>
+                                <textarea name="credentials_input" rows="3" 
+                                    required={!channel} 
+                                    placeholder={channel ? "••••••••" : (type === 'vertex' ? '{ "type": "service_account", ... }' : 'sk-...')}
+                                    className="w-full border rounded p-2 font-mono text-xs" />
+                            </div>
+                        )}
                         {type === 'azure' && <div className="grid grid-cols-2 gap-2 bg-blue-50 p-2 rounded"><input name="azure_endpoint" defaultValue={extra.endpoint} required placeholder="Endpoint" className="border rounded p-1" /><input name="azure_api_version" defaultValue={extra.api_version} required placeholder="API Version" className="border rounded p-1" /></div>}
                         {type === 'aws_bedrock' && <div className="grid grid-cols-2 gap-2 bg-orange-50 p-2 rounded"><input name="aws_region" defaultValue={extra.region} required placeholder="Region" className="border rounded p-1" /><input name="aws_ak" defaultValue={extra.access_key_id} required placeholder="AK" className="border rounded p-1" /><input name="aws_sk" defaultValue={extra.secret_access_key} required placeholder="SK" className="border rounded p-1 col-span-2" /></div>}
+                        {channel && (
+                            <div className="flex items-center space-x-2 pt-2">
+                                <input type="checkbox" name="status" id="statusCheck" 
+                                    defaultChecked={channel.status === 1} 
+                                    className="w-4 h-4 text-blue-600 rounded" />
+                                <label htmlFor="statusCheck" className="text-sm font-medium text-gray-700">Channel Active</label>
+                            </div>
+                        )}
                         <div className="flex justify-end gap-2 pt-4"><button type="button" onClick={onCancel} className="px-4 py-2 border rounded">Cancel</button><button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded">Save</button></div>
                     </form>
                 );
