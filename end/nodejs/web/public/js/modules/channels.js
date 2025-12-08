@@ -355,14 +355,42 @@ window.ChannelsManager = ({ setNotify }) => {
                                                     onChange={(e) => updateModelConfig(m.name, 'rpm', e.target.value)} />
                                             </td>
                                             <td className="p-3">
-                                                <select className="w-full border rounded px-1 py-1 text-xs bg-white focus:ring-1 focus:ring-blue-500 outline-none"
-                                                    value={m.mode}
-                                                    onChange={(e) => updateModelConfig(m.name, 'mode', e.target.value)}>
-                                                    <option value="token">Token</option>
-                                                    <option value="request">Request</option>
-                                                    <option value="time">Time</option>
-                                                    <option value="param">Param</option>
-                                                </select>
+                                                {(() => {
+                                                    const modelInfo = allModels.find(x => x.name === m.name);
+                                                    // Check pricing availability
+                                                    const canToken = (modelInfo?.price_input > 0 || modelInfo?.price_output > 0);
+                                                    const canRequest = (modelInfo?.price_request > 0);
+                                                    // Assuming price_time exists in model object, otherwise default false
+                                                    const canTime = (modelInfo?.price_time > 0); 
+                                                    // Param mode might not have a specific price field yet, keep enabled or bind to something? 
+                                                    // Let's keep Param enabled for now or bind to request price? 
+                                                    // Requirement says "if no price set, cannot select". Let's assume Param is special or free if not defined.
+                                                    // But to be safe and strict:
+                                                    const canParam = true; // TODO: Define pricing field for Param
+
+                                                    // Check if current selection is valid
+                                                    const isCurrentInvalid = (m.mode === 'token' && !canToken) || 
+                                                                           (m.mode === 'request' && !canRequest) ||
+                                                                           (m.mode === 'time' && !canTime);
+
+                                                    return (
+                                                        <select className={`border rounded w-full px-1 py-1 text-xs ${isCurrentInvalid ? 'border-red-500 bg-red-50 text-red-700' : 'bg-white'} focus:ring-1 focus:ring-blue-500 outline-none`}
+                                                            value={m.mode}
+                                                            title={isCurrentInvalid ? "Selected billing mode has no price configured!" : ""}
+                                                            onChange={(e) => updateModelConfig(m.name, 'mode', e.target.value)}>
+                                                            <option value="token" disabled={!canToken}>
+                                                                Token {!canToken ? '(No Price)' : ''}
+                                                            </option>
+                                                            <option value="request" disabled={!canRequest}>
+                                                                Request {!canRequest ? '(No Price)' : ''}
+                                                            </option>
+                                                            <option value="time" disabled={!canTime}>
+                                                                Time {!canTime ? '(No Price)' : ''}
+                                                            </option>
+                                                            <option value="param" disabled={!canParam}>Param</option>
+                                                        </select>
+                                                    );
+                                                })()}
                                             </td>
                                             <td className="p-3 text-center">
                                                 <button onClick={() => removeModel(m.name)} className="text-gray-400 hover:text-red-500 transition-colors" title="Remove">
