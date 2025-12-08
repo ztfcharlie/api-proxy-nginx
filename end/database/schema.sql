@@ -141,7 +141,7 @@ CREATE TABLE `sys_token_routes` (
 DROP TABLE IF EXISTS `sys_models`;
 CREATE TABLE `sys_models` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
-  `provider` varchar(50) NOT NULL COMMENT '厂商: openai, google, anthropic, qwen, deepseek',
+  `provider` varchar(512) NOT NULL COMMENT '厂商: openai, google, anthropic, qwen, deepseek',
   `name` varchar(100) NOT NULL COMMENT '模型名称',
   `price_input` decimal(12,6) DEFAULT 0.000000 COMMENT '百万Token输入价格',
   `price_output` decimal(12,6) DEFAULT 0.000000 COMMENT '百万Token输出价格',
