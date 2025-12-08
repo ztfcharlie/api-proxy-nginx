@@ -60,9 +60,9 @@ const App = () => {
     };
 
     return (
-        <div className="flex h-screen bg-gray-100">
+        <div className="flex h-screen w-full bg-gray-100">
             {/* Sidebar */}
-            <aside className="w-64 bg-gray-900 text-gray-300 flex flex-col shadow-xl z-20 transition-all duration-300">
+            <aside className="w-64 bg-gray-900 text-gray-300 flex flex-col shadow-xl z-20 transition-all duration-300 flex-shrink-0">
                 <div className="h-16 flex items-center px-6 bg-gray-800 border-b border-gray-700 shadow-md">
                     <i className="fas fa-project-diagram text-blue-500 text-xl mr-3"></i>
                     <span className="text-white font-bold text-lg tracking-wide">Gemini Proxy</span>
@@ -87,9 +87,9 @@ const App = () => {
             </aside>
 
             {/* Main Content Area */}
-            <main className="flex-1 flex flex-col overflow-hidden relative bg-gray-50">
+            <main className="flex-1 w-full flex flex-col overflow-hidden relative bg-gray-50">
                 {/* Top Header */}
-                <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-8 shadow-sm z-10">
+                <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-8 shadow-sm z-10 flex-shrink-0">
                     <div className="flex items-center">
                         <h2 className="text-lg font-semibold text-gray-800 capitalize flex items-center">
                             <i className={`${menuItems.find(i => i.id === activeView)?.icon} mr-2 text-gray-400`}></i>
@@ -105,7 +105,7 @@ const App = () => {
                 </header>
 
                 {/* Content Body */}
-                <div className="flex-1 overflow-hidden p-8 relative">
+                <div className="flex-1 w-full overflow-hidden p-8 relative">
                     <window.Notification message={notify.msg} type={notify.type} onClose={() => setNotify({ msg: '', type: '' })} />
                     {renderContent()}
                 </div>

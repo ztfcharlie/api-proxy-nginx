@@ -19,7 +19,7 @@ async function validateModelsConfig(modelsConfig) {
     // 注意 SQL IN 查询的处理
     const placeholders = modelNames.map(() => '?').join(',');
     const [models] = await db.query(
-        `SELECT name, input_price, output_price, request_price, price_time FROM sys_models WHERE name IN (${placeholders})`, 
+        `SELECT name, price_input, price_output, price_request, price_time FROM sys_models WHERE name IN (${placeholders})`, 
         modelNames
     );
     
@@ -40,11 +40,11 @@ async function validateModelsConfig(modelsConfig) {
         // 检查模式与价格的匹配
         if (config.mode === 'token') {
             // 允许 input 或 output 其中一个为 0 (有些模型只收输出费)，但不能全为 0
-            if (parseFloat(globalModel.input_price || 0) <= 0 && parseFloat(globalModel.output_price || 0) <= 0) {
+            if (parseFloat(globalModel.price_input || 0) <= 0 && parseFloat(globalModel.price_output || 0) <= 0) {
                 // throw new Error(`Model '${modelName}' is set to 'Token Billing', but global Input/Output prices are not set (or 0).`);
             }
         } else if (config.mode === 'request') {
-            if (parseFloat(globalModel.request_price || 0) <= 0) {
+            if (parseFloat(globalModel.price_request || 0) <= 0) {
                 // throw new Error(`Model '${modelName}' is set to 'Request Billing', but global Request Price is not set (or 0).`);
             }
         }
