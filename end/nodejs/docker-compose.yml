@@ -17,7 +17,7 @@ services:
       # 挂载 .env 文件到容器中（所有配置都在这里）
       - ../.env:/app/.env:ro
       # 挂载前端静态文件
-      - ../web/public:/app/web/public
+      - ./web/public:/app/web/public
     networks:
       api-proxy-network:
     healthcheck:
