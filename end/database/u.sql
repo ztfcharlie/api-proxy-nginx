@@ -1,0 +1,1 @@
+ALTER TABLE `sys_models` ADD COLUMN `default_rpm` INT DEFAULT 60 COMMENT '默认RPM限制';

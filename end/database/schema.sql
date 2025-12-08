@@ -148,6 +148,7 @@ CREATE TABLE `sys_models` (
   `price_cache` decimal(12,6) DEFAULT 0.000000 COMMENT '百万Token缓存价格',
   `price_time` decimal(12,6) DEFAULT 0.000000 COMMENT '每秒价格',
   `price_request` decimal(12,6) DEFAULT 0.000000 COMMENT '每次请求价格',
+  `default_rpm` int(11) DEFAULT 1000 COMMENT '默认RPM限制',
   `status` tinyint(4) DEFAULT 1 COMMENT '1:启用, 0:禁用',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
