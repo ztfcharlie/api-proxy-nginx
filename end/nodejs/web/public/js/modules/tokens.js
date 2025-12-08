@@ -2,7 +2,7 @@ const { useState, useEffect } = React;
 
 window.TokenManager = ({ setNotify }) => {
     const [tokens, setTokens] = useState([]);
-    const [users, setUsers] = useState([]);
+    const [users, setUsers] = useState([]); // For form selection only
     const [channels, setChannels] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
@@ -10,32 +10,43 @@ window.TokenManager = ({ setNotify }) => {
     const [successData, setSuccessData] = useState(null);
     
     // Filter States
-    const [filterUser, setFilterUser] = useState('');
+    const [filterUsername, setFilterUsername] = useState('');
     const [filterType, setFilterType] = useState('');
+
+    // Debounce search
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            load();
+        }, 500);
+        return () => clearTimeout(timer);
+    }, [filterUsername, filterType]);
 
     const load = async () => {
         setLoading(true);
         try {
             const params = { limit: 100 };
-            if (filterUser) params.user_id = filterUser;
+            if (filterUsername) params.username = filterUsername;
             if (filterType) params.type = filterType;
 
-            const [resTokens, resUsers, resChannels] = await Promise.all([
+            const [resTokens, resChannels] = await Promise.all([
                 window.api.tokens.list(params),
-                window.api.users.list(),
                 window.api.channels.list({ limit: 1000, status: 1 })
             ]);
             setTokens(resTokens.data.data || []);
-            setUsers(resUsers.data.data || []);
             setChannels(resChannels.data.data || []);
+            
+            // Only load users if modal is open to save bandwidth? 
+            // For now load simple list for dropdown, optimization for later.
+            if (users.length === 0) {
+                const resUsers = await window.api.users.list();
+                setUsers(resUsers.data.data || []);
+            }
         } catch (e) {
             setNotify({ msg: 'Failed to load data', type: 'error' });
         } finally {
             setLoading(false);
         }
     };
-
-    useEffect(() => { load(); }, [filterUser, filterType]);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -98,10 +109,29 @@ window.TokenManager = ({ setNotify }) => {
         }
     };
 
+    // --- Robust Copy Function (HTTP Compatible) ---
     const copyToClipboard = (text) => {
-        navigator.clipboard.writeText(text).then(() => {
-            setNotify({ msg: 'Copied to clipboard', type: 'success' });
-        });
+        if (navigator.clipboard && window.isSecureContext) {
+            navigator.clipboard.writeText(text).then(() => {
+                setNotify({ msg: 'Copied to clipboard', type: 'success' });
+            });
+        } else {
+            // Fallback for HTTP
+            const textArea = document.createElement("textarea");
+            textArea.value = text;
+            textArea.style.position = "fixed";
+            textArea.style.left = "-9999px";
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                setNotify({ msg: 'Copied to clipboard', type: 'success' });
+            } catch (err) {
+                setNotify({ msg: 'Copy failed', type: 'error' });
+            }
+            document.body.removeChild(textArea);
+        }
     };
 
     const formatDate = (dateStr) => {
@@ -137,6 +167,7 @@ window.TokenManager = ({ setNotify }) => {
                         <pre className="text-xs font-mono whitespace-pre-wrap break-all select-all">{keyDisplay}</pre>
                     </div>
                     <div className="flex justify-center gap-3">
+                        <button onClick={() => copyToClipboard(keyDisplay)} className="px-4 py-2 border rounded-lg hover:bg-gray-50"><i className="far fa-copy mr-2"></i>Copy</button>
                         <button onClick={download} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"><i className="fas fa-download mr-2"></i>Download</button>
                         <button onClick={onClose} className="px-4 py-2 border rounded-lg hover:bg-gray-50">Close</button>
                     </div>
@@ -178,7 +209,12 @@ window.TokenManager = ({ setNotify }) => {
                 {token && (
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Token Key</label>
-                        <input value={token.token_key} readOnly className="w-full border rounded-lg px-3 py-2 bg-gray-50 font-mono text-gray-500" />
+                        <div className="flex">
+                            <input value={token.token_key} readOnly className="flex-1 border rounded-l-lg px-3 py-2 bg-gray-50 font-mono text-gray-500" />
+                            <button type="button" onClick={() => copyToClipboard(token.token_key)} className="px-3 bg-gray-100 border border-l-0 rounded-r-lg hover:bg-gray-200 text-gray-600">
+                                <i className="far fa-copy"></i>
+                            </button>
+                        </div>
                     </div>
                 )}
 
@@ -210,7 +246,10 @@ window.TokenManager = ({ setNotify }) => {
 
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Limit Config (JSON)</label>
-                    <textarea name="limit_config" rows="2" defaultValue={JSON.stringify(token?.limit_config || {}, null, 2)} className="w-full border rounded-lg px-3 py-2 font-mono text-xs bg-gray-50" placeholder='{ "allowed_models": ["gpt-4"], "qps": 10 }'></textarea>
+                    <textarea name="limit_config" rows="2" 
+                        defaultValue={JSON.stringify(token?.limit_config || {}, null, 2)}
+                        className="w-full border rounded-lg px-3 py-2 font-mono text-xs bg-gray-50" 
+                        placeholder='{ "allowed_models": ["gpt-4"], "qps": 10 }'></textarea>
                 </div>
 
                 {token && (
@@ -231,16 +270,25 @@ window.TokenManager = ({ setNotify }) => {
     return (
         <div className="fade-in h-full flex flex-col">
             <div className="flex justify-between items-center mb-6">
-                <div><h1 className="text-2xl font-bold text-gray-800">Virtual Tokens</h1><p className="text-gray-500 text-sm">Manage access tokens</p></div>
+                <div>
+                    <h1 className="text-2xl font-bold text-gray-800">Virtual Tokens</h1>
+                    <p className="text-gray-500 text-sm">Manage access tokens for users</p>
+                </div>
                 <div className="flex space-x-3">
-                    <select className="border rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none" value={filterUser} onChange={e => setFilterUser(e.target.value)}>
-                        <option value="">All Users</option>
-                        {users.map(u => <option key={u.id} value={u.id}>{u.username}</option>)}
+                    <input type="text" placeholder="Filter by User..." className="border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+                        value={filterUsername} onChange={e => setFilterUsername(e.target.value)} />
+                        
+                    <select className="border rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                        value={filterType} onChange={e => setFilterType(e.target.value)}>
+                        <option value="">All Types</option>
+                        <option value="openai">OpenAI</option>
+                        <option value="vertex">Vertex</option>
+                        <option value="azure">Azure</option>
                     </select>
-                    <select className="border rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none" value={filterType} onChange={e => setFilterType(e.target.value)}>
-                        <option value="">All Types</option><option value="openai">OpenAI</option><option value="vertex">Vertex</option><option value="azure">Azure</option>
-                    </select>
-                    <button onClick={() => { setEditingToken(null); setShowModal(true); }} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-sm"><i className="fas fa-plus mr-2"></i>Issue Token</button>
+                    <button onClick={() => { setEditingToken(null); setShowModal(true); }} 
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-sm">
+                        <i className="fas fa-plus mr-2"></i>Issue Token
+                    </button>
                 </div>
             </div>
 
@@ -252,7 +300,7 @@ window.TokenManager = ({ setNotify }) => {
                             <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">User</th>
                             <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Type</th>
                             <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Token Key</th>
-                            <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Created</th>
+                            <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Created / Expires</th>
                             <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Status</th>
                             <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase">Actions</th>
                         </tr>
@@ -262,20 +310,37 @@ window.TokenManager = ({ setNotify }) => {
                             const user = users.find(u => u.id === t.user_id);
                             const isVertex = t.type === 'vertex';
                             const keyDisplay = isVertex ? 'JSON Key' : (t.token_key.length > 10 ? t.token_key.substring(0, 3) + '...' + t.token_key.substring(t.token_key.length - 3) : t.token_key);
+
                             return (
                                 <tr key={t.id} className="hover:bg-gray-50">
                                     <td className="px-6 py-4 text-sm font-medium text-gray-900">{t.name}</td>
-                                    <td className="px-6 py-4 text-sm text-gray-600">{user ? user.username : `ID:${t.user_id}`}</td>
+                                    <td className="px-6 py-4 text-sm text-gray-600">
+                                        <div className="flex items-center">
+                                            <div className="h-6 w-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold mr-2">
+                                                {(t.username || 'U')[0].toUpperCase()}
+                                            </div>
+                                            {t.username}
+                                        </div>
+                                    </td>
                                     <td className="px-6 py-4 text-sm"><span className="px-2 py-1 bg-gray-100 rounded text-xs uppercase font-bold text-gray-600">{t.type}</span></td>
                                     <td className="px-6 py-4 text-sm font-mono text-gray-500">
                                         <div className="flex items-center space-x-2">
-                                            <span className={isVertex ? "bg-purple-50 text-purple-700 px-2 py-0.5 rounded border border-purple-100 text-xs" : ""}>{keyDisplay}</span>
-                                            <button onClick={() => copyToClipboard(t.token_key)} className="text-gray-400 hover:text-blue-600 transition-colors" title="Copy Full Key"><i className="far fa-copy"></i></button>
+                                            <span className={isVertex ? "bg-purple-50 text-purple-700 px-2 py-0.5 rounded border border-purple-100" : ""}>
+                                                {keyDisplay}
+                                            </span>
+                                            <button onClick={() => copyToClipboard(t.token_key)} className="text-gray-400 hover:text-blue-600 transition-colors" title="Copy Full Key">
+                                                <i className="far fa-copy"></i>
+                                            </button>
                                         </div>
                                     </td>
-                                    <td className="px-6 py-4 text-xs text-gray-500">{formatDate(t.created_at)}</td>
+                                    <td className="px-6 py-4 text-xs text-gray-500">
+                                        <div>{formatDate(t.created_at)}</div>
+                                        <div className="text-gray-400">{t.expires_at ? formatDate(t.expires_at) : 'Never'}</div>
+                                    </td>
                                     <td className="px-6 py-4 text-sm">
-                                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${t.status ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{t.status ? 'Active' : 'Disabled'}</span>
+                                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${t.status ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                            {t.status ? 'Active' : 'Disabled'}
+                                        </span>
                                     </td>
                                     <td className="px-6 py-4 text-right text-sm space-x-2">
                                         <button onClick={() => { setEditingToken(t); setShowModal(true); }} className="text-blue-600 hover:text-blue-800 font-medium">Edit</button>
@@ -297,7 +362,13 @@ window.TokenManager = ({ setNotify }) => {
                             <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600"><i className="fas fa-times"></i></button>
                         </div>
                         <div className="p-6 overflow-y-auto">
-                            <TokenForm token={editingToken} channels={channels} users={users} onSubmit={handleSubmit} onCancel={() => setShowModal(false)} />
+                            <TokenForm 
+                                token={editingToken} 
+                                channels={channels} 
+                                users={users} 
+                                onSubmit={handleSubmit} 
+                                onCancel={() => setShowModal(false)} 
+                            />
                         </div>
                     </div>
                 </div>

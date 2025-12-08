@@ -23,7 +23,7 @@ function generateRSAKeyPair() {
  */
 router.get('/', async (req, res) => {
     try {
-        const { user_id, type, page = 1, limit = 20 } = req.query;
+        const { user_id, type, username, page = 1, limit = 20 } = req.query;
         const offset = (page - 1) * limit;
         
         let query = `
@@ -37,6 +37,10 @@ router.get('/', async (req, res) => {
         if (user_id) {
             query += " AND t.user_id = ?";
             params.push(user_id);
+        }
+        if (username) {
+            query += " AND u.username LIKE ?";
+            params.push(`%${username}%`);
         }
         if (type) {
             query += " AND t.type = ?";
