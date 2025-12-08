@@ -237,12 +237,22 @@ window.ChannelsManager = ({ setNotify }) => {
             const available = [];
 
             allModels.forEach(m => {
+                // Compatibility Check (Multi-provider support)
+                let providers = [];
+                try {
+                    const parsed = JSON.parse(m.provider);
+                    if (Array.isArray(parsed)) providers = parsed;
+                    else providers = [m.provider];
+                } catch (e) {
+                    providers = [m.provider]; // Legacy string
+                }
+
                 let isCompatible = false;
-                if (!m.provider) isCompatible = true;
-                else if (m.provider === channel.type) isCompatible = true;
-                else if (channel.type === 'azure' && m.provider === 'openai') isCompatible = true;
-                else if (channel.type === 'aws_bedrock' && (m.provider === 'anthropic' || m.provider === 'aws')) isCompatible = true;
-                else if (channel.type === 'vertex' && m.provider === 'google') isCompatible = true;
+                if (providers.length === 0) isCompatible = true; // Generic/All
+                else if (providers.includes(channel.type)) isCompatible = true;
+                else if (channel.type === 'azure' && providers.includes('openai')) isCompatible = true;
+                else if (channel.type === 'aws_bedrock' && (providers.includes('anthropic') || providers.includes('aws'))) isCompatible = true;
+                else if (channel.type === 'vertex' && providers.includes('google')) isCompatible = true;
                 
                 const configEntry = initialConfig[m.name];
                 
