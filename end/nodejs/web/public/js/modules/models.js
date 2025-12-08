@@ -84,11 +84,11 @@ window.ModelManager = ({ setNotify }) => {
                             <tr>
                                 <th className="px-4 py-3 text-left font-bold text-gray-500 uppercase tracking-wider">Name</th>
                                 <th className="px-4 py-3 text-left font-bold text-gray-500 uppercase tracking-wider">Provider</th>
-                                <th className="px-4 py-3 text-left font-bold text-gray-500 uppercase tracking-wider">Input $</th>
-                                <th className="px-4 py-3 text-left font-bold text-gray-500 uppercase tracking-wider">Output $</th>
+                                <th className="px-4 py-3 text-left font-bold text-gray-500 uppercase tracking-wider">Input (1M)</th>
+                                <th className="px-4 py-3 text-left font-bold text-gray-500 uppercase tracking-wider">Output (1M)</th>
                                 <th className="px-4 py-3 text-left font-bold text-gray-500 uppercase tracking-wider">Request $</th>
                                 <th className="px-4 py-3 text-left font-bold text-gray-500 uppercase tracking-wider">Time $</th>
-                                <th className="px-4 py-3 text-left font-bold text-gray-500 uppercase tracking-wider">Cache $</th>
+                                <th className="px-4 py-3 text-left font-bold text-gray-500 uppercase tracking-wider">Cache (1M)</th>
                                 <th className="px-4 py-3 text-left font-bold text-gray-500 uppercase tracking-wider">Def. RPM</th>
                                 <th className="px-4 py-3 text-left font-bold text-gray-500 uppercase tracking-wider">Status</th>
                                 <th className="px-4 py-3 text-right font-bold text-gray-500 uppercase tracking-wider">Actions</th>
@@ -166,29 +166,28 @@ window.ModelManager = ({ setNotify }) => {
                                 </div>
                             </div>
                             
-                            {/* Pricing Rows */}
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Input Price ($/1k)</label>
-                                    <input type="number" step="0.000001" name="price_input" defaultValue={editingModel?.price_input || 0} className="w-full border rounded-lg px-3 py-2" />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Output Price ($/1k)</label>
-                                    <input type="number" step="0.000001" name="price_output" defaultValue={editingModel?.price_output || 0} className="w-full border rounded-lg px-3 py-2" />
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Cache Price ($/1k)</label>
-                                    <input type="number" step="0.000001" name="price_cache" defaultValue={editingModel?.price_cache || 0} className="w-full border rounded-lg px-3 py-2" />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Time Price ($/sec)</label>
-                                    <input type="number" step="0.000001" name="price_time" defaultValue={editingModel?.price_time || 0} className="w-full border rounded-lg px-3 py-2" />
-                                </div>
-                            </div>
-
+                                                                {/* Pricing Rows */}
+                                                                <div className="grid grid-cols-2 gap-4">
+                                                                    <div>
+                                                                        <label className="block text-sm font-medium text-gray-700 mb-1">Input Price ($/1M)</label>
+                                                                        <input type="number" step="0.000001" name="price_input" defaultValue={editingModel?.price_input || 0} className="w-full border rounded-lg px-3 py-2" />
+                                                                    </div>
+                                                                    <div>
+                                                                        <label className="block text-sm font-medium text-gray-700 mb-1">Output Price ($/1M)</label>
+                                                                        <input type="number" step="0.000001" name="price_output" defaultValue={editingModel?.price_output || 0} className="w-full border rounded-lg px-3 py-2" />
+                                                                    </div>
+                                                                </div>
+                            
+                                                                <div className="grid grid-cols-2 gap-4">
+                                                                    <div>
+                                                                        <label className="block text-sm font-medium text-gray-700 mb-1">Cache Price ($/1M)</label>
+                                                                        <input type="number" step="0.000001" name="price_cache" defaultValue={editingModel?.price_cache || 0} className="w-full border rounded-lg px-3 py-2" />
+                                                                    </div>
+                                                                    <div>
+                                                                        <label className="block text-sm font-medium text-gray-700 mb-1">Time Price ($/sec)</label>
+                                                                        <input type="number" step="0.000001" name="price_time" defaultValue={editingModel?.price_time || 0} className="w-full border rounded-lg px-3 py-2" />
+                                                                    </div>
+                                                                </div>
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Request Price ($/req)</label>

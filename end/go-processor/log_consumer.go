@@ -291,7 +291,8 @@ func (lc *LogConsumer) calculateCost(ctx context.Context, channelID int, model s
 
 	// 3. 计算最终费用
 	var cost float64
-	const PriceUnitDivisor = 1000.0 
+	// [Modified] 将计费单位统一为 1M (百万) Token
+	const PriceUnitDivisor = 1000000.0 
 
 	if billingMode == "request" {
 		// 按次计费: 优先用全局定义的单次价格
