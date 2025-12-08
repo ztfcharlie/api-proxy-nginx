@@ -376,18 +376,34 @@ window.ChannelsManager = ({ setNotify }) => {
                                                     return (
                                                         <select className={`border rounded w-full px-1 py-1 text-xs ${isCurrentInvalid ? 'border-red-500 bg-red-50 text-red-700' : 'bg-white'} focus:ring-1 focus:ring-blue-500 outline-none`}
                                                             value={m.mode}
-                                                            title={isCurrentInvalid ? "Selected billing mode has no price configured!" : ""}
+                                                            title={isCurrentInvalid ? "Current mode is invalid (no price set)" : ""}
                                                             onChange={(e) => updateModelConfig(m.name, 'mode', e.target.value)}>
-                                                            <option value="token" disabled={!canToken}>
-                                                                Token {!canToken ? '(No Price)' : ''}
-                                                            </option>
-                                                            <option value="request" disabled={!canRequest}>
-                                                                Request {!canRequest ? '(No Price)' : ''}
-                                                            </option>
-                                                            <option value="time" disabled={!canTime}>
-                                                                Time {!canTime ? '(No Price)' : ''}
-                                                            </option>
-                                                            <option value="param" disabled={!canParam}>Param</option>
+                                                            
+                                                            {(canToken || m.mode === 'token') && (
+                                                                <option value="token" disabled={!canToken}>
+                                                                    Token {!canToken ? '(Invalid - No Price)' : ''}
+                                                                </option>
+                                                            )}
+                                                            
+                                                            {(canRequest || m.mode === 'request') && (
+                                                                <option value="request" disabled={!canRequest}>
+                                                                    Request {!canRequest ? '(Invalid - No Price)' : ''}
+                                                                </option>
+                                                            )}
+                                                            
+                                                            {(canTime || m.mode === 'time') && (
+                                                                <option value="time" disabled={!canTime}>
+                                                                    Time {!canTime ? '(Invalid - No Price)' : ''}
+                                                                </option>
+                                                            )}
+                                                            
+                                                            {(canParam || m.mode === 'param') && (
+                                                                <option value="param" disabled={!canParam}>Param</option>
+                                                            )}
+
+                                                            {!canToken && !canRequest && !canTime && !canParam && (
+                                                                <option disabled>No Pricing Configured</option>
+                                                            )}
                                                         </select>
                                                     );
                                                 })()}
