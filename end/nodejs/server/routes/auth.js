@@ -28,15 +28,8 @@ router.post('/login', async (req, res) => {
             return res.status(403).json({ error: 'Account disabled' });
         }
 
-        // [DEBUG] Temporary Logging
-        console.log(`[Login Debug] User: ${user.username}, Hash in DB: ${user.password_hash}`);
-        console.log(`[Login Debug] Input Password: ${password}`);
-
         // 验证密码
         const isValid = await bcrypt.compare(password, user.password_hash);
-        
-        console.log(`[Login Debug] Is Valid: ${isValid}`);
-
         if (!isValid) {
             return res.status(401).json({ error: 'Invalid credentials' });
         }

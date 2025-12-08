@@ -3,6 +3,7 @@ const router = express.Router();
 const db = require('../../config/db').dbPool;
 const logger = require('../../services/LoggerService');
 const SyncManager = require('../../services/SyncManager');
+const bcrypt = require('bcryptjs');
 
 router.get('/', async (req, res) => {
     try {
@@ -16,9 +17,13 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
     const { username, password, role, remark } = req.body;
     try {
-        const hash = password; // Plain text for MVP (should be hashed in production if not handled by frontend)
-        // Note: Password hashing should ideally happen here using bcrypt
+        if (!password) {
+            return res.status(400).json({ error: "Password is required" });
+        }
+        
+        const hash = await bcrypt.hash(password, 10);
         const userRole = role || 'user';
+        
         await db.query(
             "INSERT INTO sys_users (username, password_hash, role, remark) VALUES (?, ?, ?, ?)",
             [username, hash, userRole, remark]
@@ -66,9 +71,11 @@ router.put('/:id', async (req, res) => {
             updates.push("remark = ?");
             params.push(remark);
         }
-        if (password) {
+        
+        if (password && password.trim() !== '') {
+            const hash = await bcrypt.hash(password, 10);
             updates.push("password_hash = ?");
-            params.push(password);
+            params.push(hash);
         }
         
         if (updates.length === 0) return res.json({ message: "No changes" });
