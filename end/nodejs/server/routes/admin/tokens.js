@@ -89,6 +89,14 @@ router.post('/', async (req, res) => {
         return res.status(400).json({ error: "Missing required fields" });
     }
     
+    // [Added] Check name uniqueness
+    if (name) {
+        const [existing] = await db.query("SELECT id FROM sys_virtual_tokens WHERE name = ?", [name]);
+        if (existing.length > 0) {
+            return res.status(400).json({ error: `Token name '${name}' already exists. Please use a unique name.` });
+        }
+    }
+    
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
@@ -180,6 +188,14 @@ router.post('/', async (req, res) => {
 router.put('/:id', async (req, res) => {
     const { id } = req.params;
     const { status, name, expires_at, routes, limit_config } = req.body;
+    
+    // [Added] Check name uniqueness
+    if (name) {
+        const [existing] = await db.query("SELECT id FROM sys_virtual_tokens WHERE name = ? AND id != ?", [name, id]);
+        if (existing.length > 0) {
+            return res.status(400).json({ error: `Token name '${name}' already exists.` });
+        }
+    }
     
     const connection = await db.getConnection();
     try {

@@ -417,10 +417,18 @@ window.ChannelsManager = ({ setNotify }) => {
                                         </button>
                                     </td>
                                     <td className="px-6 py-4 text-sm">
-                                        <span className={`flex items-center w-fit px-2.5 py-0.5 rounded-full text-xs font-bold ${ch.status ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                                            <div className={`w-1.5 h-1.5 rounded-full mr-1.5 ${ch.status ? 'bg-green-500' : 'bg-red-500'}`}></div>
-                                            {ch.status ? 'Active' : 'Disabled'}
-                                        </span>
+                                        <div className="flex flex-col items-start gap-1">
+                                            <span className={`flex items-center w-fit px-2.5 py-0.5 rounded-full text-xs font-bold ${ch.status ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-600'}`}>
+                                                <div className={`w-1.5 h-1.5 rounded-full mr-1.5 ${ch.status ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+                                                {ch.status ? 'Active' : 'Disabled'}
+                                            </span>
+                                            {ch.last_error && (
+                                                <div className="text-xs text-red-600 bg-red-50 border border-red-100 px-2 py-1 rounded flex items-start max-w-[200px]" title={ch.last_error}>
+                                                    <i className="fas fa-exclamation-triangle mr-1.5 mt-0.5 flex-shrink-0"></i>
+                                                    <span className="truncate">{ch.last_error}</span>
+                                                </div>
+                                            )}
+                                        </div>
                                     </td>
                                     <td className="px-6 py-4 text-right text-sm space-x-3">
                                         <button onClick={() => { setEditingChannel(ch); setShowModal(true); }} className="text-gray-400 hover:text-blue-600 transition-colors"><i className="fas fa-edit text-lg"></i></button>
