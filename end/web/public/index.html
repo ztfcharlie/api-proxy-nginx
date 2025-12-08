@@ -1,42 +1,13 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Universal AI Console</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- React 18 -->
-    <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js" crossorigin></script>
-    <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-    <!-- Babel 7 for JSX and ES2020+ -->
-    <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7/babel.min.js"></script>
-    <!-- Axios -->
-    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
-    
-    <style>
-        ::-webkit-scrollbar { width: 8px; height: 8px; }
-        ::-webkit-scrollbar-track { background: #f1f1f1; }
-        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
-        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
-    </style>
+    <meta http-equiv="refresh" content="0; url=/admin/console.html" />
+    <script type="text/javascript">
+        window.location.href = "/admin/console.html";
+    </script>
+    <title>Redirecting to Admin Console...</title>
 </head>
-<body class="bg-gray-50 text-gray-900 h-screen overflow-hidden">
-    <div id="root"></div>
-
-    <!-- 1. UI Library -->
-    <script type="text/babel" src="js/lib/ui.js"></script>
-
-    <!-- 2. Modules (业务逻辑) -->
-    <!-- 暂时还没写，先把坑占上，稍后填充 -->
-    <script type="text/babel" src="js/modules/channels.js"></script>
-    <script type="text/babel" src="js/modules/models.js"></script>
-    <script type="text/babel" src="js/modules/tokens.js"></script>
-    <script type="text/babel" src="js/modules/users.js"></script>
-    <script type="text/babel" src="js/modules/redis.js"></script>
-    <script type="text/babel" src="js/modules/jobs.js"></script>
-    <script type="text/babel" src="js/modules/logs.js"></script>
-
-    <!-- 3. App Entry -->
-    <script type="text/babel" src="js/app.js"></script>
+<body>
+    If you are not redirected automatically, follow this <a href="/admin/console.html">link to the Admin Console</a>.
 </body>
 </html>

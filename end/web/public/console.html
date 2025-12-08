@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini Proxy Admin v3.0</title>
+    <!-- Dependencies -->
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        .fade-in { animation: fadeIn 0.3s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        .modal-backdrop { background-color: rgba(0, 0, 0, 0.5); }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f1f1; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        .nav-item.active { background-color: #1e293b; border-right: 4px solid #3b82f6; }
+        .nav-item { transition: all 0.2s; border-right: 4px solid transparent; }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans text-gray-900 h-screen overflow-hidden">
+    <div id="root" class="h-full"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // --- AXIOS CONFIG ---
+        axios.interceptors.request.use(config => {
+            const token = localStorage.getItem('token');
+            if (token) config.headers.Authorization = `Bearer ${token}`;
+            return config;
+        });
+
+        axios.interceptors.response.use(response => response, error => {
+            if (error.response && error.response.status === 401) {
+                localStorage.removeItem('token');
+                window.location.reload();
+            }
+            return Promise.reject(error);
+        });
+
+        // --- API DEFINITIONS ---
+        const api = {
+            auth: {
+                login: (username, password) => axios.post('/api/auth/login', { username, password }),
+                changePassword: (oldPassword, newPassword) => axios.post('/api/auth/password', { oldPassword, newPassword }),
+                me: () => axios.get('/api/auth/me')
+            },
+            channels: {
+                list: (params) => axios.get('/api/admin/channels', { params }),
+                create: (data) => axios.post('/api/admin/channels', data),
+                update: (id, data) => axios.put(`/api/admin/channels/${id}`, data),
+                delete: (id) => axios.delete(`/api/admin/channels/${id}`)
+            },
+            tokens: {
+                list: () => axios.get('/api/admin/tokens'), // Need to check if this endpoint exists/matches params
+                create: (data) => axios.post('/api/admin/tokens', data),
+                delete: (id) => axios.delete(`/api/admin/tokens/${id}`)
+            },
+            users: {
+                list: () => axios.get('/api/admin/users'),
+                create: (data) => axios.post('/api/admin/users', data),
+                update: (id, data) => axios.put(`/api/admin/users/${id}`, data),
+                delete: (id) => axios.delete(`/api/admin/users/${id}`)
+            }
+        };
+
+        // --- COMPONENTS ---
+        const Notification = ({ message, type, onClose }) => {
+            useEffect(() => {
+                if (message) {
+                    const timer = setTimeout(onClose, 3000);
+                    return () => clearTimeout(timer);
+                }
+            }, [message, onClose]);
+            if (!message) return null;
+            const bgColor = type === 'success' ? 'bg-green-500' : 'bg-red-500';
+            return (
+                <div className={`fixed top-4 right-4 ${bgColor} text-white px-6 py-3 rounded-lg shadow-xl z-50 fade-in flex items-center`}>
+                    <span className="font-medium">{message}</span>
+                    <button onClick={onClose} className="ml-4 opacity-80 hover:opacity-100"><i className="fas fa-times"></i></button>
+                </div>
+            );
+        };
+
+        const LoginView = ({ onLogin }) => {
+            const [creds, setCreds] = useState({ username: '', password: '' });
+            const [error, setError] = useState('');
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                try {
+                    const res = await api.auth.login(creds.username, creds.password);
+                    localStorage.setItem('token', res.data.token);
+                    localStorage.setItem('user', JSON.stringify(res.data.user));
+                    onLogin(res.data.user);
+                } catch (err) {
+                    setError(err.response?.data?.error || 'Login failed');
+                }
+            };
+
+            return (
+                <div className="flex items-center justify-center h-full bg-gray-900">
+                    <div className="bg-white p-8 rounded-xl shadow-2xl w-96 fade-in">
+                        <h2 className="text-2xl font-bold text-center mb-6 text-gray-800">Admin Login</h2>
+                        {error && <div className="bg-red-100 text-red-700 p-3 rounded mb-4 text-sm">{error}</div>}
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Username</label>
+                                <input type="text" required className="w-full border rounded-lg px-3 py-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none"
+                                    value={creds.username} onChange={e => setCreds({...creds, username: e.target.value})} />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Password</label>
+                                <input type="password" required className="w-full border rounded-lg px-3 py-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none"
+                                    value={creds.password} onChange={e => setCreds({...creds, password: e.target.value})} />
+                            </div>
+                            <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition-colors">Sign In</button>
+                        </form>
+                    </div>
+                </div>
+            );
+        };
+
+        const AccountCenter = ({ setNotify }) => {
+            const [form, setForm] = useState({ oldPassword: '', newPassword: '', confirmPassword: '' });
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                if (form.newPassword !== form.confirmPassword) {
+                    return setNotify({ msg: 'New passwords do not match', type: 'error' });
+                }
+                if (form.newPassword.length < 6) {
+                    return setNotify({ msg: 'Password must be at least 6 characters', type: 'error' });
+                }
+                try {
+                    await api.auth.changePassword(form.oldPassword, form.newPassword);
+                    setNotify({ msg: 'Password updated successfully!', type: 'success' });
+                    setForm({ oldPassword: '', newPassword: '', confirmPassword: '' });
+                } catch (err) {
+                    setNotify({ msg: err.response?.data?.error || 'Update failed', type: 'error' });
+                }
+            };
+
+            return (
+                <div className="fade-in max-w-2xl mx-auto mt-10">
+                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+                        <div className="flex items-center mb-6 border-b pb-4">
+                            <div className="p-3 bg-blue-100 text-blue-600 rounded-lg mr-4">
+                                <i className="fas fa-user-shield text-xl"></i>
+                            </div>
+                            <div>
+                                <h2 className="text-xl font-bold text-gray-800">Account Security</h2>
+                                <p className="text-sm text-gray-500">Update your login credentials</p>
+                            </div>
+                        </div>
+
+                        <form onSubmit={handleSubmit} className="space-y-6">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Current Password</label>
+                                <input type="password" required className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                                    value={form.oldPassword} onChange={e => setForm({...form, oldPassword: e.target.value})} />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">New Password</label>
+                                    <input type="password" required className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                                        value={form.newPassword} onChange={e => setForm({...form, newPassword: e.target.value})} />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Confirm Password</label>
+                                    <input type="password" required className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                                        value={form.confirmPassword} onChange={e => setForm({...form, confirmPassword: e.target.value})} />
+                                </div>
+                            </div>
+                            <div className="pt-4 flex justify-end">
+                                <button type="submit" className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-sm transition-colors">
+                                    Update Password
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            );
+        };
+
+        const ChannelsManager = ({ setNotify }) => {
+            const [channels, setChannels] = useState([]);
+            const [loading, setLoading] = useState(true);
+
+            const load = async () => {
+                setLoading(true);
+                try {
+                    const res = await api.channels.list({ limit: 100 });
+                    setChannels(res.data.data || []);
+                } catch (e) {
+                    setNotify({ msg: 'Failed to load channels', type: 'error' });
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            useEffect(() => { load(); }, []);
+
+            return (
+                <div className="fade-in h-full flex flex-col">
+                    <div className="flex justify-between items-center mb-6">
+                        <div>
+                            <h1 className="text-2xl font-bold text-gray-800">Channels</h1>
+                            <p className="text-gray-500 text-sm">Manage upstream API channels</p>
+                        </div>
+                        <button className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-sm">
+                            <i className="fas fa-plus mr-2"></i>New Channel
+                        </button>
+                    </div>
+
+                    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex-1 overflow-y-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">ID</th>
+                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Name</th>
+                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Type</th>
+                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Status</th>
+                                    <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200">
+                                {channels.map(ch => (
+                                    <tr key={ch.id} className="hover:bg-gray-50">
+                                        <td className="px-6 py-4 text-sm text-gray-500">#{ch.id}</td>
+                                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{ch.name}</td>
+                                        <td className="px-6 py-4 text-sm"><span className="px-2 py-1 bg-gray-100 rounded text-xs uppercase">{ch.type}</span></td>
+                                        <td className="px-6 py-4 text-sm">
+                                            <span className={`px-2 py-1 rounded-full text-xs font-bold ${ch.status ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                                {ch.status ? 'Active' : 'Disabled'}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-right text-sm space-x-2">
+                                            <button className="text-blue-600 hover:text-blue-800">Edit</button>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {channels.length === 0 && !loading && <tr><td colSpan="5" className="px-6 py-8 text-center text-gray-400">No channels found</td></tr>}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            );
+        };
+
+        const Dashboard = () => (
+             <div className="text-center py-20 text-gray-500">
+                <i className="fas fa-chart-pie text-6xl mb-4 text-gray-300"></i>
+                <h2 className="text-xl font-bold mb-2">Dashboard Under Construction</h2>
+                <p>Use the sidebar to manage Channels and Account.</p>
+            </div>
+        );
+
+        // --- MAIN APP ---
+        const App = () => {
+            const [user, setUser] = useState(null);
+            const [activeView, setActiveView] = useState('dashboard');
+            const [notify, setNotify] = useState({ msg: '', type: '' });
+
+            useEffect(() => {
+                const token = localStorage.getItem('token');
+                const userData = localStorage.getItem('user');
+                if (token && userData) {
+                    setUser(JSON.parse(userData));
+                }
+            }, []);
+
+            const handleLogout = () => {
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+                setUser(null);
+            };
+
+            if (!user) return <LoginView onLogin={setUser} />;
+
+            const menuItems = [
+                { id: 'dashboard', label: 'Dashboard', icon: 'fas fa-home' },
+                { id: 'channels', label: 'Channels', icon: 'fas fa-network-wired' },
+                { id: 'users', label: 'Users', icon: 'fas fa-users' },
+                { id: 'account', label: 'Account Center', icon: 'fas fa-user-circle' }
+            ];
+
+            return (
+                <div className="flex h-screen bg-gray-100">
+                    <aside className="w-64 bg-gray-900 text-gray-300 flex flex-col shadow-xl z-20">
+                        <div className="h-16 flex items-center px-6 bg-gray-800 border-b border-gray-700">
+                            <i className="fas fa-project-diagram text-blue-500 text-xl mr-3"></i>
+                            <span className="text-white font-bold text-lg tracking-wide">Gemini Proxy</span>
+                        </div>
+                        <nav className="flex-1 py-6 space-y-1 px-3">
+                            {menuItems.map(item => (
+                                <button key={item.id} onClick={() => setActiveView(item.id)}
+                                    className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-all nav-item ${activeView === item.id ? 'active text-white bg-gray-800' : 'hover:bg-gray-800 hover:text-white'}`}>
+                                    <i className={`${item.icon} w-6 text-center mr-3 ${activeView === item.id ? 'text-blue-400' : 'text-gray-500'}`}></i>
+                                    {item.label}
+                                </button>
+                            ))}
+                        </nav>
+                        <div className="p-4 border-t border-gray-800">
+                            <button onClick={handleLogout} className="w-full flex items-center px-4 py-2 text-sm text-red-400 hover:bg-gray-800 rounded transition-colors">
+                                <i className="fas fa-sign-out-alt w-6 text-center mr-3"></i> Sign Out
+                            </button>
+                        </div>
+                    </aside>
+
+                    <main className="flex-1 flex flex-col overflow-hidden relative">
+                        <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-8 shadow-sm z-10">
+                            <h2 className="text-lg font-semibold text-gray-700 capitalize">{menuItems.find(i => i.id === activeView)?.label}</h2>
+                            <div className="text-sm text-gray-500">Logged in as <span className="font-bold text-gray-700">{user.username}</span></div>
+                        </header>
+
+                        <div className="flex-1 overflow-hidden p-8 relative bg-gray-100">
+                            <Notification message={notify.msg} type={notify.type} onClose={() => setNotify({ msg: '', type: '' })} />
+                            
+                            {activeView === 'dashboard' && <Dashboard />}
+                            {activeView === 'channels' && <ChannelsManager setNotify={setNotify} />}
+                            {activeView === 'users' && <UserManager setNotify={setNotify} />}
+                            {activeView === 'account' && <AccountCenter setNotify={setNotify} />}
+                        </div>
+                    </main>
+                </div>
+            );
+        };
+
+        const UserManager = ({ setNotify }) => {
+            const [users, setUsers] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [showModal, setShowModal] = useState(false);
+            const [editingUser, setEditingUser] = useState(null);
+
+            const load = async () => {
+                setLoading(true);
+                try {
+                    const res = await api.users.list();
+                    setUsers(res.data.data || []);
+                } catch (e) {
+                    setNotify({ msg: 'Failed to load users', type: 'error' });
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            useEffect(() => { load(); }, []);
+
+            const handleSubmit = async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target);
+                const data = Object.fromEntries(formData.entries());
+                data.status = formData.get('status') === 'on' ? 1 : 0;
+                
+                try {
+                    if (editingUser) {
+                        // 如果密码为空，移除它以免覆盖
+                        if (!data.password) delete data.password;
+                        await api.users.update(editingUser.id, data);
+                        setNotify({ msg: 'User updated successfully', type: 'success' });
+                    } else {
+                        if (!data.password) return setNotify({ msg: 'Password is required for new users', type: 'error' });
+                        data.status = 1; // Default active
+                        await api.users.create(data);
+                        setNotify({ msg: 'User created successfully', type: 'success' });
+                    }
+                    setShowModal(false);
+                    load();
+                } catch (err) {
+                    setNotify({ msg: err.response?.data?.error || 'Operation failed', type: 'error' });
+                }
+            };
+
+            const handleDelete = async (id) => {
+                if (!confirm('Are you sure you want to delete this user?')) return;
+                try {
+                    await api.users.delete(id);
+                    setNotify({ msg: 'User deleted', type: 'success' });
+                    load();
+                } catch (err) {
+                    setNotify({ msg: err.response?.data?.error || 'Delete failed', type: 'error' });
+                }
+            };
+
+            return (
+                <div className="fade-in h-full flex flex-col">
+                    <div className="flex justify-between items-center mb-6">
+                        <div>
+                            <h1 className="text-2xl font-bold text-gray-800">User Management</h1>
+                            <p className="text-gray-500 text-sm">Manage system access and roles</p>
+                        </div>
+                        <button onClick={() => { setEditingUser(null); setShowModal(true); }} 
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-sm">
+                            <i className="fas fa-plus mr-2"></i>New User
+                        </button>
+                    </div>
+
+                    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex-1 overflow-y-auto">
+                        <table className="min-w-full divide-y divide-gray-200">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">ID</th>
+                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Username</th>
+                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Role</th>
+                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Status</th>
+                                    <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Remark</th>
+                                    <th className="px-6 py-3 text-right text-xs font-bold text-gray-500 uppercase">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-200">
+                                {users.map(u => (
+                                    <tr key={u.id} className="hover:bg-gray-50">
+                                        <td className="px-6 py-4 text-sm text-gray-500">#{u.id}</td>
+                                        <td className="px-6 py-4 text-sm font-medium text-gray-900">{u.username}</td>
+                                        <td className="px-6 py-4 text-sm">
+                                            <span className={`px-2 py-1 rounded text-xs uppercase font-bold ${u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-gray-100 text-gray-700'}`}>
+                                                {u.role || 'user'}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-sm">
+                                            <span className={`px-2 py-1 rounded-full text-xs font-bold ${u.status ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                                {u.status ? 'Active' : 'Disabled'}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-sm text-gray-500 truncate max-w-xs">{u.remark}</td>
+                                        <td className="px-6 py-4 text-right text-sm space-x-2">
+                                            <button onClick={() => { setEditingUser(u); setShowModal(true); }} className="text-blue-600 hover:text-blue-800">Edit</button>
+                                            {u.username !== 'admin' && (
+                                                <button onClick={() => handleDelete(u.id)} className="text-red-600 hover:text-red-800">Delete</button>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))}
+                                {users.length === 0 && !loading && <tr><td colSpan="6" className="px-6 py-8 text-center text-gray-400">No users found</td></tr>}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {showModal && (
+                        <div className="fixed inset-0 modal-backdrop flex items-center justify-center z-50 fade-in px-4">
+                            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden">
+                                <div className="px-6 py-4 border-b flex justify-between items-center bg-gray-50">
+                                    <h3 className="text-lg font-bold text-gray-800">{editingUser ? 'Edit User' : 'Create User'}</h3>
+                                    <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600"><i className="fas fa-times"></i></button>
+                                </div>
+                                <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Username
+                                            {editingUser?.username === 'admin' && <span className="ml-2 text-xs text-purple-600 font-bold bg-purple-100 px-2 py-0.5 rounded">Super Admin</span>}
+                                        </label>
+                                        <input name="username" defaultValue={editingUser?.username} required disabled={!!editingUser}
+                                            className="w-full border rounded-lg px-3 py-2 bg-gray-50 disabled:text-gray-500" />
+                                    </div>
+                                    
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Password {editingUser && <span className="text-gray-400 text-xs font-normal">(Leave blank to keep unchanged)</span>}
+                                        </label>
+                                        <input type="password" name="password" placeholder={editingUser ? "••••••" : ""} 
+                                            className="w-full border rounded-lg px-3 py-2" />
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Role</label>
+                                        <select name="role" defaultValue={editingUser?.role || 'user'} 
+                                            disabled={editingUser?.username === 'admin'}
+                                            className="w-full border rounded-lg px-3 py-2 bg-white disabled:bg-gray-100 disabled:text-gray-500">
+                                            <option value="user">User (Standard)</option>
+                                            <option value="admin">Admin (Full Access)</option>
+                                        </select>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Remark</label>
+                                        <input name="remark" defaultValue={editingUser?.remark} className="w-full border rounded-lg px-3 py-2" />
+                                    </div>
+
+                                    {editingUser && (
+                                        <div className="flex items-center space-x-2 pt-2">
+                                            <input type="checkbox" name="status" id="statusCheck" 
+                                                defaultChecked={editingUser.status === 1} 
+                                                disabled={editingUser.username === 'admin'}
+                                                className="w-4 h-4 text-blue-600 rounded disabled:opacity-50" />
+                                            <label htmlFor="statusCheck" className="text-sm font-medium text-gray-700">Account Active</label>
+                                        </div>
+                                    )}
+
+                                    <div className="flex justify-end gap-3 pt-4 border-t mt-4">
+                                        <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 border rounded-lg hover:bg-gray-50">Cancel</button>
+                                        <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Save Changes</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
