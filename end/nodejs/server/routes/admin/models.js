@@ -54,33 +54,38 @@ router.put('/:id', async (req, res) => {
     
     try {
         // 1. 获取模型信息
-        const [currentModels] = await db.query("SELECT name FROM sys_models WHERE id = ?", [id]);
+        const [currentModels] = await db.query("SELECT name, status FROM sys_models WHERE id = ?", [id]);
         if (currentModels.length === 0) return res.status(404).json({ error: "Model not found" });
-        const modelName = currentModels[0].name;
+        const currentModel = currentModels[0];
+        const modelName = currentModel.name;
 
-        // 2. 识别被禁用的计费模式
+        // 2. 识别潜在的破坏性操作
         const checks = [];
         
-        // 检查 Token 模式 (Input/Output 只要有一个还在就不算彻底禁用，但为了安全，如果任一被置0且在用，可以报错，或者只在全0时报错？
-        // 按照前端逻辑：price_input<=0 AND price_output<=0 才会禁用 Token 选项。
-        // 这里严格一点：如果正在用 Token 模式，不允许把 Input 或 Output 改为 0 (除非原来就是0)
-        // 简化逻辑：如果请求显式将 Input 或 Output 设为 <= 0，检查是否有 Token 模式的使用者
-        if ((body.price_input !== undefined && parseFloat(body.price_input) <= 0) || 
-            (body.price_output !== undefined && parseFloat(body.price_output) <= 0)) {
-            checks.push({ mode: 'token', field: 'price_input/output' });
-        }
-        
-        if (body.price_request !== undefined && parseFloat(body.price_request) <= 0) {
-            checks.push({ mode: 'request', field: 'price_request' });
-        }
-        
-        if (body.price_time !== undefined && parseFloat(body.price_time) <= 0) {
-            checks.push({ mode: 'time', field: 'price_time' });
+        // A. 重命名检查
+        if (body.name && body.name !== modelName) {
+            checks.push({ type: 'rename', msg: 'renaming' });
         }
 
-        // 3. 执行依赖检查
+        // B. 禁用检查
+        if (body.status !== undefined && parseInt(body.status) === 0 && currentModel.status === 1) {
+            checks.push({ type: 'disable', msg: 'disabling' });
+        }
+
+        // C. 计费归零检查 (原有逻辑)
+        if ((body.price_input !== undefined && parseFloat(body.price_input) <= 0) || 
+            (body.price_output !== undefined && parseFloat(body.price_output) <= 0)) {
+            checks.push({ type: 'price', mode: 'token', field: 'price_input/output' });
+        }
+        if (body.price_request !== undefined && parseFloat(body.price_request) <= 0) {
+            checks.push({ type: 'price', mode: 'request', field: 'price_request' });
+        }
+        if (body.price_time !== undefined && parseFloat(body.price_time) <= 0) {
+            checks.push({ type: 'price', mode: 'time', field: 'price_time' });
+        }
+
+        // 3. 执行依赖检查 (如果有任何敏感操作)
         if (checks.length > 0) {
-            // 粗略查找所有包含该模型的渠道
             const searchPattern = `%"${modelName}":%`;
             const [channels] = await db.query(
                 "SELECT name, models_config FROM sys_channels WHERE status = 1 AND models_config LIKE ?", 
@@ -94,20 +99,28 @@ router.put('/:id', async (req, res) => {
                 } catch (e) { continue; }
 
                 const modelConfig = config[modelName];
-                if (!modelConfig) continue;
+                if (!modelConfig) continue; // 该渠道未配置此模型
 
-                // 确定该渠道当前使用的模式
-                let currentMode = 'token'; // 默认
-                if (typeof modelConfig === 'object' && modelConfig.mode) {
-                    currentMode = modelConfig.mode;
-                }
-
-                // 检查冲突
+                // 针对每种检查类型进行验证
                 for (const check of checks) {
-                    if (currentMode === check.mode) {
+                    // 重命名或禁用：只要渠道用了这个模型，就全盘拒绝
+                    if (check.type === 'rename' || check.type === 'disable') {
                         return res.status(400).json({ 
-                            error: `Cannot disable ${check.mode} pricing (via ${check.field}): Channel '${channel.name}' is using this mode for model '${modelName}'.` 
+                            error: `Cannot proceed with ${check.msg} model '${modelName}': It is currently used by channel '${channel.name}'. Please unbind it first.` 
                         });
+                    }
+
+                    // 价格检查：只有当渠道使用了特定计费模式时才拒绝
+                    if (check.type === 'price') {
+                        let currentMode = 'token';
+                        if (typeof modelConfig === 'object' && modelConfig.mode) {
+                            currentMode = modelConfig.mode;
+                        }
+                        if (currentMode === check.mode) {
+                            return res.status(400).json({ 
+                                error: `Cannot disable ${check.mode} pricing (via ${check.field}): Channel '${channel.name}' is using this mode for model '${modelName}'.` 
+                            });
+                        }
                     }
                 }
             }
