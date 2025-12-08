@@ -40,7 +40,9 @@ window.ModelManager = ({ setNotify }) => {
             if(editingModel) await window.api.models.update(editingModel.id, data);
             else { data.status = 1; await window.api.models.create(data); }
             setShowModal(false); load(); setNotify({msg: 'Saved', type: 'success'});
-        } catch(e) { setNotify({msg: 'Error', type: 'error'}); }
+        } catch(e) { 
+            setNotify({ msg: e.response?.data?.error || e.message || 'Operation failed', type: 'error' }); 
+        }
     };
 
     const handleDelete = async (id) => {
@@ -50,7 +52,7 @@ window.ModelManager = ({ setNotify }) => {
             setNotify({ msg: 'Model deleted', type: 'success' });
             load();
         } catch (err) {
-            setNotify({ msg: 'Delete failed', type: 'error' });
+            setNotify({ msg: err.response?.data?.error || err.message || 'Delete failed', type: 'error' });
         }
     };
 
