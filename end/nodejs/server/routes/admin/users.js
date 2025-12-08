@@ -6,7 +6,7 @@ const SyncManager = require('../../services/SyncManager');
 
 router.get('/', async (req, res) => {
     try {
-        const [users] = await db.query("SELECT id, username, email, status, remark, created_at FROM sys_users ORDER BY id DESC");
+        const [users] = await db.query("SELECT id, username, role, email, status, remark, created_at FROM sys_users ORDER BY id DESC");
         res.json({ data: users });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -14,12 +14,14 @@ router.get('/', async (req, res) => {
 });
 
 router.post('/', async (req, res) => {
-    const { username, password, remark } = req.body;
+    const { username, password, role, remark } = req.body;
     try {
-        const hash = password; // Plain text for MVP
+        const hash = password; // Plain text for MVP (should be hashed in production if not handled by frontend)
+        // Note: Password hashing should ideally happen here using bcrypt
+        const userRole = role || 'user';
         await db.query(
-            "INSERT INTO sys_users (username, password_hash, remark) VALUES (?, ?, ?)",
-            [username, hash, remark]
+            "INSERT INTO sys_users (username, password_hash, role, remark) VALUES (?, ?, ?, ?)",
+            [username, hash, userRole, remark]
         );
         res.status(201).json({ message: "User created" });
     } catch (err) {
@@ -29,16 +31,37 @@ router.post('/', async (req, res) => {
 
 router.put('/:id', async (req, res) => {
     const { id } = req.params;
-    const { status, password, remark } = req.body;
+    const { status, password, role, remark } = req.body;
     
     try {
+        // [Security] Fetch user to check for 'admin' protection
+        const [users] = await db.query("SELECT username FROM sys_users WHERE id = ?", [id]);
+        if (users.length === 0) return res.status(404).json({ error: "User not found" });
+        const targetUser = users[0];
+
         const updates = [];
         const params = [];
         
-        if (status !== undefined) {
-            updates.push("status = ?");
-            params.push(status);
+        if (targetUser.username === 'admin') {
+            // Hardcode protection for super admin
+            if (status !== undefined && parseInt(status) !== 1) {
+                return res.status(403).json({ error: "Cannot disable the super admin account" });
+            }
+            if (role !== undefined && role !== 'admin') {
+                return res.status(403).json({ error: "Cannot demote the super admin account" });
+            }
+        } else {
+            // Normal users
+            if (status !== undefined) {
+                updates.push("status = ?");
+                params.push(status);
+            }
+            if (role !== undefined) {
+                updates.push("role = ?");
+                params.push(role);
+            }
         }
+
         if (remark !== undefined) {
             updates.push("remark = ?");
             params.push(remark);
@@ -73,6 +96,12 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
     const { id } = req.params;
     try {
+        // [Security] Check if user is admin
+        const [users] = await db.query("SELECT username FROM sys_users WHERE id = ?", [id]);
+        if (users.length > 0 && users[0].username === 'admin') {
+            return res.status(403).json({ error: "Cannot delete the super admin account" });
+        }
+
         // 1. 检查是否有关联的 Tokens
         const [tokens] = await db.query("SELECT id FROM sys_virtual_tokens WHERE user_id = ?", [id]);
         if (tokens.length > 0) {
