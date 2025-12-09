@@ -23,7 +23,14 @@ function generateRSAKeyPair() {
  */
 router.get('/', async (req, res) => {
     try {
-        const { user_id, type, username, channel_id, search, page = 1, limit = 20 } = req.query;
+        let { user_id, type, username, channel_id, search, page = 1, limit = 20 } = req.query;
+        
+        // [RBAC] Force user_id for non-admins
+        if (req.user.role !== 'admin') {
+            user_id = req.user.id;
+            username = undefined; // Disable username search for users
+        }
+
         const offset = (page - 1) * limit;
         
         let query = `
@@ -44,6 +51,7 @@ router.get('/', async (req, res) => {
             query += " AND t.user_id = ?";
             params.push(user_id);
         }
+        // ... (rest of query building) ...
         if (username) {
             query += " AND u.username LIKE ?";
             params.push(`%${username}%`);
@@ -68,7 +76,6 @@ router.get('/', async (req, res) => {
         
         if (tokens.length > 0) {
             const tokenIds = tokens.map(t => t.id);
-            // 批量查询路由信息，避免 N+1 问题
             const [allRoutes] = await db.query(`
                 SELECT r.virtual_token_id, r.channel_id, r.weight, c.name as channel_name 
                 FROM sys_token_routes r
@@ -76,7 +83,6 @@ router.get('/', async (req, res) => {
                 WHERE r.virtual_token_id IN (?)
             `, [tokenIds]);
 
-            // 内存组装
             const routesMap = {};
             allRoutes.forEach(r => {
                 if (!routesMap[r.virtual_token_id]) routesMap[r.virtual_token_id] = [];
@@ -100,9 +106,13 @@ router.get('/', async (req, res) => {
  * 创建虚拟令牌
  */
 router.post('/', async (req, res) => {
+    // [RBAC] Only admin can create tokens
+    if (req.user.role !== 'admin') {
+        return res.status(403).json({ error: "Forbidden: Only admins can issue tokens" });
+    }
+
     const { user_id, name, type, routes, limit_config } = req.body;
-    // routes: [{ channel_id: 1, weight: 80 }, ...]
-    
+    // ... (rest of logic) ...
     if (!user_id || !type || !routes || routes.length === 0) {
         return res.status(400).json({ error: "Missing required fields" });
     }
@@ -122,29 +132,16 @@ router.post('/', async (req, res) => {
         let token_key = "";
         let token_secret = null;
         let public_key = null;
-        let download_payload = null; // 返回给前端下载的内容
+        let download_payload = null;
         
         if (type === 'vertex') {
-            // 生成 RSA 密钥对
             const keys = await generateRSAKeyPair();
             token_secret = keys.privateKeyPem;
             public_key = keys.publicKeyPem;
-            
-            // 生成唯一的 client_email
             const uniqueId = uuidv4().replace(/-/g, '').substring(0, 12);
             token_key = `service-account-${uniqueId}@virtual-project.iam.gserviceaccount.com`;
-            
-            // 构造 Vertex JSON
             const domain = process.env.DOMAIN_NAME || 'localhost:8888';
-            const baseUrl = `http://${domain}`; // 使用 http 还是 https 取决于 Nginx 是否配了 SSL，这里假设 http 或由 Nginx 处理跳转
-            // 如果是生产环境，建议在 .env 里 DOMAIN_NAME 直接带协议，或者这里判断
-            // 简单起见，我们统一用 https (如果客户端支持自动降级最好，否则需要 Nginx 配 SSL)
-            // 为了兼容性，我们用 http 除非确定有证书。或者让用户在 .env 里配 PROTOCOL
-            
-            // 修正：Vertex SDK 通常要求 https。如果您的 8888 端口是 HTTP，可能会报错。
-            // 但为了先跑通，我们用 http://47.239.10.174:8888
             const protocol = 'http'; 
-
             download_payload = {
                 type: "service_account",
                 project_id: "virtual-project",
@@ -157,21 +154,17 @@ router.post('/', async (req, res) => {
                 auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
                 client_x509_cert_url: `${protocol}://${domain}/www.googleapis.com/robot/v1/metadata/x509/${encodeURIComponent(token_key)}`
             };
-            
         } else {
-            // Azure / OpenAI: 生成随机 sk-
             token_key = "sk-virt-" + uuidv4().replace(/-/g, '');
             download_payload = { api_key: token_key };
         }
         
-        // 1. 插入 Tokens 表
         const [resToken] = await connection.query(
             "INSERT INTO sys_virtual_tokens (user_id, name, type, token_key, token_secret, public_key, limit_config, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             [user_id, name, type, token_key, token_secret, public_key, JSON.stringify(limit_config || {}), req.body.expires_at || null]
         );
         const tokenId = resToken.insertId;
         
-        // 2. 插入 Routes 表
         for (const route of routes) {
             await connection.query(
                 "INSERT INTO sys_token_routes (virtual_token_id, channel_id, weight) VALUES (?, ?, ?)",
@@ -180,16 +173,10 @@ router.post('/', async (req, res) => {
         }
         
         await connection.commit();
-        
-        // 3. 触发 Redis 同步 (使用非事务连接)
         const [newToken] = await db.query("SELECT * FROM sys_virtual_tokens WHERE id = ?", [tokenId]);
         await SyncManager.updateVirtualTokenCache(newToken[0]);
         
-        res.status(201).json({ 
-            id: tokenId, 
-            message: "Token created successfully",
-            credentials: download_payload // 仅此一次返回完整凭证
-        });
+        res.status(201).json({ id: tokenId, message: "Token created successfully", credentials: download_payload });
         
     } catch (err) {
         await connection.rollback();
@@ -201,25 +188,34 @@ router.post('/', async (req, res) => {
 });
 
 /**
- * 更新令牌 (状态、路由、配置)
+ * 更新令牌
  */
 router.put('/:id', async (req, res) => {
     const { id } = req.params;
     const { status, name, expires_at, routes, limit_config } = req.body;
     
-    // [Added] Check name uniqueness
+    // [RBAC] Check ownership and permissions
+    if (req.user.role !== 'admin') {
+        const [t] = await db.query("SELECT user_id FROM sys_virtual_tokens WHERE id = ?", [id]);
+        if (t.length === 0 || t[0].user_id !== req.user.id) {
+            return res.status(403).json({ error: "Forbidden" });
+        }
+        // Users can ONLY change status
+        if (name || expires_at || routes || limit_config) {
+            return res.status(403).json({ error: "Users can only modify token status" });
+        }
+    }
+
+    // Check name uniqueness (only if name provided)
     if (name) {
         const [existing] = await db.query("SELECT id FROM sys_virtual_tokens WHERE name = ? AND id != ?", [name, id]);
-        if (existing.length > 0) {
-            return res.status(400).json({ error: `Token name '${name}' already exists.` });
-        }
+        if (existing.length > 0) return res.status(400).json({ error: `Token name '${name}' already exists.` });
     }
     
     const connection = await db.getConnection();
     try {
         await connection.beginTransaction();
 
-        // 1. 更新基本信息
         let updateFields = [];
         let params = [];
         if (status !== undefined) { updateFields.push("status = ?"); params.push(status); }
@@ -232,8 +228,8 @@ router.put('/:id', async (req, res) => {
             await connection.query(`UPDATE sys_virtual_tokens SET ${updateFields.join(", ")} WHERE id = ?`, params);
         }
 
-        // 2. 更新路由 (先删后加)
-        if (routes) {
+        // Update Routes (Admin Only)
+        if (routes && req.user.role === 'admin') {
             await connection.query("DELETE FROM sys_token_routes WHERE virtual_token_id = ?", [id]);
             for (const route of routes) {
                 await connection.query(
@@ -244,8 +240,6 @@ router.put('/:id', async (req, res) => {
         }
 
         await connection.commit();
-
-        // 3. 同步缓存
         const [token] = await db.query("SELECT * FROM sys_virtual_tokens WHERE id = ?", [id]);
         if (token.length > 0) {
             await SyncManager.updateVirtualTokenCache(token[0]);
@@ -266,30 +260,25 @@ router.put('/:id', async (req, res) => {
  * 删除令牌
  */
 router.delete('/:id', async (req, res) => {
+    // [RBAC] Only admin
+    if (req.user.role !== 'admin') {
+        return res.status(403).json({ error: "Forbidden: Only admins can delete tokens" });
+    }
+
     const { id } = req.params;
     try {
-        // 1. 先获取 Token 信息
         const [tokens] = await db.query("SELECT * FROM sys_virtual_tokens WHERE id = ?", [id]);
         if (tokens.length === 0) return res.json({ message: "Token not found" });
         const token = tokens[0];
 
-        // 2. 关键：先尝试删除 Redis 缓存
-        // 如果这一步失败（抛出异常），程序会跳到 catch，数据库不会被删除
-        // 从而保证了“缓存不删，数据不丢”的一致性原则
         try {
             await SyncManager.deleteTokenCache(token);
         } catch (redisErr) {
             logger.error(`[Critical] Failed to delete token cache for ${id}: ${redisErr.message}`);
-            // 策略选择：
-            // A. 强一致性：直接报错返回，不允许删除 DB
-            return res.status(500).json({ error: "Critical Error: Failed to sync with Redis. Delete aborted to prevent leakage." });
-            
-            // B. 最终一致性：继续删除 DB，但记录严重报警 (不推荐用于资损场景)
+            return res.status(500).json({ error: "Critical Error: Failed to sync with Redis." });
         }
 
-        // 3. 缓存删除成功后，再删除 DB 记录
         await db.query("DELETE FROM sys_virtual_tokens WHERE id = ?", [id]);
-
         res.json({ message: "Token deleted successfully" });
     } catch (err) {
         logger.error('Delete token failed:', err);

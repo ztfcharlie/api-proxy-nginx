@@ -14,9 +14,11 @@ const { authenticate, requireAdmin } = require('../../middleware/authCheck');
 // 全局鉴权拦截
 router.use(authenticate);
 
+// 混合权限模块 (控制器内部处理 RBAC)
+router.use('/channels', channelRoutes);
+router.use('/tokens', tokenRoutes);
+
 // 仅限管理员访问的模块
-router.use('/channels', requireAdmin, channelRoutes);
-router.use('/tokens', requireAdmin, tokenRoutes);
 router.use('/users', requireAdmin, userRoutes);
 router.use('/models', requireAdmin, modelRoutes);
 router.use('/redis', requireAdmin, redisRoutes);

@@ -19,7 +19,8 @@ const ChannelForm = ({ channel, onSubmit, onCancel }) => {
         
         const payload = {
             type: data.type,
-            credentials: data.credentials_input || (channel ? channel.credentials : ''),
+            credentials: data.credentials_input, // Send input value (might be empty)
+            channel_id: channel?.id, // Send ID so backend can lookup key if input is empty
             extra_config: {}
         };
 
