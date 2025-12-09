@@ -31,7 +31,7 @@ const App = () => {
     }
 
     // Menu Definition
-    const menuItems = [
+    const allMenuItems = [
         { id: 'dashboard', label: 'Dashboard', icon: 'fas fa-home' },
         { id: 'channels', label: 'Channels', icon: 'fas fa-network-wired' },
         { id: 'models', label: 'Models', icon: 'fas fa-cubes' },
@@ -44,13 +44,33 @@ const App = () => {
         { id: 'account', label: 'Account Center', icon: 'fas fa-user-circle' }
     ];
 
+    const menuItems = React.useMemo(() => {
+        if (!user) return [];
+        if (user.role === 'admin') return allMenuItems;
+        // User role visible items
+        return allMenuItems.filter(i => ['tokens', 'logs', 'account'].includes(i.id));
+    }, [user]);
+
+    // Redirect user from dashboard to tokens if not admin
+    useEffect(() => {
+        if (user && user.role !== 'admin' && activeView === 'dashboard') {
+            setActiveView('tokens');
+        }
+    }, [user]);
+
     // View Router
     const renderContent = () => {
+        // Security check for view access
+        const isAllowed = menuItems.find(i => i.id === activeView);
+        if (!isAllowed && activeView !== 'dashboard') { // Dashboard might be default fallback
+             return <div className="text-center mt-20 text-red-500">Access Denied</div>;
+        }
+
         switch (activeView) {
-            case 'dashboard': return <window.Dashboard />;
+            case 'dashboard': return user.role === 'admin' ? <window.Dashboard /> : null;
             case 'channels': return <window.ChannelsManager setNotify={setNotify} />;
             case 'models': return <window.ModelManager setNotify={setNotify} />;
-            case 'tokens': return <window.TokenManager setNotify={setNotify} />;
+            case 'tokens': return <window.TokenManager user={user} setNotify={setNotify} />; // Pass user prop
             case 'users': return <window.UserManager setNotify={setNotify} />;
             case 'logs': return <window.LogViewer setNotify={setNotify} />;
             case 'jobs': return <window.JobManager setNotify={setNotify} />;
