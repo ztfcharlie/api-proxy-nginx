@@ -1,25 +1,22 @@
 const { useState, useEffect } = React;
 const axios = window.axios;
 
-// --- Sub-Components (Defined outside to prevent re-renders) ---
+// --- Sub-Components ---
 
 const ChannelForm = ({ channel, onSubmit, onCancel }) => {
     const [type, setType] = useState(channel?.type || 'openai');
     const extra = channel?.extra_config ? (typeof channel.extra_config === 'string' ? JSON.parse(channel.extra_config) : channel.extra_config) : {};
 
-    // Update local type state when channel changes
     useEffect(() => {
         if (channel) setType(channel.type);
         else setType('openai');
     }, [channel]);
 
     const handleTestConnection = async () => {
-        // Collect data from form manually
         const form = document.getElementById('channelForm');
         const formData = new FormData(form);
         const data = Object.fromEntries(formData.entries());
         
-        // Prepare payload
         const payload = {
             type: data.type,
             credentials: data.credentials_input || (channel ? channel.credentials : ''),
@@ -150,10 +147,10 @@ const ChannelForm = ({ channel, onSubmit, onCancel }) => {
 };
 
 const ModelConfigForm = ({ channel, allModels, onSubmit, onCancel }) => {
-    // 1. Parse existing config
     const [enabledModels, setEnabledModels] = useState([]);
     const [filteredAvailable, setFilteredAvailable] = useState([]);
     const [testingModel, setTestingModel] = useState(null);
+    const [sortOrder, setSortOrder] = useState('asc');
 
     useEffect(() => {
         if (!allModels) return;
@@ -166,14 +163,13 @@ const ModelConfigForm = ({ channel, allModels, onSubmit, onCancel }) => {
         const available = [];
 
         allModels.forEach(m => {
-            // Compatibility Check
             let providers = [];
             try {
                 const parsed = JSON.parse(m.provider || "[]");
                 if (Array.isArray(parsed)) providers = parsed;
                 else providers = [m.provider];
             } catch (e) {
-                providers = [m.provider]; // Legacy string
+                providers = [m.provider]; 
             }
 
             let isCompatible = false;
@@ -201,6 +197,13 @@ const ModelConfigForm = ({ channel, allModels, onSubmit, onCancel }) => {
         setEnabledModels(selected);
         setFilteredAvailable(available);
     }, [allModels, channel]);
+
+    // Sorting Logic
+    const sortedAvailable = [...filteredAvailable].sort((a, b) => {
+        return sortOrder === 'asc' 
+            ? a.name.localeCompare(b.name) 
+            : b.name.localeCompare(a.name);
+    });
 
     const addModel = (model) => {
         const defaultRpm = model.default_rpm || 5000;
@@ -246,7 +249,7 @@ const ModelConfigForm = ({ channel, allModels, onSubmit, onCancel }) => {
                 mapTo: m.mapTo || null,
                 rpm: m.rpm ? parseInt(m.rpm) : null,
                 mode: m.mode,
-                region: m.region || 'us-central1' // Vertex Region
+                region: m.region || 'us-central1'
             };
         });
         onSubmit(newConfigJson);
@@ -274,25 +277,31 @@ const ModelConfigForm = ({ channel, allModels, onSubmit, onCancel }) => {
         <div className="flex flex-col h-full">
             <div className="flex-1 flex gap-4 overflow-hidden">
                 {/* Left: Available */}
-                <div className="w-1/3 flex flex-col border rounded-lg bg-gray-50">
-                    <div className="p-3 border-b bg-white font-bold text-sm text-gray-700 flex justify-between">
+                <div className="w-1/4 flex flex-col border rounded-lg bg-gray-50 flex-shrink-0">
+                    <div className="p-3 border-b bg-white font-bold text-sm text-gray-700 flex justify-between items-center">
                         <span>Available</span>
-                        <span className="text-xs bg-blue-100 text-blue-600 px-2 rounded-full">{filteredAvailable.length}</span>
+                        <div className="flex items-center gap-2">
+                            <button onClick={() => setSortOrder(prev => prev === 'asc' ? 'desc' : 'asc')} 
+                                className="text-gray-400 hover:text-blue-600 focus:outline-none transition-colors" title="Sort Models">
+                                <i className={`fas fa-sort-alpha-${sortOrder === 'asc' ? 'down' : 'up'}`}></i>
+                            </button>
+                            <span className="text-xs bg-blue-100 text-blue-600 px-2 rounded-full">{sortedAvailable.length}</span>
+                        </div>
                     </div>
-                    <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                        {filteredAvailable.map(m => (
+                    <div className="flex-1 overflow-y-auto p-2 space-y-1 custom-scrollbar">
+                        {sortedAvailable.map(m => (
                             <div key={m.id} onClick={() => addModel(m)}
-                                className="flex justify-between items-center p-2 bg-white border rounded cursor-pointer hover:bg-blue-50 group transition-colors">
-                                <span className="text-sm font-medium text-gray-700">{m.name}</span>
+                                className="flex justify-between items-center p-2 bg-white border rounded cursor-pointer hover:bg-blue-50 group transition-colors shadow-sm mb-1">
+                                <span className="text-sm font-medium text-gray-700 truncate mr-2" title={m.name}>{m.name}</span>
                                 <i className="fas fa-arrow-right text-gray-300 group-hover:text-blue-500"></i>
                             </div>
                         ))}
-                        {filteredAvailable.length === 0 && <div className="p-4 text-center text-xs text-gray-400">No compatible models</div>}
+                        {sortedAvailable.length === 0 && <div className="p-4 text-center text-xs text-gray-400">No compatible models</div>}
                     </div>
                 </div>
 
                 {/* Right: Configured */}
-                <div className="flex-1 flex flex-col border rounded-lg bg-white">
+                <div className="flex-1 flex flex-col border rounded-lg bg-white overflow-hidden">
                     <div className="p-3 border-b bg-gray-100 font-bold text-sm text-gray-700 flex justify-between">
                         <span>Selected Models ({enabledModels.length})</span>
                     </div>
@@ -300,11 +309,10 @@ const ModelConfigForm = ({ channel, allModels, onSubmit, onCancel }) => {
                         <table className="w-full text-left border-collapse">
                             <thead className="bg-gray-50 text-xs text-gray-500 uppercase sticky top-0 z-10">
                                 <tr>
-                                    <th className="p-3 border-b">Model Name</th>
-                                    {/* Vertex Region Column */}
+                                    <th className="p-3 border-b whitespace-nowrap">Model Name</th>
                                     {isVertex && <th className="p-3 border-b w-32">Region</th>}
-                                    <th className="p-3 border-b w-32">RPM</th>
-                                    <th className="p-3 border-b w-32">Billing</th>
+                                    <th className="p-3 border-b w-24">RPM</th>
+                                    <th className="p-3 border-b w-24">Billing</th>
                                     <th className="p-3 border-b w-20 text-center">Actions</th>
                                 </tr>
                             </thead>
@@ -321,9 +329,8 @@ const ModelConfigForm = ({ channel, allModels, onSubmit, onCancel }) => {
 
                                     return (
                                     <tr key={m.name} className="border-b hover:bg-gray-50 group">
-                                        <td className="p-3 font-medium text-gray-700">{m.name}</td>
+                                        <td className="p-3 font-medium text-gray-700 whitespace-nowrap">{m.name}</td>
                                         
-                                        {/* Vertex Region Input */}
                                         {isVertex && (
                                             <td className="p-3">
                                                 <input className="w-full border rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-500 outline-none"
@@ -342,7 +349,7 @@ const ModelConfigForm = ({ channel, allModels, onSubmit, onCancel }) => {
                                         )}
 
                                         <td className="p-3">
-                                            <input type="number" className="w-full border rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-500 outline-none min-w-[100px]"
+                                            <input type="number" className="w-full border rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-500 outline-none min-w-[80px]"
                                                 placeholder={modelInfo?.default_rpm || 5000}
                                                 value={m.rpm}
                                                 onChange={(e) => updateModelConfig(m.name, 'rpm', e.target.value)} />
@@ -557,7 +564,7 @@ window.ChannelsManager = ({ setNotify }) => {
 
             {showModelConfig && configTargetChannel && (
                 <div className="fixed inset-0 modal-backdrop flex items-center justify-center z-50 fade-in px-4">
-                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-5xl overflow-hidden flex flex-col h-[80vh]">
+                    <div className="bg-white rounded-xl shadow-2xl w-full max-w-7xl overflow-hidden flex flex-col h-[85vh]">
                         <div className="px-6 py-4 border-b flex justify-between items-center bg-gray-50">
                             <div>
                                 <h3 className="text-lg font-bold text-gray-800">Configure Models</h3>
