@@ -162,21 +162,20 @@ router.put('/:id', async (req, res) => {
             await validateModelsConfig(models_config);
         }
 
-        // 3. Update logic
         const updates = [];
         const params = [];
         
-        if (name) { updateFields.push("name = ?"); params.push(name); }
-        if (type) { updateFields.push("type = ?"); params.push(type); }
-        if (credentials) { updateFields.push("credentials = ?"); params.push(credentials); }
-        if (extra_config) { updateFields.push("extra_config = ?"); params.push(JSON.stringify(extra_config)); }
-        if (models_config) { updateFields.push("models_config = ?"); params.push(JSON.stringify(models_config)); }
-        if (status !== undefined) { updateFields.push("status = ?"); params.push(status); }
+        if (name) { updates.push("name = ?"); params.push(name); }
+        if (type) { updates.push("type = ?"); params.push(type); }
+        if (credentials) { updates.push("credentials = ?"); params.push(credentials); }
+        if (extra_config) { updates.push("extra_config = ?"); params.push(JSON.stringify(extra_config)); }
+        if (models_config) { updates.push("models_config = ?"); params.push(JSON.stringify(models_config)); }
+        if (status !== undefined) { updates.push("status = ?"); params.push(status); }
         
-        if (updateFields.length === 0) return res.json({ message: "No changes" });
+        if (updates.length === 0) return res.json({ message: "No changes" });
         
         params.push(id);
-        await db.query(`UPDATE sys_channels SET ${updateFields.join(", ")} WHERE id = ?`, params);
+        await db.query(`UPDATE sys_channels SET ${updates.join(", ")} WHERE id = ?`, params);
         
         // 触发缓存同步
         const [channel] = await db.query("SELECT * FROM sys_channels WHERE id = ?", [id]);
