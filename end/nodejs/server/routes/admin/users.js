@@ -115,7 +115,13 @@ router.delete('/:id', async (req, res) => {
             return res.status(400).json({ error: "Cannot delete user: User has associated tokens. Please delete tokens first." });
         }
 
-        // 2. 删除用户
+        // 2. [New] 检查是否有消费记录 (Request Logs)
+        const [logs] = await db.query("SELECT id FROM sys_request_logs WHERE user_id = ? LIMIT 1", [id]);
+        if (logs.length > 0) {
+            return res.status(400).json({ error: "Cannot delete user: Consumption records exist. Please disable the user instead." });
+        }
+
+        // 3. 删除用户
         await db.query("DELETE FROM sys_users WHERE id = ?", [id]);
         res.json({ message: "User deleted successfully" });
     } catch (err) {

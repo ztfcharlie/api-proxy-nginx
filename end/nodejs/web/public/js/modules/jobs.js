@@ -28,9 +28,9 @@ window.JobManager = ({ setNotify }) => {
         }
     };
 
-    const handleUpdateInterval = async (name, interval) => {
+    const handleUpdateInterval = async (name, intervalSec) => {
         try {
-            await axios.put(`/api/admin/jobs/${name}/interval`, { interval: parseInt(interval) });
+            await axios.put(`/api/admin/jobs/${name}/interval`, { interval: parseFloat(intervalSec) * 1000 });
             setNotify({ msg: 'Interval updated', type: 'success' });
             load();
         } catch (e) {
@@ -39,7 +39,9 @@ window.JobManager = ({ setNotify }) => {
     };
 
     const JobCard = ({ job }) => {
-        const [interval, setIntervalVal] = useState(job.interval);
+        // Convert ms to s for display
+        const initialSec = job.interval / 1000;
+        const [intervalSec, setIntervalSec] = useState(initialSec);
         
         return (
             <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex flex-col">
@@ -69,25 +71,33 @@ window.JobManager = ({ setNotify }) => {
 
                 <div className="border-t pt-4 space-y-3">
                     {/* Interval Control */}
-                    <div className="flex items-center gap-2">
-                        <div className="flex-1 relative">
-                            <label className="absolute -top-2 left-2 bg-white px-1 text-xs text-gray-400">Interval (ms)</label>
-                            <input 
-                                type="number" 
-                                value={interval} 
-                                onChange={e => setIntervalVal(e.target.value)}
-                                disabled={job.isRemote}
-                                className="w-full border rounded px-3 py-2 text-sm disabled:bg-gray-50 disabled:text-gray-400"
-                            />
+                    {job.isRemote ? (
+                        <div className="flex justify-between items-center bg-gray-50 p-2 rounded border">
+                            <span className="text-xs text-gray-500 font-bold">Execution Interval</span>
+                            <span className="text-sm font-mono">{initialSec} seconds</span>
                         </div>
-                        <button 
-                            onClick={() => handleUpdateInterval(job.name, interval)}
-                            disabled={job.isRemote || parseInt(interval) === job.interval}
-                            className="px-3 py-2 border border-blue-600 text-blue-600 rounded hover:bg-blue-50 disabled:opacity-50 disabled:border-gray-300 disabled:text-gray-400 text-xs font-bold transition-colors">
-                            Update
-                        </button>
-                    </div>
-                    {job.isRemote && <div className="text-xs text-orange-500 text-center">* Remote Job: Interval managed by Go Service</div>}
+                    ) : (
+                        <div className="flex items-center gap-2">
+                            <div className="flex-1 relative">
+                                <label className="absolute -top-2 left-2 bg-white px-1 text-xs text-gray-400">Interval (seconds)</label>
+                                <input 
+                                    type="number" 
+                                    value={intervalSec} 
+                                    onChange={e => setIntervalSec(e.target.value)}
+                                    className="w-full border rounded px-3 py-2 text-sm"
+                                    min="1"
+                                />
+                            </div>
+                            <button 
+                                onClick={() => handleUpdateInterval(job.name, intervalSec)}
+                                disabled={parseFloat(intervalSec) === initialSec}
+                                className="px-3 py-2 border border-blue-600 text-blue-600 rounded hover:bg-blue-50 disabled:opacity-50 text-xs font-bold transition-colors">
+                                Update
+                            </button>
+                        </div>
+                    )}
+                    
+                    {job.isRemote && <div className="text-xs text-gray-400 text-center italic">* Managed by Go Service</div>}
 
                     {/* Run Button */}
                     <button onClick={() => handleTrigger(job.name)} disabled={job.status === 'running'}
