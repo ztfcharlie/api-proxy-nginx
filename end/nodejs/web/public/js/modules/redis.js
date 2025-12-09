@@ -75,8 +75,47 @@ window.RedisInspector = ({ setNotify }) => {
         }
     };
 
+    // Process keys into groups
+    const groupedKeys = React.useMemo(() => {
+        const groups = {};
+        const prefix = 'oauth2:';
+        
+        keys.forEach(key => {
+            let displayKey = key;
+            let groupName = 'other';
+
+            // Detect Double Prefix (Trash)
+            if (key.startsWith(prefix + prefix)) {
+                groupName = 'TRASH / DUPLICATE';
+                displayKey = key; // Show full mess
+            } 
+            // Normal Prefix
+            else if (key.startsWith(prefix)) {
+                const parts = key.substring(prefix.length).split(':');
+                if (parts.length > 0) {
+                    groupName = parts[0].toUpperCase();
+                    // If group is SYS, maybe sub-group? kept simple for now
+                    displayKey = key.substring(prefix.length); // Remove 'oauth2:'
+                }
+            } else {
+                groupName = 'NO PREFIX';
+            }
+
+            if (!groups[groupName]) groups[groupName] = [];
+            groups[groupName].push({ full: key, display: displayKey });
+        });
+
+        // Sort groups alphabetically, but put TRASH last
+        return Object.keys(groups).sort((a, b) => {
+            if (a === 'TRASH / DUPLICATE') return 1;
+            if (b === 'TRASH / DUPLICATE') return -1;
+            return a.localeCompare(b);
+        }).map(g => ({ name: g, items: groups[g] }));
+    }, [keys]);
+
     return (
         <div className="fade-in h-full flex flex-col">
+            {/* ... Header ... */}
             <div className="flex justify-between items-center mb-4">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-800">Redis Inspector</h1>
@@ -100,25 +139,36 @@ window.RedisInspector = ({ setNotify }) => {
                         </button>
                     </div>
                     
-                    <div className="flex-1 overflow-y-auto custom-scrollbar space-y-1">
-                        {keys.map(k => (
-                            <div key={k} 
-                                onClick={() => setSelectedKey(k)}
-                                className={`px-3 py-2 text-xs font-mono rounded cursor-pointer truncate transition-colors ${selectedKey === k ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'hover:bg-gray-50 text-gray-600'}`}
-                                title={k}>
-                                {k}
+                    <div className="flex-1 overflow-y-auto custom-scrollbar">
+                        {groupedKeys.map(group => (
+                            <div key={group.name} className="mb-2">
+                                <div className="sticky top-0 bg-gray-100 text-xs font-bold text-gray-500 px-2 py-1 mb-1 rounded uppercase tracking-wider border-b border-gray-200 z-10">
+                                    {group.name} <span className="ml-1 opacity-70">({group.items.length})</span>
+                                </div>
+                                <div className="space-y-0.5">
+                                    {group.items.map(item => (
+                                        <div key={item.full} 
+                                            onClick={() => setSelectedKey(item.full)}
+                                            className={`px-3 py-1.5 text-xs font-mono rounded cursor-pointer truncate transition-colors border-l-2 ${selectedKey === item.full ? 'bg-blue-50 text-blue-700 border-blue-500' : 'hover:bg-gray-50 text-gray-600 border-transparent'}`}
+                                            title={item.full}>
+                                            {item.display}
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
                         ))}
+                        
                         {keys.length === 0 && !loading && <div className="text-center text-gray-400 text-sm py-4">No keys found</div>}
+                        
                         {cursor !== 0 && (
-                            <button onClick={() => loadKeys(false)} className="w-full text-center text-xs text-blue-500 py-2 hover:underline">
+                            <button onClick={() => loadKeys(false)} className="w-full text-center text-xs text-blue-500 py-4 hover:underline">
                                 Load More...
                             </button>
                         )}
                     </div>
                 </div>
 
-                {/* Right Panel: Detail */}
+                {/* Right Panel: Detail (Unchanged) */}
                 <div className="flex-1 flex flex-col bg-gray-50 rounded-xl p-4 overflow-hidden relative border">
                     {!selectedKey ? (
                         <div className="flex items-center justify-center h-full text-gray-400">
