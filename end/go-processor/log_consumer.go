@@ -83,11 +83,31 @@ func (lc *LogConsumer) Start(ctx context.Context) {
 	}
 }
 
+// 更新渠道错误状态
+func (lc *LogConsumer) updateChannelError(channelID int, errorMsg string) {
+	if channelID <= 0 {
+		return
+	}
+	// 截断错误信息防止过长
+	if len(errorMsg) > 255 {
+		errorMsg = errorMsg[:252] + "..."
+	}
+	
+	// 异步执行更新，不阻塞主流程
+	go func() {
+		// 这里可以加一个简单的缓存去重，防止短时间内重复更新同一个错误
+		// 但为了实时性，直接更新 DB
+		_, err := lc.db.Exec("UPDATE sys_channels SET last_error = ?, updated_at = NOW() WHERE id = ?", errorMsg, channelID)
+		if err != nil {
+			log.Printf("[WARN] Failed to update channel error: %v", err)
+		}
+	}()
+}
+
 func (lc *LogConsumer) processBatch(ctx context.Context, msgs []redis.XMessage) {
-	// 隐私开关检查
+	// ... (existing variable declarations) ...
 	saveBody := os.Getenv("LOG_SAVE_BODY") == "true"
 
-	// 准备批量插入的参数
 	var valueStrings []string
 	var valueArgs []interface{}
 	var ackIDs []string
@@ -107,7 +127,7 @@ func (lc *LogConsumer) processBatch(ctx context.Context, msgs []redis.XMessage) 
 			continue
 		}
 
-		// 处理字段 (先拿到 channelID 才能算钱)
+		// 处理字段
 		tokenKey := ""
 		if strings.HasPrefix(meta.ClientToken, "sk-") {
 			tokenKey = meta.ClientToken
@@ -116,8 +136,40 @@ func (lc *LogConsumer) processBatch(ctx context.Context, msgs []redis.XMessage) 
 		channelID := 0
 		fmt.Sscanf(meta.KeyFilename, "%d", &channelID)
 
+		// [Added] 错误状态上报
+		if meta.Status >= 400 && channelID > 0 {
+			var errMsg string
+			// 尝试从响应体解析错误
+			if len(resBodyRaw) > 0 {
+				// 尝试解析常见 JSON 错误格式
+				var jsonErr struct {
+					Error struct {
+						Message string `json:"message"`
+					} `json:"error"`
+					Message string `json:"message"` // some APIs return flat message
+				}
+				if json.Unmarshal([]byte(resBodyRaw), &jsonErr) == nil {
+					if jsonErr.Error.Message != "" {
+						errMsg = fmt.Sprintf("[%d] %s", meta.Status, jsonErr.Error.Message)
+					} else if jsonErr.Message != "" {
+						errMsg = fmt.Sprintf("[%d] %s", meta.Status, jsonErr.Message)
+					}
+				}
+			}
+			
+			// 如果没解析出来，用原始 body 或状态码
+			if errMsg == "" {
+				if len(resBodyRaw) > 0 && len(resBodyRaw) < 100 {
+					errMsg = fmt.Sprintf("[%d] %s", meta.Status, resBodyRaw)
+				} else {
+					errMsg = fmt.Sprintf("HTTP %d Error", meta.Status)
+				}
+			}
+			
+			lc.updateChannelError(channelID, errMsg)
+		}
+
 		// [Modified] 使用计费引擎计算 Token 和费用
-		// 注意：即使 saveBody=false，我们这里仍然使用 raw body 进行计算，计算完后才丢弃
 		usage, err := lc.engine.Calculate(meta.ModelName, meta.URI, []byte(reqBodyRaw), []byte(resBodyRaw), meta.Status)
 		if err != nil {
 			log.Printf("[WARN] Billing calculation failed for %s: %v", reqID, err)
@@ -132,6 +184,17 @@ func (lc *LogConsumer) processBatch(ctx context.Context, msgs []redis.XMessage) 
 				if err != redis.Nil {
 					log.Printf("[WARN] Cost calculation failed for %s: %v", reqID, err)
 				}
+			}
+			
+			// [Added] 成功时清除错误状态 (可选，或者只在下次健康检查时清除)
+			// 为了防止错误闪烁，这里我们可以选择不清除，或者只有当 last_error 不为空时才清除。
+			// 简单起见，如果成功了，说明渠道活过来了，清除错误是合理的。
+			if channelID > 0 {
+				go func() {
+					// 只有当当前有错误时才更新，减少 DB 写压力
+					// UPDATE ... WHERE id = ? AND last_error IS NOT NULL
+					lc.db.Exec("UPDATE sys_channels SET last_error = NULL WHERE id = ? AND last_error IS NOT NULL", channelID)
+				}()
 			}
 		}
 

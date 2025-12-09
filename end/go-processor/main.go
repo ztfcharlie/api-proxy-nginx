@@ -67,33 +67,38 @@ func main() {
 	// DSN: user:password@tcp(host:port)/dbname
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True", dbUser, dbPass, dbHost, dbPort, dbName)
 	
-	// 3. 启动各个组件
-	
-	// Component A: Token Manager (Auto Refresh)
-	tm := NewTokenManager(rdb)
-	go tm.Start(ctx)
-
 	// Component B: Sync Manager (DB <-> Redis)
 	sm, err := NewSyncManager(rdb, dsn)
+	var tm *TokenManager
+
 	if err != nil {
 		log.Printf("[ERROR] Failed to connect to MySQL, SyncManager & LogConsumer disabled: %v", err)
+		// 即使 DB 挂了，TokenManager 也要尝试运行 (虽然没法上报错误)
+		tm = NewTokenManager(rdb, nil)
 	} else {
 		go sm.Start(ctx)
 		
-		// Component C: Log Consumer (Redis Stream -> MySQL)
-		// 复用 SyncManager 的 db 连接，或者 sm.db (如果公开的话)
-		// 这里我们为了简单，直接把 sm.db 传进去，或者让 NewLogConsumer 自己建连接？
-		// SyncManager 里的 db 是私有的。我们这里最好直接传 dsn 重新建一个，或者改 SyncManager 暴露 DB。
-		// 为了稳妥，我们复用 dsn 再开一个连接给 LogConsumer 也没问题 (Go sql.DB 是连接池)
-		
-		lcDB, err := sm.OpenNewDB(dsn) // 我们需要在 SyncManager 加个 helper 或者直接 sql.Open
+		// Component C: Log Consumer
+		lcDB, err := sm.OpenNewDB(dsn)
 		if err == nil {
 			lc := NewLogConsumer(rdb, lcDB)
 			go lc.Start(ctx)
 		} else {
 			log.Printf("[ERROR] Failed to open DB for LogConsumer: %v", err)
 		}
+
+		// Component A: Token Manager (Auto Refresh)
+		// 复用 sm 的辅助方法开连接
+		tmDB, err := sm.OpenNewDB(dsn)
+		if err != nil {
+			log.Printf("[WARN] Failed to open DB for TokenManager, error reporting disabled: %v", err)
+			tm = NewTokenManager(rdb, nil)
+		} else {
+			tm = NewTokenManager(rdb, tmDB)
+		}
 	}
+
+	go tm.Start(ctx)
 
 	// Component D: Redis Pub/Sub Listener (Remote Control)
 	go func() {

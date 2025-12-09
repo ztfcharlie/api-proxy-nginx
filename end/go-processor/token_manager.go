@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -36,11 +37,12 @@ type TokenData struct {
 // TokenManager 管理器结构
 type TokenManager struct {
 	rdb *redis.Client
+	db  *sql.DB
 }
 
 // NewTokenManager 创建管理器
-func NewTokenManager(rdb *redis.Client) *TokenManager {
-	return &TokenManager{rdb: rdb}
+func NewTokenManager(rdb *redis.Client, db *sql.DB) *TokenManager {
+	return &TokenManager{rdb: rdb, db: db}
 }
 
 // Start 启动后台刷新任务
@@ -102,7 +104,6 @@ func (tm *TokenManager) scanAndRefresh(ctx context.Context) {
 	sem := make(chan struct{}, 5) 
 	
 	var refreshCount int
-	// simple mutex for counter if we want to be strict, or just atomic, or ignore race for simple logging
 	var mu sync.Mutex
 
 	for _, key := range keys {
@@ -190,6 +191,11 @@ func (tm *TokenManager) refreshToken(ctx context.Context, channelID, saJSON stri
 	tokenResp, err := RefreshTokenFromServiceAccount(saJSON)
 	if err != nil {
 		log.Printf("[ERROR] Failed to refresh token for channel %s: %v", channelID, err)
+		// 上报错误到数据库
+		if tm.db != nil {
+			errMsg := fmt.Sprintf("Token Refresh Failed: %v", err)
+			tm.db.ExecContext(ctx, "UPDATE sys_channels SET last_error = ?, updated_at = NOW() WHERE id = ?", errMsg, channelID)
+		}
 		return
 	}
 
@@ -206,5 +212,10 @@ func (tm *TokenManager) refreshToken(ctx context.Context, channelID, saJSON stri
 		log.Printf("[ERROR] Failed to save token to Redis: %v", err)
 	} else {
 		log.Printf("[SUCCESS] Refreshed token for channel %s (TTL: %v)", channelID, ttl)
+		// 成功，清除错误状态，并备份 Token 到 DB
+		if tm.db != nil {
+			expiresAt := time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
+			tm.db.ExecContext(ctx, "UPDATE sys_channels SET last_error = NULL, current_access_token = ?, token_expires_at = ?, updated_at = NOW() WHERE id = ?", tokenResp.AccessToken, expiresAt, channelID)
+		}
 	}
 }

@@ -14,7 +14,7 @@ const ChannelForm = ({ channel, onSubmit, onCancel }) => {
     }, [channel]);
 
     const handleTestConnection = async () => {
-        // Collect data from form manually since state might not be fully sync
+        // Collect data from form manually
         const form = document.getElementById('channelForm');
         const formData = new FormData(form);
         const data = Object.fromEntries(formData.entries());
@@ -28,10 +28,12 @@ const ChannelForm = ({ channel, onSubmit, onCancel }) => {
 
         if (data.type === 'azure') {
             payload.extra_config = { endpoint: data.azure_endpoint, api_version: data.azure_api_version };
-        }
-        // Vertex credentials handling
-        if (data.type === 'vertex' && payload.credentials) {
-             // Try to parse if it's a string, backend expects object or string but let's send what we have
+        } else if (data.type === 'aws_bedrock') {
+            payload.extra_config = { 
+                region: data.aws_region, 
+                access_key_id: data.aws_ak, 
+                secret_access_key: data.aws_sk 
+            };
         }
 
         try {
@@ -97,6 +99,11 @@ const ChannelForm = ({ channel, onSubmit, onCancel }) => {
                         <label className="block text-xs font-medium text-gray-600 mb-1">API Version</label>
                         <input name="azure_api_version" defaultValue={extra.api_version || '2023-05-15'} required className="w-full border rounded px-2 py-1 text-sm" />
                     </div>
+                    <div className="col-span-2 text-right">
+                        <button type="button" onClick={handleTestConnection} className="text-xs bg-white hover:bg-blue-50 text-blue-600 px-3 py-1 rounded border border-blue-200 transition-colors">
+                            <i className="fas fa-plug mr-1"></i> Test Azure
+                        </button>
+                    </div>
                 </div>
             )}
 
@@ -116,6 +123,11 @@ const ChannelForm = ({ channel, onSubmit, onCancel }) => {
                     <div>
                         <label className="block text-xs font-medium text-gray-600 mb-1">Secret Access Key</label>
                         <input name="aws_sk" type="password" defaultValue={extra.secret_access_key} required className="w-full border rounded px-2 py-1 text-sm" />
+                    </div>
+                    <div className="text-right">
+                        <button type="button" onClick={handleTestConnection} className="text-xs bg-white hover:bg-orange-50 text-orange-600 px-3 py-1 rounded border border-orange-200 transition-colors">
+                            <i className="fas fa-plug mr-1"></i> Test AWS
+                        </button>
                     </div>
                 </div>
             )}
@@ -138,6 +150,7 @@ const ChannelForm = ({ channel, onSubmit, onCancel }) => {
 };
 
 const ModelConfigForm = ({ channel, allModels, onSubmit, onCancel }) => {
+    // 1. Parse existing config
     const [enabledModels, setEnabledModels] = useState([]);
     const [filteredAvailable, setFilteredAvailable] = useState([]);
     const [testingModel, setTestingModel] = useState(null);
@@ -173,7 +186,7 @@ const ModelConfigForm = ({ channel, allModels, onSubmit, onCancel }) => {
             const configEntry = initialConfig[m.name];
             
             if (configEntry !== undefined) {
-                let conf = { name: m.name, mapTo: '', rpm: '', mode: 'token' };
+                let conf = { name: m.name, mapTo: '', rpm: '', mode: 'token', region: 'us-central1' };
                 if (typeof configEntry === 'string') {
                     conf.mapTo = configEntry;
                 } else if (typeof configEntry === 'object' && configEntry !== null) {
@@ -191,7 +204,7 @@ const ModelConfigForm = ({ channel, allModels, onSubmit, onCancel }) => {
 
     const addModel = (model) => {
         const defaultRpm = model.default_rpm || 5000;
-        setEnabledModels([...enabledModels, { name: model.name, mapTo: '', rpm: defaultRpm, mode: 'token' }]);
+        setEnabledModels([...enabledModels, { name: model.name, mapTo: '', rpm: defaultRpm, mode: 'token', region: 'us-central1' }]);
         setFilteredAvailable(filteredAvailable.filter(m => m.name !== model.name));
     };
 
@@ -200,7 +213,7 @@ const ModelConfigForm = ({ channel, allModels, onSubmit, onCancel }) => {
         if (modelInfo) {
             let providers = [];
             try {
-                const parsed = JSON.parse(modelInfo.provider);
+                const parsed = JSON.parse(modelInfo.provider || "[]");
                 if (Array.isArray(parsed)) providers = parsed;
                 else providers = [modelInfo.provider];
             } catch (e) { providers = [modelInfo.provider]; }
@@ -225,28 +238,6 @@ const ModelConfigForm = ({ channel, allModels, onSubmit, onCancel }) => {
         ));
     };
 
-    const handleTestModel = async (modelName) => {
-        setTestingModel(modelName);
-        try {
-            const res = await axios.post(`/api/admin/channels/${channel.id}/test-model`, { model: modelName });
-            if (res.data.success) {
-                // Using alert or a prop notify? Since notify is in parent, we might not have it here. 
-                // Wait, ChannelsManager passes setNotify? No, ModelConfigForm props don't have it.
-                // We should probably rely on console or simplistic alert for this sub-component if we didn't pass setNotify.
-                // Or assume window.Notification exists? No. 
-                // Let's just alert for now or try to use parent's context if passed.
-                alert(`Test passed: ${res.data.duration}ms`);
-            } else {
-                alert('Test failed');
-            }
-        } catch (err) {
-            alert('Test error: ' + (err.response?.data?.error || err.message));
-        } finally {
-            setTestingModel(null);
-        }
-    };
-
-    // [FIX] Define handleSave properly
     const handleSave = (e) => {
         e.preventDefault();
         const newConfigJson = {};
@@ -254,11 +245,30 @@ const ModelConfigForm = ({ channel, allModels, onSubmit, onCancel }) => {
             newConfigJson[m.name] = {
                 mapTo: m.mapTo || null,
                 rpm: m.rpm ? parseInt(m.rpm) : null,
-                mode: m.mode
+                mode: m.mode,
+                region: m.region || 'us-central1' // Vertex Region
             };
         });
         onSubmit(newConfigJson);
     };
+
+    const handleTestModel = async (modelName) => {
+        setTestingModel(modelName);
+        try {
+            const res = await axios.post(`/api/admin/channels/${channel.id}/test-model`, { model: modelName });
+            if (res.data.success) {
+                alert(`✅ Test passed: ${res.data.duration}ms`);
+            } else {
+                alert('❌ Test failed');
+            }
+        } catch (err) {
+            alert('❌ Test error: ' + (err.response?.data?.error || err.message));
+        } finally {
+            setTestingModel(null);
+        }
+    };
+
+    const isVertex = channel.type === 'vertex';
 
     return (
         <div className="flex flex-col h-full">
@@ -291,6 +301,8 @@ const ModelConfigForm = ({ channel, allModels, onSubmit, onCancel }) => {
                             <thead className="bg-gray-50 text-xs text-gray-500 uppercase sticky top-0 z-10">
                                 <tr>
                                     <th className="p-3 border-b">Model Name</th>
+                                    {/* Vertex Region Column */}
+                                    {isVertex && <th className="p-3 border-b w-32">Region</th>}
                                     <th className="p-3 border-b w-32">RPM</th>
                                     <th className="p-3 border-b w-32">Billing</th>
                                     <th className="p-3 border-b w-20 text-center">Actions</th>
@@ -310,6 +322,25 @@ const ModelConfigForm = ({ channel, allModels, onSubmit, onCancel }) => {
                                     return (
                                     <tr key={m.name} className="border-b hover:bg-gray-50 group">
                                         <td className="p-3 font-medium text-gray-700">{m.name}</td>
+                                        
+                                        {/* Vertex Region Input */}
+                                        {isVertex && (
+                                            <td className="p-3">
+                                                <input className="w-full border rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-500 outline-none"
+                                                    placeholder="us-central1"
+                                                    value={m.region || ''}
+                                                    onChange={(e) => updateModelConfig(m.name, 'region', e.target.value)} 
+                                                    list="regions" />
+                                                <datalist id="regions">
+                                                    <option value="us-central1" />
+                                                    <option value="us-east1" />
+                                                    <option value="us-west1" />
+                                                    <option value="europe-west1" />
+                                                    <option value="asia-northeast1" />
+                                                </datalist>
+                                            </td>
+                                        )}
+
                                         <td className="p-3">
                                             <input type="number" className="w-full border rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-500 outline-none min-w-[100px]"
                                                 placeholder={modelInfo?.default_rpm || 5000}
