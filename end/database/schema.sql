@@ -1,5 +1,5 @@
 -- ==========================================
--- Gemini Proxy 全量数据库结构 (Schema Full)
+-- Universal AI Gateway 全量数据库结构 (Schema Full)
 -- 版本: 3.2 (Consolidated)
 -- 支持: Vertex, Azure, OpenAI, AWS, Anthropic
 -- 功能: 多渠道路由、权重负载、模型RPM限制、虚拟令牌管理
