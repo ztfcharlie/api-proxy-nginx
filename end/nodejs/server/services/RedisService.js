@@ -491,7 +491,7 @@ class RedisService {
 
             return {
                 status: 'healthy',
-                responseTime: `${responseTime}ms`,
+                latency: responseTime,
                 connected: this.isConnected
             };
         } catch (error) {

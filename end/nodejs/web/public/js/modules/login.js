@@ -17,7 +17,7 @@ window.LoginView = ({ onLogin }) => {
     };
 
     return (
-        <div className="flex items-center justify-center h-full bg-gray-900">
+        <div className="flex items-center justify-center h-full w-full bg-gray-900">
             <div className="bg-white p-8 rounded-xl shadow-2xl w-96 fade-in">
                 <h2 className="text-2xl font-bold text-center mb-6 text-gray-800">Admin Login</h2>
                 {error && <div className="bg-red-100 text-red-700 p-3 rounded mb-4 text-sm">{error}</div>}

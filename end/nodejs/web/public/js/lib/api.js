@@ -34,7 +34,7 @@ window.api = {
     },
     jobs: {
         list: () => axios.get('/api/admin/jobs'),
-        trigger: (name) => axios.post(`/api/admin/jobs/trigger/${name}`)
+        trigger: (name) => axios.post(`/api/admin/jobs/${name}/run`)
     },
     system: {
         status: () => axios.get('/api/admin/system/status')
