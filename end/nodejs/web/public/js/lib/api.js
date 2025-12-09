@@ -12,19 +12,19 @@ window.api = {
         delete: (id) => axios.delete(`/api/admin/channels/${id}`)
     },
     tokens: {
-        list: () => axios.get('/api/admin/tokens'),
+        list: (params) => axios.get('/api/admin/tokens', { params }),
         create: (data) => axios.post('/api/admin/tokens', data),
         update: (id, data) => axios.put(`/api/admin/tokens/${id}`, data),
         delete: (id) => axios.delete(`/api/admin/tokens/${id}`)
     },
     models: {
-        list: () => axios.get('/api/admin/models'),
+        list: (params) => axios.get('/api/admin/models', { params }),
         create: (data) => axios.post('/api/admin/models', data),
         update: (id, data) => axios.put(`/api/admin/models/${id}`, data),
         delete: (id) => axios.delete(`/api/admin/models/${id}`)
     },
     users: {
-        list: () => axios.get('/api/admin/users'),
+        list: (params) => axios.get('/api/admin/users', { params }),
         create: (data) => axios.post('/api/admin/users', data),
         update: (id, data) => axios.put(`/api/admin/users/${id}`, data),
         delete: (id) => axios.delete(`/api/admin/users/${id}`)
