@@ -67,7 +67,7 @@ const App = () => {
             <aside className="w-64 bg-gray-900 text-gray-300 flex flex-col shadow-xl z-20 transition-all duration-300 flex-shrink-0">
                 <div className="h-16 flex items-center px-6 bg-gray-800 border-b border-gray-700 shadow-md">
                     <i className="fas fa-project-diagram text-blue-500 text-xl mr-3"></i>
-                    <span className="text-white font-bold text-lg tracking-wide">Universal AI Gateway</span>
+                    <span className="text-white font-bold text-lg tracking-wide">AI Gateway</span>
                 </div>
                 
                 <nav className="flex-1 py-6 space-y-1 px-3 overflow-y-auto custom-scrollbar">
