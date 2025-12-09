@@ -1,4 +1,5 @@
-const { useState, useEffect, useRef } = React;
+const { useState, useEffect, useMemo } = React;
+const axios = window.axios; // Ensure axios is available
 
 window.RedisInspector = ({ setNotify }) => {
     const [keys, setKeys] = useState([]);
@@ -66,17 +67,8 @@ window.RedisInspector = ({ setNotify }) => {
         }
     };
 
-    const formatValue = (val) => {
-        if (typeof val === 'object') return JSON.stringify(val, null, 2);
-        try {
-            return JSON.stringify(JSON.parse(val), null, 2);
-        } catch (e) {
-            return val;
-        }
-    };
-
-    // Process keys into groups
-    const groupedKeys = React.useMemo(() => {
+    // Grouping Logic
+    const groupedKeys = useMemo(() => {
         const groups = {};
         const prefix = 'oauth2:';
         
@@ -113,6 +105,35 @@ window.RedisInspector = ({ setNotify }) => {
         }).map(g => ({ name: g, items: groups[g] }));
     }, [keys]);
 
+    const handleCleanGroup = async (items) => {
+        if (!confirm(`Are you sure you want to delete all ${items.length} keys in this group? This cannot be undone.`)) return;
+        
+        setLoading(true);
+        try {
+            let count = 0;
+            for (const item of items) {
+                await axios.delete('/api/admin/redis/key', { params: { key: item.full } });
+                count++;
+            }
+            setNotify({ msg: `Cleaned ${count} keys`, type: 'success' });
+            loadKeys(true);
+        } catch (e) {
+            setNotify({ msg: 'Clean failed: ' + e.message, type: 'error' });
+            loadKeys(true);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const formatValue = (val) => {
+        if (typeof val === 'object') return JSON.stringify(val, null, 2);
+        try {
+            return JSON.stringify(JSON.parse(val), null, 2);
+        } catch (e) {
+            return val;
+        }
+    };
+
     return (
         <div className="fade-in h-full flex flex-col">
             {/* ... Header ... */}
@@ -142,8 +163,14 @@ window.RedisInspector = ({ setNotify }) => {
                     <div className="flex-1 overflow-y-auto custom-scrollbar">
                         {groupedKeys.map(group => (
                             <div key={group.name} className="mb-2">
-                                <div className="sticky top-0 bg-gray-100 text-xs font-bold text-gray-500 px-2 py-1 mb-1 rounded uppercase tracking-wider border-b border-gray-200 z-10">
-                                    {group.name} <span className="ml-1 opacity-70">({group.items.length})</span>
+                                <div className="sticky top-0 bg-gray-100 text-xs font-bold text-gray-500 px-2 py-1 mb-1 rounded uppercase tracking-wider border-b border-gray-200 z-10 flex justify-between items-center">
+                                    <span>{group.name} <span className="ml-1 opacity-70">({group.items.length})</span></span>
+                                    {group.name === 'TRASH / DUPLICATE' && (
+                                        <button onClick={(e) => { e.stopPropagation(); handleCleanGroup(group.items); }} 
+                                            className="text-red-600 hover:text-red-800 hover:bg-red-50 px-2 rounded transition-colors text-[10px] border border-red-200">
+                                            Clean All
+                                        </button>
+                                    )}
                                 </div>
                                 <div className="space-y-0.5">
                                     {group.items.map(item => (
