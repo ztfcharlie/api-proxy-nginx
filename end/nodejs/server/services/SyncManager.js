@@ -10,6 +10,7 @@ class SyncManager {
 
     initialize(redisService) {
         this.redis = redisService;
+        jobManager.setRedis(redisService); // Inject Redis into JobManager
     }
 
     /**

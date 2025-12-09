@@ -78,7 +78,7 @@ func (tm *TokenManager) ReportJobStatus(ctx context.Context, status, lastResult 
 	}
 	
 	val, _ := json.Marshal(jobData)
-	tm.rdb.Set(ctx, "sys:job:token_refresh", string(val), 0)
+	tm.rdb.Set(ctx, "oauth2:sys:job:token_refresh", string(val), 0)
 }
 
 func (tm *TokenManager) scanAndRefresh(ctx context.Context) {

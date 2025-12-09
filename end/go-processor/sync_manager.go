@@ -104,7 +104,7 @@ func (sm *SyncManager) ReportJobStatus(ctx context.Context, status, lastResult s
 	}
 	
 	val, _ := json.Marshal(jobData)
-	sm.rdb.Set(ctx, "sys:job:db_sync", string(val), 0)
+	sm.rdb.Set(ctx, "oauth2:sys:job:db_sync", string(val), 0)
 }
 
 // performSync 执行实际同步

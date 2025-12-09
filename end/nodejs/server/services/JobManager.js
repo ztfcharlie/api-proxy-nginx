@@ -1,10 +1,14 @@
 const logger = require('./LoggerService');
-const RedisService = require('./RedisService'); // 引入 RedisService
 
 class JobManager {
     constructor() {
         this.jobs = new Map(); // name -> { interval, timer, lastRun, status, callback }
         this.isRunning = false;
+        this.redis = null; // Injected
+    }
+
+    setRedis(redisInstance) {
+        this.redis = redisInstance;
     }
 
     /**
@@ -151,10 +155,14 @@ class JobManager {
         }
 
         // 2. 尝试远程触发 (Go Service)
+        if (!this.redis) {
+            throw new Error("Redis not initialized for remote jobs");
+        }
+
         logger.info(`[JobManager] Job ${name} not found locally, sending remote trigger...`);
         try {
             // Publish to 'cmd:job:trigger' (RedisService will add prefix)
-            const count = await RedisService.publish('cmd:job:trigger', name);
+            const count = await this.redis.publish('cmd:job:trigger', name);
             if (count > 0) {
                 logger.info(`[JobManager] Remote trigger sent for ${name} (Subscribers: ${count})`);
             } else {
@@ -199,12 +207,17 @@ class JobManager {
         }));
 
         // 2. 获取远程 Go Service 任务状态
+        // 如果 Redis 未就绪，直接返回本地任务
+        if (!this.redis) {
+            return localJobs;
+        }
+
         const remoteKeys = ['sys:job:token_refresh', 'sys:job:db_sync'];
         const remoteJobs = [];
 
         try {
             for (const key of remoteKeys) {
-                const val = await RedisService.get(key);
+                const val = await this.redis.get(key);
                 if (val) {
                     try {
                         const jobData = JSON.parse(val);

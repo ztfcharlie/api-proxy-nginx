@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const db = require('../../config/db').dbPool;
-const RedisService = require('../../services/RedisService'); // instance
+const SyncManager = require('../../services/SyncManager'); // Use initialized singleton
 const axios = require('axios');
 
 /**
@@ -24,31 +24,36 @@ router.get('/status', async (req, res) => {
         status.mysql = { status: 'unhealthy', error: e.message };
     }
 
-    // 2. Check Redis
+    // 2. Check Redis (via SyncManager.redis)
     try {
-        const redisHealth = await RedisService.healthCheck();
-        status.redis = redisHealth;
+        if (SyncManager.redis) {
+            const redisHealth = await SyncManager.redis.healthCheck();
+            status.redis = redisHealth;
+        } else {
+            status.redis = { status: 'unhealthy', error: 'Redis Service not initialized in SyncManager' };
+        }
     } catch (e) {
         status.redis = { status: 'unhealthy', error: e.message };
     }
 
     // 3. Check Go Core Service (via Redis Heartbeat)
     try {
-        // Key: oauth2:sys:heartbeat:go-processor
-        // RedisService 自动加前缀，所以我们只传 sys:heartbeat:go-processor
-        const lastBeat = await RedisService.get('sys:heartbeat:go-processor');
-        if (lastBeat) {
-            const beatTime = parseInt(lastBeat);
-            const now = Math.floor(Date.now() / 1000);
-            const diff = now - beatTime;
-            
-            if (diff < 30) {
-                status.go_core = { status: 'healthy', last_heartbeat: new Date(beatTime * 1000).toISOString(), lag: diff };
+        if (SyncManager.redis) {
+            // Key: oauth2:sys:heartbeat:go-processor
+            const lastBeat = await SyncManager.redis.get('sys:heartbeat:go-processor');
+            if (lastBeat) {
+                const beatTime = parseInt(lastBeat);
+                const now = Math.floor(Date.now() / 1000);
+                const diff = now - beatTime;
+                
+                if (diff < 30) {
+                    status.go_core = { status: 'healthy', last_heartbeat: new Date(beatTime * 1000).toISOString(), lag: diff };
+                } else {
+                    status.go_core = { status: 'warning', last_heartbeat: new Date(beatTime * 1000).toISOString(), lag: diff, message: 'Heartbeat delayed' };
+                }
             } else {
-                status.go_core = { status: 'warning', last_heartbeat: new Date(beatTime * 1000).toISOString(), lag: diff, message: 'Heartbeat delayed' };
+                status.go_core = { status: 'unhealthy', error: 'No heartbeat found' };
             }
-        } else {
-            status.go_core = { status: 'unhealthy', error: 'No heartbeat found' };
         }
     } catch (e) {
         status.go_core = { status: 'unhealthy', error: e.message };
