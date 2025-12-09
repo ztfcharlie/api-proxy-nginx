@@ -162,8 +162,9 @@ router.put('/:id', async (req, res) => {
             await validateModelsConfig(models_config);
         }
 
-        let updateFields = [];
-        let params = [];
+        // 3. Update logic
+        const updates = [];
+        const params = [];
         
         if (name) { updateFields.push("name = ?"); params.push(name); }
         if (type) { updateFields.push("type = ?"); params.push(type); }

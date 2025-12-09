@@ -38,12 +38,21 @@ end
 function _M.error_response(status, message)
     ngx.status = status
     ngx.header.content_type = "application/json"
-    ngx.say(cjson.encode({
+    
+    local error_body = cjson.encode({
         error = message,
         status = status,
         timestamp = ngx.time(),
         request_id = ngx.var.request_id
-    }))
+    })
+    
+    -- [关键] 记录错误响应体到上下文，供 log_request 使用
+    ngx.ctx.buffered_response = error_body
+    
+    -- 尝试记录日志 (异步)
+    _M.log_request()
+    
+    ngx.say(error_body)
     ngx.exit(status)
 end
 
