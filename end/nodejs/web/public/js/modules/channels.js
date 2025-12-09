@@ -1,4 +1,5 @@
 const { useState, useEffect } = React;
+const axios = window.axios;
 
 // --- Sub-Components (Defined outside to prevent re-renders) ---
 
@@ -117,7 +118,7 @@ const ModelConfigForm = ({ channel, allModels, onSubmit, onCancel }) => {
             // Compatibility Check
             let providers = [];
             try {
-                const parsed = JSON.parse(m.provider);
+                const parsed = JSON.parse(m.provider || "[]");
                 if (Array.isArray(parsed)) providers = parsed;
                 else providers = [m.provider];
             } catch (e) {
@@ -229,12 +230,11 @@ const ModelConfigForm = ({ channel, allModels, onSubmit, onCancel }) => {
                                             <th className="p-3 border-b w-20 text-center">Actions</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="text-sm">
-                                        {enabledModels.map(m => {
-                                            const modelInfo = allModels.find(x => x.name === m.name);
-                                            const canToken = (modelInfo?.price_input > 0 || modelInfo?.price_output > 0);
-                                            const canRequest = (modelInfo?.price_request > 0);
-                                            const canTime = (modelInfo?.price_time > 0); 
+                                                                    <tbody className="text-sm">
+                                                                        {enabledModels.map(m => {
+                                                                            const modelInfo = allModels.find(x => x.name === m.name) || {};
+                                                                            const canToken = (modelInfo?.price_input > 0 || modelInfo?.price_output > 0);
+                                                                            const canRequest = (modelInfo?.price_request > 0);                                            const canTime = (modelInfo?.price_time > 0); 
                                             const canParam = true; 
                                             const isCurrentInvalid = (m.mode === 'token' && !canToken) || 
                                                                    (m.mode === 'request' && !canRequest) ||

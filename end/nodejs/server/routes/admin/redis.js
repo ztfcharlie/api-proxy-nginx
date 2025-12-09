@@ -1,96 +1,90 @@
 const express = require('express');
 const router = express.Router();
-const Redis = require('ioredis'); // Import Redis class
-const SyncManager = require('../../services/SyncManager');
-
-// 创建一个无前缀的专用客户端用于扫描
-// 注意：每次请求创建销毁可能开销大，建议改为单例或复用配置
-// 这里为了稳妥，我们临时创建一个
-const getRawRedis = () => {
-    return new Redis({
-        host: process.env.REDIS_HOST || 'api-proxy-redis',
-        port: parseInt(process.env.REDIS_PORT) || 6379,
-        password: process.env.REDIS_PASSWORD,
-        db: parseInt(process.env.REDIS_DB) || 0,
-        keyPrefix: '' // 显式为空
-    });
-};
+const SyncManager = require('../../services/SyncManager'); // Singleton with redis
 
 /**
- * 扫描 Keys
+ * 列出所有 Redis Key
  */
 router.get('/keys', async (req, res) => {
-    const rawRedis = getRawRedis();
     try {
-        // 获取实际使用的前缀 (用于过滤)
-        const servicePrefix = SyncManager.redis?.config?.keyPrefix || 'oauth2:';
-        const pattern = req.query.pattern || '*';
-        
-        // 我们的目标模式 (加上前缀)
-        const targetPatterns = ['vtoken:*', 'apikey:*', 'channel:*', 'real_token:*'];
-        
-        let allKeys = [];
-        
-        if (pattern === '*') {
-            for (const p of targetPatterns) {
-                // 手动拼接前缀
-                const searchPattern = servicePrefix + p;
-                console.log(`[Redis Inspector] Raw Scan: ${searchPattern}`);
-                
-                const keys = await rawRedis.keys(searchPattern);
-                allKeys = allKeys.concat(keys);
-            }
-        } else {
-            // 自定义搜索
-            const keys = await rawRedis.keys(pattern.includes('*') ? pattern : `*${pattern}*`);
-            allKeys = keys;
+        if (!SyncManager.redis || !SyncManager.redis.isConnected) {
+            return res.status(503).json({ error: 'Redis not connected' });
         }
-        
-        // 过滤掉非相关 Key (可选)
-        // ...
 
-        allKeys = [...new Set(allKeys)].sort();
+        const { pattern = '*', count = 100, cursor = 0 } = req.query;
+        // 注意：SyncManager.redis 是 RedisService 实例
+        // RedisService 的 keyPrefix 配置会影响 scan 吗？
+        // 如果用 ioredis 实例直接 scan，它可能会返回原始 key。
+        // 但我们 RedisService 封装的方法没有暴露 scan。
+        // 我们这里直接用 ioredis 实例。
+        const redisClient = SyncManager.redis.redis; 
         
-        res.json({ data: allKeys });
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: err.message });
-    } finally {
-        rawRedis.quit(); // 务必关闭连接
+        // 我们加上前缀 pattern (因为用户想搜 oauth2:*)
+        const keyPrefix = SyncManager.redis.config.keyPrefix || '';
+        let searchPattern = pattern;
+        
+        // 如果用户输入的 pattern 没有前缀，我们是否自动加？
+        // 假设用户想搜所有，输入 *。我们需要搜 oauth2:*。
+        if (!searchPattern.startsWith(keyPrefix) && keyPrefix) {
+            searchPattern = keyPrefix + searchPattern;
+        }
+
+        // 使用 SCAN 命令
+        const [newCursor, rawKeys] = await redisClient.scan(cursor, 'MATCH', searchPattern, 'COUNT', count);
+        
+        // 去掉前缀返回给前端？或者前端显示完整 Key。显示完整 Key 比较清晰。
+        // 但为了前端美观，我们可以标记 prefix。
+        
+        res.json({ 
+            data: rawKeys, 
+            cursor: newCursor,
+            prefix: keyPrefix 
+        });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
     }
 });
 
 /**
- * 获取 Key 详情
+ * 获取单个 Key 详情
  */
-router.get('/value', async (req, res) => {
-    const rawRedis = getRawRedis();
+router.get('/key', async (req, res) => {
+    const { key } = req.query; // 完整 Key
+    if (!key) return res.status(400).json({ error: 'Missing key' });
+
     try {
-        const key = req.query.key;
-        if (!key) return res.status(400).json({ error: "Missing key" });
-
-        const type = await rawRedis.type(key);
-        const ttl = await rawRedis.ttl(key);
+        const redisClient = SyncManager.redis.redis;
+        
+        // 1. Get Type
+        const type = await redisClient.type(key);
+        
+        // 2. Get TTL
+        const ttl = await redisClient.ttl(key);
+        
+        // 3. Get Value
         let value = null;
-
         if (type === 'string') {
-            value = await rawRedis.get(key);
-            try { value = JSON.parse(value); } catch (e) {}
+            value = await redisClient.get(key);
         } else if (type === 'hash') {
-            value = await rawRedis.hgetall(key);
-        } else if (type === 'list') {
-            value = await rawRedis.lrange(key, 0, -1);
+            value = await redisClient.hgetall(key);
         } else if (type === 'set') {
-            value = await rawRedis.smembers(key);
+            value = await redisClient.smembers(key);
+        } else if (type === 'zset') {
+            value = await redisClient.zrange(key, 0, -1, 'WITHSCORES');
+        } else if (type === 'list') {
+            value = await redisClient.lrange(key, 0, -1);
+        } else {
+            value = `(Unsupported type: ${type})`;
         }
 
-        res.json({ 
-            data: { key, type, ttl, value }
+        res.json({
+            key,
+            type,
+            ttl,
+            value
         });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    } finally {
-        rawRedis.quit();
+    } catch (e) {
+        res.status(500).json({ error: e.message });
     }
 });
 
@@ -98,29 +92,15 @@ router.get('/value', async (req, res) => {
  * 删除 Key
  */
 router.delete('/key', async (req, res) => {
-    const rawRedis = getRawRedis();
-    try {
-        const key = req.query.key;
-        if (!key) return res.status(400).json({ error: "Missing key" });
-        
-        await rawRedis.del(key);
-        res.json({ message: "Deleted" });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    } finally {
-        rawRedis.quit();
-    }
-});
+    const { key } = req.query;
+    if (!key) return res.status(400).json({ error: 'Missing key' });
 
-/**
- * 手动触发全量同步
- */
-router.post('/sync', async (req, res) => {
     try {
-        await SyncManager.performFullSync();
-        res.json({ message: "Full sync triggered" });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
+        const redisClient = SyncManager.redis.redis;
+        const result = await redisClient.del(key);
+        res.json({ success: result > 0, message: result > 0 ? 'Key deleted' : 'Key not found' });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
     }
 });
 

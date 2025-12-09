@@ -39,6 +39,7 @@ const App = () => {
         { id: 'users', label: 'Users', icon: 'fas fa-users' },
         { id: 'logs', label: 'Request Logs', icon: 'fas fa-list-alt' },
         { id: 'jobs', label: 'Job Scheduler', icon: 'fas fa-clock' },
+        { id: 'redis', label: 'Redis Inspector', icon: 'fas fa-database' },
         { id: 'system', label: 'System Status', icon: 'fas fa-server' },
         { id: 'account', label: 'Account Center', icon: 'fas fa-user-circle' }
     ];
@@ -53,6 +54,7 @@ const App = () => {
             case 'users': return <window.UserManager setNotify={setNotify} />;
             case 'logs': return <window.LogViewer setNotify={setNotify} />;
             case 'jobs': return <window.JobManager setNotify={setNotify} />;
+            case 'redis': return <window.RedisInspector setNotify={setNotify} />;
             case 'system': return <window.SystemStatus setNotify={setNotify} />;
             case 'account': return <window.AccountCenter setNotify={setNotify} />;
             default: return <window.Dashboard />;
