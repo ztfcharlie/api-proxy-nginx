@@ -20,7 +20,9 @@ window.RedisInspector = ({ setNotify }) => {
             });
             
             const newKeys = res.data.data || [];
-            setKeys(reset ? newKeys : [...keys, ...newKeys]);
+            let updatedKeys = reset ? newKeys : [...keys, ...newKeys];
+            updatedKeys.sort(); // Alphabetical sort
+            setKeys(updatedKeys);
             setCursor(parseInt(res.data.cursor));
         } catch (e) {
             setNotify({ msg: 'Failed to scan keys: ' + e.message, type: 'error' });
