@@ -19,17 +19,6 @@ const App = () => {
         }
     }, []);
 
-    const handleLogout = () => {
-        localStorage.removeItem('token');
-        localStorage.removeItem('user');
-        setUser(null);
-    };
-
-    // Render Login View if not authenticated
-    if (!user) {
-        return <window.LoginView onLogin={setUser} />;
-    }
-
     // Menu Definition
     const allMenuItems = [
         { id: 'dashboard', label: 'Dashboard', icon: 'fas fa-home' },
@@ -56,7 +45,19 @@ const App = () => {
         if (user && user.role !== 'admin' && activeView === 'dashboard') {
             setActiveView('tokens');
         }
-    }, [user]);
+    }, [user, activeView]);
+
+    const handleLogout = () => {
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        setUser(null);
+    };
+
+    // Render Login View if not authenticated
+    // [CRITICAL FIX] Hooks must be called before conditional return
+    if (!user) {
+        return <window.LoginView onLogin={setUser} />;
+    }
 
     // View Router
     const renderContent = () => {
