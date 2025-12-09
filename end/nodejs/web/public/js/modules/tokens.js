@@ -56,32 +56,30 @@ window.TokenManager = ({ user, setNotify }) => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         const formData = new FormData(e.target);
-        const data = Object.fromEntries(formData.entries());
-        data.status = formData.get('status') === 'on' ? 1 : 0;
+        const rawData = Object.fromEntries(formData.entries());
+        const status = formData.get('status') === 'on' ? 1 : 0;
         
-        try {
-            if(data.limit_config && data.limit_config.trim()) {
-                data.limit_config = JSON.parse(data.limit_config);
-            } else {
-                data.limit_config = {};
-            }
-        } catch(e) {
-            return setNotify({ msg: 'Invalid Limit Config JSON', type: 'error' });
-        }
+        // Prepare payload based on role
+        let payload = {};
 
-        // Only collect routes if admin (or if we allow user to see but not edit, we shouldn't send routes if disabled)
-        // If inputs are disabled, formData won't include them.
-        // We need to preserve existing routes if user is editing status only.
         if (!isAdmin && editingToken) {
-            // For non-admin, we only update status. Don't send routes.
-            // Backend should handle partial updates or we send existing routes?
-            // Let's send existing routes to be safe, or modify backend to ignore missing routes on PUT?
-            // Actually, `PUT` in `tokens.js` replaces routes if `routes` field is present.
-            // If `routes` is NOT present in body, it keeps existing.
-            // So for non-admin, we simply DO NOT include `routes` in `data`.
-            delete data.routes; 
+            // User can ONLY update status
+            payload = { status };
         } else {
-            // Admin logic
+            // Admin can update everything
+            payload = { ...rawData, status };
+            
+            try {
+                if(payload.limit_config && payload.limit_config.trim()) {
+                    payload.limit_config = JSON.parse(payload.limit_config);
+                } else {
+                    payload.limit_config = {};
+                }
+            } catch(e) {
+                return setNotify({ msg: 'Invalid Limit Config JSON', type: 'error' });
+            }
+
+            // Collect Routes
             const routes = [];
             channels.forEach(ch => {
                 if (formData.get(`channel_${ch.id}`) === 'on') {
@@ -89,22 +87,23 @@ window.TokenManager = ({ user, setNotify }) => {
                     routes.push({ channel_id: ch.id, weight });
                 }
             });
+
             if (routes.length === 0 && !editingToken) {
                 return setNotify({ msg: 'Please bind at least one channel', type: 'error' });
             }
-            if (routes.length > 0) data.routes = routes;
+            if (routes.length > 0) payload.routes = routes;
         }
 
         try {
             let res;
             if (editingToken) {
-                await window.api.tokens.update(editingToken.id, data);
+                await window.api.tokens.update(editingToken.id, payload);
                 setNotify({ msg: 'Token updated', type: 'success' });
                 setShowModal(false);
                 load();
             } else {
-                data.status = 1;
-                res = await window.api.tokens.create(data);
+                // Admin create logic (status is 1 by default, but payload has it)
+                res = await window.api.tokens.create(payload);
                 setNotify({ msg: 'Token created', type: 'success' });
                 setShowModal(false);
                 setSuccessData(res.data);
