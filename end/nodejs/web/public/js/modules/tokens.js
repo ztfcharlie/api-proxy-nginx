@@ -12,17 +12,10 @@ window.TokenManager = ({ setNotify }) => {
     // Filter States
     const [filterUser, setFilterUser] = useState('');
     const [filterType, setFilterType] = useState('');
-    const [filterSearch, setFilterSearch] = useState(''); // Name or Key
-    const [filterChannel, setFilterChannel] = useState(''); // Channel ID
+    const [filterSearch, setFilterSearch] = useState('');
+    const [filterChannel, setFilterChannel] = useState('');
 
-    // Debounce search
-    useEffect(() => {
-        const timer = setTimeout(() => {
-            load();
-        }, 500);
-        return () => clearTimeout(timer);
-    }, [filterUser, filterType, filterSearch, filterChannel]);
-
+    // Load Data
     const load = async () => {
         setLoading(true);
         try {
@@ -35,7 +28,7 @@ window.TokenManager = ({ setNotify }) => {
             const [resTokens, resChannels, resUsers] = await Promise.all([
                 window.api.tokens.list(params),
                 window.api.channels.list({ limit: 1000, status: 1 }),
-                window.api.users.list() // Preload for form
+                window.api.users.list()
             ]);
             setTokens(resTokens.data.data || []);
             setChannels(resChannels.data.data || []);
@@ -46,6 +39,12 @@ window.TokenManager = ({ setNotify }) => {
             setLoading(false);
         }
     };
+
+    // Initial load only
+    useEffect(() => { load(); }, []);
+
+    const handleSearch = () => load();
+    const handleKeyDown = (e) => { if (e.key === 'Enter') load(); };
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -127,7 +126,7 @@ window.TokenManager = ({ setNotify }) => {
         return new Date(dateStr).toLocaleDateString();
     };
 
-    const SuccessModal = ({ data, onClose }) => { /* ... same as before ... */
+    const SuccessModal = ({ data, onClose }) => {
         if (!data) return null;
         const isVertex = data.credentials && data.credentials.type === 'service_account';
         const keyDisplay = isVertex ? JSON.stringify(data.credentials, null, 2) : data.credentials?.api_key;
@@ -153,7 +152,7 @@ window.TokenManager = ({ setNotify }) => {
         );
     };
 
-    const TokenForm = ({ token, channels, users, onSubmit, onCancel }) => { /* ... same as before ... */
+    const TokenForm = ({ token, channels, users, onSubmit, onCancel }) => {
         const [type, setType] = useState(token?.type || 'openai');
         const compatibleChannels = channels.filter(ch => ch.type === type);
         return (
@@ -176,7 +175,15 @@ window.TokenManager = ({ setNotify }) => {
                     <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
                     <input name="name" defaultValue={token?.name} required className="w-full border rounded-lg px-3 py-2" />
                 </div>
-                {/* Channel List */}
+                {token && (
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Token Key</label>
+                        <div className="flex">
+                            <input value={token.token_key} readOnly className="flex-1 border rounded-l-lg px-3 py-2 bg-gray-50 font-mono text-gray-500" />
+                            <button type="button" onClick={() => copyToClipboard(token.token_key)} className="px-3 bg-gray-100 border border-l-0 rounded-r-lg hover:bg-gray-200 text-gray-600"><i className="far fa-copy"></i></button>
+                        </div>
+                    </div>
+                )}
                 <div className="border rounded-lg p-4 bg-gray-50">
                     <label className="block text-sm font-bold text-gray-700 mb-3">Bind Channels</label>
                     {compatibleChannels.length === 0 ? <div className="text-sm text-red-500">No active channels found.</div> : (
@@ -203,6 +210,12 @@ window.TokenManager = ({ setNotify }) => {
                     <label className="block text-sm font-medium text-gray-700 mb-1">Limit Config</label>
                     <textarea name="limit_config" rows="2" defaultValue={JSON.stringify(token?.limit_config || {}, null, 2)} className="w-full border rounded-lg px-3 py-2 font-mono text-xs" placeholder='{}'></textarea>
                 </div>
+                {token && (
+                    <div className="flex items-center space-x-2 pt-2 border-t mt-4">
+                        <input type="checkbox" name="status" id="statusCheck" defaultChecked={token.status === 1} className="w-4 h-4 text-blue-600 rounded" />
+                        <label htmlFor="statusCheck" className="text-sm font-medium text-gray-700">Token Active</label>
+                    </div>
+                )}
                 <div className="flex justify-end gap-3 pt-4 border-t">
                     <button type="button" onClick={onCancel} className="px-4 py-2 border rounded">Cancel</button>
                     <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded">Save</button>
@@ -218,15 +231,22 @@ window.TokenManager = ({ setNotify }) => {
                     <h1 className="text-2xl font-bold text-gray-800">Virtual Tokens</h1>
                     <p className="text-gray-500 text-sm">Manage access tokens for users</p>
                 </div>
-                <div className="flex space-x-3">
-                    <input type="text" placeholder="Search User..." className="border rounded-lg px-3 py-2 text-sm w-32" value={filterUser} onChange={e => setFilterUser(e.target.value)} />
-                    <input type="text" placeholder="Search Name/Key..." className="border rounded-lg px-3 py-2 text-sm w-40" value={filterSearch} onChange={e => setFilterSearch(e.target.value)} />
-                    <input type="text" placeholder="Channel ID..." className="border rounded-lg px-3 py-2 text-sm w-24" value={filterChannel} onChange={e => setFilterChannel(e.target.value)} />
+                <div className="flex space-x-2">
+                    <input type="text" placeholder="Search Name/Key..." className="border rounded-lg px-3 py-2 text-sm w-40 focus:ring-2 focus:ring-blue-500 outline-none" value={filterSearch} onChange={e => setFilterSearch(e.target.value)} onKeyDown={handleKeyDown} />
+                    <input type="text" placeholder="User Name..." className="border rounded-lg px-3 py-2 text-sm w-32 focus:ring-2 focus:ring-blue-500 outline-none" value={filterUser} onChange={e => setFilterUser(e.target.value)} onKeyDown={handleKeyDown} />
+                    <input type="text" placeholder="Channel ID..." className="border rounded-lg px-3 py-2 text-sm w-24 focus:ring-2 focus:ring-blue-500 outline-none" value={filterChannel} onChange={e => setFilterChannel(e.target.value)} onKeyDown={handleKeyDown} />
                     
-                    <select className="border rounded-lg px-3 py-2 text-sm bg-white" value={filterType} onChange={e => setFilterType(e.target.value)}>
-                        <option value="">All Types</option><option value="openai">OpenAI</option><option value="vertex">Vertex</option>
+                    <select className="border rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none" value={filterType} onChange={e => setFilterType(e.target.value)}>
+                        <option value="">All Types</option><option value="openai">OpenAI</option><option value="vertex">Vertex</option><option value="azure">Azure</option>
                     </select>
-                    <button onClick={() => { setEditingToken(null); setShowModal(true); }} className="px-4 py-2 bg-blue-600 text-white rounded-lg shadow-sm">Issue</button>
+                    
+                    <button onClick={handleSearch} className="px-3 py-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200 border border-blue-200">
+                        <i className={`fas fa-search ${loading ? 'fa-spin' : ''}`}></i>
+                    </button>
+                    
+                    <button onClick={() => { setEditingToken(null); setShowModal(true); }} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-sm ml-2">
+                        <i className="fas fa-plus mr-2"></i>Issue
+                    </button>
                 </div>
             </div>
 
@@ -236,6 +256,7 @@ window.TokenManager = ({ setNotify }) => {
                         <tr>
                             <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Name</th>
                             <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">User</th>
+                            <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Type</th>
                             <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Routes (Channels)</th>
                             <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Token Key</th>
                             <th className="px-6 py-3 text-left text-xs font-bold text-gray-500 uppercase">Created</th>
@@ -245,6 +266,7 @@ window.TokenManager = ({ setNotify }) => {
                     </thead>
                     <tbody className="divide-y divide-gray-200">
                         {tokens.map(t => {
+                            const user = users.find(u => u.id === t.user_id);
                             const isVertex = t.type === 'vertex';
                             const keyDisplay = isVertex ? 'JSON Key' : (t.token_key.length > 10 ? t.token_key.substring(0, 3) + '...' + t.token_key.substring(t.token_key.length - 3) : t.token_key);
                             
@@ -257,30 +279,32 @@ window.TokenManager = ({ setNotify }) => {
                                             {t.username}
                                         </div>
                                     </td>
+                                    <td className="px-6 py-4 text-sm"><span className="px-2 py-1 bg-gray-100 rounded text-xs uppercase font-bold text-gray-600 border border-gray-200">{t.type}</span></td>
                                     <td className="px-6 py-4 text-sm">
                                         <div className="flex flex-col gap-1">
                                             {t.routes && t.routes.length > 0 ? t.routes.map(r => (
-                                                <span key={r.channel_id} className="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded border border-gray-200 whitespace-nowrap">
-                                                    {r.channel_name} <span className="text-gray-400">#{r.channel_id}</span> <span className="text-blue-500 font-bold">[{r.weight}]</span>
+                                                <span key={r.channel_id} className="text-xs bg-gray-50 text-gray-700 px-2 py-1 rounded border border-gray-200 whitespace-nowrap">
+                                                    {r.channel_name} <span className="text-gray-400">#{r.channel_id}</span> <span className="text-blue-500 font-bold ml-1">W:{r.weight}</span>
                                                 </span>
-                                            )) : <span className="text-red-400 text-xs">No Routes</span>}
+                                            )) : <span className="text-red-400 text-xs italic">No Routes</span>}
                                         </div>
                                     </td>
                                     <td className="px-6 py-4 text-sm font-mono text-gray-500">
                                         <div className="flex items-center space-x-2">
                                             <span>{keyDisplay}</span>
-                                            <button onClick={() => copyToClipboard(t.token_key)} className="text-gray-400 hover:text-blue-600"><i className="far fa-copy"></i></button>
+                                            <button onClick={() => copyToClipboard(t.token_key)} className="text-gray-400 hover:text-blue-600 transition-colors"><i className="far fa-copy"></i></button>
                                         </div>
                                     </td>
                                     <td className="px-6 py-4 text-xs text-gray-500">{formatDate(t.created_at)}</td>
                                     <td className="px-6 py-4 text-sm"><span className={`px-2 py-1 rounded-full text-xs font-bold ${t.status ? 'bg-green-100 text-green-700' : 'bg-red-100'}`}>{t.status ? 'Active' : 'Disabled'}</span></td>
                                     <td className="px-6 py-4 text-right text-sm space-x-2">
-                                        <button onClick={() => { setEditingToken(t); setShowModal(true); }} className="text-blue-600 font-medium">Edit</button>
-                                        <button onClick={() => handleDelete(t.id)} className="text-red-600 font-medium">Del</button>
+                                        <button onClick={() => { setEditingToken(t); setShowModal(true); }} className="text-blue-600 font-medium hover:underline">Edit</button>
+                                        <button onClick={() => handleDelete(t.id)} className="text-red-600 font-medium hover:underline">Del</button>
                                     </td>
                                 </tr>
                             );
                         })}
+                        {tokens.length === 0 && !loading && <tr><td colSpan="8" className="px-6 py-12 text-center text-gray-400 italic">No tokens found</td></tr>}
                     </tbody>
                 </table>
             </div>
