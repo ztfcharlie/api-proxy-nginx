@@ -9,7 +9,8 @@ window.api = {
         list: (params) => axios.get('/api/admin/channels', { params }),
         create: (data) => axios.post('/api/admin/channels', data),
         update: (id, data) => axios.put(`/api/admin/channels/${id}`, data),
-        delete: (id) => axios.delete(`/api/admin/channels/${id}`)
+        delete: (id) => axios.delete(`/api/admin/channels/${id}`),
+        testConnection: (data) => axios.post('/api/admin/channels/test-connection', data)
     },
     tokens: {
         list: (params) => axios.get('/api/admin/tokens', { params }),

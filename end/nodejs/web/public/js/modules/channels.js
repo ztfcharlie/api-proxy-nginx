@@ -13,6 +13,39 @@ const ChannelForm = ({ channel, onSubmit, onCancel }) => {
         else setType('openai');
     }, [channel]);
 
+    const handleTestConnection = async () => {
+        // Collect data from form manually since state might not be fully sync
+        const form = document.getElementById('channelForm');
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData.entries());
+        
+        // Prepare payload
+        const payload = {
+            type: data.type,
+            credentials: data.credentials_input || (channel ? channel.credentials : ''),
+            extra_config: {}
+        };
+
+        if (data.type === 'azure') {
+            payload.extra_config = { endpoint: data.azure_endpoint, api_version: data.azure_api_version };
+        }
+        // Vertex credentials handling
+        if (data.type === 'vertex' && payload.credentials) {
+             // Try to parse if it's a string, backend expects object or string but let's send what we have
+        }
+
+        try {
+            const res = await window.api.channels.testConnection(payload);
+            if (res.data.success) {
+                alert('✅ ' + res.data.message);
+            } else {
+                alert('❌ Test Failed: ' + res.data.message);
+            }
+        } catch (e) {
+            alert('❌ Error: ' + (e.response?.data?.error || e.message));
+        }
+    };
+
     return (
         <form id="channelForm" onSubmit={onSubmit} className="space-y-4">
             <div className="grid grid-cols-2 gap-4">
@@ -45,6 +78,11 @@ const ChannelForm = ({ channel, onSubmit, onCancel }) => {
                         defaultValue=""
                         className="w-full border rounded-lg px-3 py-2 font-mono text-xs bg-gray-50" 
                         placeholder={channel ? "••••••••" : (type === 'vertex' ? '{ "type": "service_account", ... }' : 'sk-...')} />
+                    <div className="mt-2 text-right">
+                        <button type="button" onClick={handleTestConnection} className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-1 rounded border transition-colors">
+                            <i className="fas fa-plug mr-1"></i> Test Credentials
+                        </button>
+                    </div>
                 </div>
             )}
 

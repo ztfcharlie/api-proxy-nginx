@@ -1,22 +1,19 @@
 const express = require('express');
 const router = express.Router();
+const axios = require('axios');
 const db = require('../../config/db').dbPool;
 const logger = require('../../services/LoggerService');
 const SyncManager = require('../../services/SyncManager');
-const serviceAccountManager = require('../../services/ServiceAccountManager');
 const { GoogleAuth } = require('google-auth-library');
+const AwsSigner = require('../../utils/aws_signer');
 
-// [Added] 模型配置校验辅助函数
+// 模型配置校验辅助函数
 async function validateModelsConfig(modelsConfig) {
     if (!modelsConfig || Object.keys(modelsConfig).length === 0) return;
 
-    // 1. 获取所有相关模型的全局价格
-    // 为了性能，可以只查 modelsConfig 里涉及的模型 ID
     const modelNames = Object.keys(modelsConfig).filter(k => k !== 'default');
     if (modelNames.length === 0) return;
 
-    // 这里的 modelNames 必须对应 sys_models 里的 name (varchar)
-    // 注意 SQL IN 查询的处理
     const placeholders = modelNames.map(() => '?').join(',');
     const [models] = await db.query(
         `SELECT name, price_input, price_output, price_request, price_time FROM sys_models WHERE name IN (${placeholders})`, 
@@ -26,29 +23,10 @@ async function validateModelsConfig(modelsConfig) {
     const modelMap = {};
     models.forEach(m => modelMap[m.name] = m);
 
-    // 2. 逐个检查
     for (const [modelName, config] of Object.entries(modelsConfig)) {
-        if (modelName === 'default') continue; // 默认配置暂不强校验，或需要查默认策略
-
+        if (modelName === 'default') continue;
         const globalModel = modelMap[modelName];
-        if (!globalModel) {
-            // throw new Error(`Model '${modelName}' does not exist in Model Management. Please add it first.`);
-            // 暂时允许不存在的模型（可能系统里没录入但上游支持）
-            continue;
-        }
-
-        // 检查模式与价格的匹配
-        if (config.mode === 'token') {
-            // 允许 input 或 output 其中一个为 0 (有些模型只收输出费)，但不能全为 0
-            if (parseFloat(globalModel.price_input || 0) <= 0 && parseFloat(globalModel.price_output || 0) <= 0) {
-                // throw new Error(`Model '${modelName}' is set to 'Token Billing', but global Input/Output prices are not set (or 0).`);
-            }
-        } else if (config.mode === 'request') {
-            if (parseFloat(globalModel.price_request || 0) <= 0) {
-                // throw new Error(`Model '${modelName}' is set to 'Request Billing', but global Request Price is not set (or 0).`);
-            }
-        }
-        // 未来扩展: mode === 'time' check time_price
+        if (!globalModel) continue; 
     }
 }
 
@@ -72,11 +50,9 @@ router.get('/', async (req, res) => {
             params.push(status);
         }
         
-        // 总数查询
         const countQuery = query.replace("SELECT id, name, type, extra_config, models_config, status, last_error, created_at", "SELECT COUNT(*) as total");
         const [countResult] = await db.query(countQuery, params);
         
-        // 数据查询
         query += " ORDER BY id DESC LIMIT ? OFFSET ?";
         params.push(parseInt(limit), offset);
         const [channels] = await db.query(query, params);
@@ -118,17 +94,11 @@ router.post('/', async (req, res) => {
         return res.status(400).json({ error: "Missing required fields: name, type, credentials" });
     }
     
-    // 简单的凭证校验
     if (type === 'vertex') {
-        try {
-            JSON.parse(credentials);
-        } catch (e) {
-            return res.status(400).json({ error: "Credentials for Vertex must be valid JSON" });
-        }
+        try { JSON.parse(credentials); } catch (e) { return res.status(400).json({ error: "Credentials for Vertex must be valid JSON" }); }
     }
 
     try {
-        // [Added] 校验计费配置完整性
         await validateModelsConfig(models_config);
 
         const [result] = await db.query(
@@ -137,15 +107,13 @@ router.post('/', async (req, res) => {
         );
         
         const newId = result.insertId;
-        
-        // 触发缓存同步
         const [newChannel] = await db.query("SELECT * FROM sys_channels WHERE id = ?", [newId]);
         await SyncManager.updateChannelCache(newChannel[0]);
         
         res.status(201).json({ id: newId, message: "Channel created successfully" });
     } catch (err) {
         logger.error('Create channel failed:', err);
-        res.status(500).json({ error: err.message }); // 这里会返回具体的校验错误信息
+        res.status(500).json({ error: err.message });
     }
 });
 
@@ -157,7 +125,6 @@ router.put('/:id', async (req, res) => {
     const { name, type, credentials, extra_config, models_config, status } = req.body;
     
     try {
-        // [Added] 校验计费配置完整性 (仅当更新了 models_config 时)
         if (models_config) {
             await validateModelsConfig(models_config);
         }
@@ -177,7 +144,6 @@ router.put('/:id', async (req, res) => {
         params.push(id);
         await db.query(`UPDATE sys_channels SET ${updates.join(", ")} WHERE id = ?`, params);
         
-        // 触发缓存同步
         const [channel] = await db.query("SELECT * FROM sys_channels WHERE id = ?", [id]);
         if (channel.length > 0) {
             await SyncManager.updateChannelCache(channel[0]);
@@ -196,15 +162,12 @@ router.put('/:id', async (req, res) => {
 router.delete('/:id', async (req, res) => {
     const { id } = req.params;
     try {
-        // 检查是否被引用
         const [refs] = await db.query("SELECT COUNT(*) as count FROM sys_token_routes WHERE channel_id = ?", [id]);
         if (refs[0].count > 0) {
             return res.status(400).json({ error: "Cannot delete channel: it is used by existing tokens" });
         }
         
         await db.query("DELETE FROM sys_channels WHERE id = ?", [id]);
-        
-        // 清除 Redis 缓存
         if (SyncManager.redis) {
             await SyncManager.redis.delete('channel:' + id);
         }
@@ -217,14 +180,14 @@ router.delete('/:id', async (req, res) => {
 });
 
 /**
- * 测试连接
+ * 测试连接 (Key Validation)
  */
 router.post('/test-connection', async (req, res) => {
     const { type, credentials, extra_config } = req.body;
     
     try {
+        // Vertex AI
         if (type === 'vertex') {
-            // 测试 Vertex Service Account
             let creds = credentials;
             if (typeof creds === 'string') creds = JSON.parse(creds);
             
@@ -236,23 +199,98 @@ router.post('/test-connection', async (req, res) => {
             const tokenRes = await client.getAccessToken();
             
             if (tokenRes.token) {
-                res.json({ success: true, message: "Vertex authentication successful" });
+                return res.json({ success: true, message: "Vertex authentication successful" });
             } else {
-                res.json({ success: false, message: "Failed to get token" });
+                return res.json({ success: false, message: "Failed to get token" });
             }
         } 
-        // TODO: 添加 Azure / OpenAI 测试逻辑 (简单 curl 请求)
+        
+        // AWS Bedrock (Real Test via AwsSigner)
+        else if (type === 'aws_bedrock') {
+            const region = extra_config?.region || 'us-east-1';
+            const accessKeyId = extra_config?.access_key_id;
+            const secretAccessKey = extra_config?.secret_access_key;
+
+            if (!accessKeyId || !secretAccessKey) {
+                return res.status(400).json({ success: false, message: "Missing AK/SK" });
+            }
+
+            const host = `bedrock.${region}.amazonaws.com`;
+            const path = '/foundation-models'; // Lightweight list models call
+            const method = 'GET';
+            
+            // AWS requires x-amz-date
+            const datetime = new Date().toISOString().replace(/[:\-]|\.\d{3}/g, '');
+            const headers = {
+                'host': host,
+                'x-amz-date': datetime
+            };
+
+            const authHeader = AwsSigner.sign({
+                method,
+                path,
+                headers,
+                region,
+                accessKeyId,
+                secretAccessKey,
+                service: 'bedrock'
+            });
+
+            headers['Authorization'] = authHeader;
+
+            await axios.get(`https://${host}${path}`, { headers, timeout: 5000 });
+            return res.json({ success: true, message: "AWS Bedrock Connection Successful" });
+        }
+
+        // OpenAI / DeepSeek / Qwen
+        else if (type === 'openai' || type === 'deepseek' || type === 'qwen') {
+            let url = 'https://api.openai.com/v1/models';
+            if (type === 'deepseek') url = 'https://api.deepseek.com/models';
+            if (type === 'qwen') url = 'https://dashscope.aliyuncs.com/compatible-mode/v1/models';
+            
+            await axios.get(url, {
+                headers: { 'Authorization': `Bearer ${credentials}` },
+                timeout: 5000
+            });
+            return res.json({ success: true, message: `${type} API Key is valid` });
+        }
+
+        // Anthropic
+        else if (type === 'anthropic') {
+            // models endpoint
+            await axios.get('https://api.anthropic.com/v1/models', {
+                headers: { 
+                    'x-api-key': credentials, 
+                    'anthropic-version': '2023-06-01'
+                },
+                timeout: 5000
+            });
+            return res.json({ success: true, message: "Anthropic API Key is valid" });
+        }
+
+        // Azure
+        else if (type === 'azure') {
+            const endpoint = extra_config?.endpoint;
+            const apiVersion = extra_config?.api_version || '2023-05-15';
+            if (!endpoint) throw new Error("Endpoint is required for Azure");
+            
+            const url = `${endpoint}/openai/models?api-version=${apiVersion}`;
+            await axios.get(url, {
+                headers: { 'api-key': credentials },
+                timeout: 5000
+            });
+            return res.json({ success: true, message: "Azure API Key & Endpoint are valid" });
+        }
+
         else {
             res.json({ success: true, message: `Test skipped for ${type} (not implemented yet)` });
         }
     } catch (err) {
-        res.status(400).json({ success: false, error: err.message });
+        const status = err.response?.status;
+        const msg = err.response?.data?.error?.message || err.response?.data?.message || err.message;
+        res.status(200).json({ success: false, message: `Validation Failed (${status || 'Err'}): ${msg}` });
     }
 });
-
-const axios = require('axios');
-
-// ... existing code ...
 
 /**
  * 测试指定模型的连通性
@@ -272,7 +310,6 @@ router.post('/:id/test-model', async (req, res) => {
 
         // 通用构造逻辑
         if (channel.type === 'openai' || channel.type === 'deepseek' || channel.type === 'qwen' || channel.type === 'azure') {
-            // 基础配置
             headers['Authorization'] = `Bearer ${channel.credentials}`;
             headers['Content-Type'] = 'application/json';
             body = {
@@ -281,14 +318,11 @@ router.post('/:id/test-model', async (req, res) => {
                 max_tokens: 1
             };
 
-            // 厂商特定 URL
             if (channel.type === 'openai') url = 'https://api.openai.com/v1/chat/completions';
-            else if (channel.type === 'deepseek') url = 'https://api.deepseek.com/v1/chat/completions';
+            else if (channel.type === 'deepseek') url = 'https://api.deepseek.com/chat/completions'; // Fixed URL
             else if (channel.type === 'qwen') url = 'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions';
             else if (channel.type === 'azure') {
                 const extra = typeof channel.extra_config === 'string' ? JSON.parse(channel.extra_config) : channel.extra_config;
-                // Azure URL: https://{resource}.openai.azure.com/openai/deployments/{model}/chat/completions?api-version={version}
-                // 这里比较复杂，需要 deployment name。通常 model name = deployment name
                 if (!extra || !extra.endpoint) throw new Error("Azure endpoint missing");
                 const apiVersion = extra.api_version || '2023-05-15';
                 url = `${extra.endpoint}/openai/deployments/${model}/chat/completions?api-version=${apiVersion}`;
