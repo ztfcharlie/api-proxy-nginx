@@ -23,16 +23,22 @@ function generateRSAKeyPair() {
  */
 router.get('/', async (req, res) => {
     try {
-        const { user_id, type, username, page = 1, limit = 20 } = req.query;
+        const { user_id, type, username, channel_id, search, page = 1, limit = 20 } = req.query;
         const offset = (page - 1) * limit;
         
         let query = `
-            SELECT t.*, u.username 
+            SELECT DISTINCT t.*, u.username 
             FROM sys_virtual_tokens t
             JOIN sys_users u ON t.user_id = u.id
-            WHERE 1=1
         `;
         let params = [];
+
+        // Join routes if filtering by channel
+        if (channel_id) {
+            query += " JOIN sys_token_routes r ON t.id = r.virtual_token_id";
+        }
+        
+        query += " WHERE 1=1";
         
         if (user_id) {
             query += " AND t.user_id = ?";
@@ -45,6 +51,14 @@ router.get('/', async (req, res) => {
         if (type) {
             query += " AND t.type = ?";
             params.push(type);
+        }
+        if (channel_id) {
+            query += " AND r.channel_id = ?";
+            params.push(channel_id);
+        }
+        if (search) {
+            query += " AND (t.name LIKE ? OR t.token_key LIKE ?)";
+            params.push(`%${search}%`, `%${search}%`);
         }
         
         query += " ORDER BY t.id DESC LIMIT ? OFFSET ?";

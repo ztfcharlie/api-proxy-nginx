@@ -1,10 +1,15 @@
-const { useState, useEffect } = React;
+const { useState, useEffect, useMemo } = React;
 
 window.ModelManager = ({ setNotify }) => {
     const [models, setModels] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showModal, setShowModal] = useState(false);
     const [editingModel, setEditingModel] = useState(null);
+    
+    // Filter & Sort States
+    const [searchTerm, setSearchTerm] = useState('');
+    const [filterProvider, setFilterProvider] = useState('');
+    const [sortConfig, setSortConfig] = useState({ key: 'name', direction: 'asc' });
 
     const load = async () => {
         setLoading(true);
@@ -59,11 +64,68 @@ window.ModelManager = ({ setNotify }) => {
     const renderProviders = (providerStr) => {
         try {
             const parsed = JSON.parse(providerStr);
-            if (Array.isArray(parsed)) return parsed.map(p => <span key={p} className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-xs mr-1 uppercase border border-gray-200">{p.replace('_', ' ')}</span>);
+            if (Array.isArray(parsed)) return (
+                <div className="flex flex-wrap gap-1">
+                    {parsed.map(p => (
+                        <span key={p} className="bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded text-xs uppercase border border-gray-200 whitespace-nowrap">
+                            {p.replace('_', ' ')}
+                        </span>
+                    ))}
+                </div>
+            );
             return <span className="uppercase">{providerStr}</span>;
         } catch (e) {
             return <span className="uppercase">{providerStr}</span>;
         }
+    };
+
+    // Filter and Sort Logic
+    const processedModels = useMemo(() => {
+        let result = [...models];
+
+        // 1. Filter
+        if (searchTerm) {
+            const lower = searchTerm.toLowerCase();
+            result = result.filter(m => m.name.toLowerCase().includes(lower));
+        }
+        if (filterProvider) {
+            result = result.filter(m => {
+                try {
+                    const parsed = JSON.parse(m.provider);
+                    return Array.isArray(parsed) ? parsed.includes(filterProvider) : m.provider === filterProvider;
+                } catch { return m.provider === filterProvider; }
+            });
+        }
+
+        // 2. Sort
+        if (sortConfig.key) {
+            result.sort((a, b) => {
+                let valA = a[sortConfig.key];
+                let valB = b[sortConfig.key];
+                
+                // Special handling for numeric sorting if needed, but names are strings
+                if (typeof valA === 'string') valA = valA.toLowerCase();
+                if (typeof valB === 'string') valB = valB.toLowerCase();
+
+                if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+                if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+                return 0;
+            });
+        }
+
+        return result;
+    }, [models, searchTerm, filterProvider, sortConfig]);
+
+    const handleSort = (key) => {
+        setSortConfig(current => ({
+            key,
+            direction: current.key === key && current.direction === 'asc' ? 'desc' : 'asc'
+        }));
+    };
+
+    const SortIcon = ({ column }) => {
+        if (sortConfig.key !== column) return <i className="fas fa-sort text-gray-300 ml-1"></i>;
+        return <i className={`fas fa-sort-${sortConfig.direction === 'asc' ? 'up' : 'down'} text-blue-500 ml-1`}></i>;
     };
 
     return (
@@ -73,19 +135,42 @@ window.ModelManager = ({ setNotify }) => {
                     <h1 className="text-2xl font-bold text-gray-800">Models</h1>
                     <p className="text-gray-500 text-sm">Manage supported models and pricing</p>
                 </div>
-                <button onClick={()=>{setEditingModel(null);setShowModal(true)}} 
-                    className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-sm">
-                    <i className="fas fa-plus mr-2"></i>New Model
-                </button>
+                <div className="flex space-x-3">
+                    <input 
+                        type="text" 
+                        placeholder="Search models..." 
+                        className="border rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500 w-64"
+                        value={searchTerm}
+                        onChange={e => setSearchTerm(e.target.value)}
+                    />
+                    <select 
+                        className="border rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none"
+                        value={filterProvider}
+                        onChange={e => setFilterProvider(e.target.value)}
+                    >
+                        <option value="">All Providers</option>
+                        {['openai', 'azure', 'vertex', 'anthropic', 'aws_bedrock', 'deepseek', 'qwen'].map(p => (
+                            <option key={p} value={p}>{p.replace('_', ' ').toUpperCase()}</option>
+                        ))}
+                    </select>
+                    <button onClick={()=>{setEditingModel(null);setShowModal(true)}} 
+                        className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-sm flex items-center">
+                        <i className="fas fa-plus mr-2"></i>New Model
+                    </button>
+                </div>
             </div>
 
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex-1 overflow-y-auto">
                 <div className="overflow-x-auto">
                     <table className="min-w-full divide-y divide-gray-200 text-sm">
-                        <thead className="bg-gray-50">
+                        <thead className="bg-gray-50 sticky top-0 z-10">
                             <tr>
-                                <th className="px-4 py-3 text-left font-bold text-gray-500 uppercase tracking-wider">Name</th>
-                                <th className="px-4 py-3 text-left font-bold text-gray-500 uppercase tracking-wider">Provider</th>
+                                <th className="px-4 py-3 text-left font-bold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => handleSort('name')}>
+                                    Name <SortIcon column="name" />
+                                </th>
+                                <th className="px-4 py-3 text-left font-bold text-gray-500 uppercase tracking-wider cursor-pointer hover:bg-gray-100" onClick={() => handleSort('provider')}>
+                                    Provider <SortIcon column="provider" />
+                                </th>
                                 <th className="px-4 py-3 text-left font-bold text-gray-500 uppercase tracking-wider">Input (1M)</th>
                                 <th className="px-4 py-3 text-left font-bold text-gray-500 uppercase tracking-wider">Output (1M)</th>
                                 <th className="px-4 py-3 text-left font-bold text-gray-500 uppercase tracking-wider">Request $</th>
@@ -97,10 +182,12 @@ window.ModelManager = ({ setNotify }) => {
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200">
-                            {models.map(m => (
+                            {processedModels.map(m => (
                                 <tr key={m.id} className="hover:bg-gray-50">
                                     <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">{m.name}</td>
-                                    <td className="px-4 py-3 text-gray-500 whitespace-normal max-w-xs leading-tight">{renderProviders(m.provider)}</td>
+                                    <td className="px-4 py-3 text-gray-500 whitespace-normal max-w-xs leading-tight">
+                                        {renderProviders(m.provider)}
+                                    </td>
                                     <td className="px-4 py-3 text-gray-500 font-mono">{m.price_input > 0 ? m.price_input : '-'}</td>
                                     <td className="px-4 py-3 text-gray-500 font-mono">{m.price_output > 0 ? m.price_output : '-'}</td>
                                     <td className="px-4 py-3 text-gray-500 font-mono">{m.price_request > 0 ? m.price_request : '-'}</td>
@@ -118,7 +205,7 @@ window.ModelManager = ({ setNotify }) => {
                                     </td>
                                 </tr>
                             ))}
-                            {models.length === 0 && !loading && <tr><td colSpan="10" className="px-6 py-8 text-center text-gray-400">No models found</td></tr>}
+                            {processedModels.length === 0 && !loading && <tr><td colSpan="10" className="px-6 py-8 text-center text-gray-400">No models found</td></tr>}
                         </tbody>
                     </table>
                 </div>
@@ -168,54 +255,55 @@ window.ModelManager = ({ setNotify }) => {
                                 </div>
                             </div>
                             
-                                                                {/* Pricing Rows */}
-                                                                <div className="grid grid-cols-2 gap-4">
-                                                                    <div>
-                                                                        <label className="block text-sm font-medium text-gray-700 mb-1">Input Price ($/1M)</label>
-                                                                        <input type="number" step="0.000001" name="price_input" defaultValue={editingModel?.price_input || 0} className="w-full border rounded-lg px-3 py-2" />
-                                                                    </div>
-                                                                    <div>
-                                                                        <label className="block text-sm font-medium text-gray-700 mb-1">Output Price ($/1M)</label>
-                                                                        <input type="number" step="0.000001" name="price_output" defaultValue={editingModel?.price_output || 0} className="w-full border rounded-lg px-3 py-2" />
-                                                                    </div>
-                                                                </div>
-                            
-                                                                <div className="grid grid-cols-2 gap-4">
-                                                                    <div>
-                                                                        <label className="block text-sm font-medium text-gray-700 mb-1">Cache Price ($/1M)</label>
-                                                                        <input type="number" step="0.000001" name="price_cache" defaultValue={editingModel?.price_cache || 0} className="w-full border rounded-lg px-3 py-2" />
-                                                                    </div>
-                                                                    <div>
-                                                                        <label className="block text-sm font-medium text-gray-700 mb-1">Time Price ($/sec)</label>
-                                                                        <input type="number" step="0.000001" name="price_time" defaultValue={editingModel?.price_time || 0} className="w-full border rounded-lg px-3 py-2" />
-                                                                    </div>
-                                                                </div>
+                            {/* Pricing Rows */}
                             <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Request Price ($/req)</label>
-                                    <input type="number" step="0.000001" name="price_request" defaultValue={editingModel?.price_request || 0} className="w-full border rounded-lg px-3 py-2" />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Default RPM</label>
-                                    <input type="number" name="default_rpm" defaultValue={editingModel?.default_rpm || 1000} className="w-full border rounded-lg px-3 py-2" placeholder="1000" />
-                                </div>
-                            </div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Input Price ($/1M)</label>
+                                    <input type="number" step="0.000001" name="price_input" defaultValue={editingModel?.price_input || 0} className="w-full border rounded-lg px-3 py-2" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Output Price ($/1M)</label>
+                                            <input type="number" step="0.000001" name="price_output" defaultValue={editingModel?.price_output || 0} className="w-full border rounded-lg px-3 py-2" />
+                                        </div>
+                                    </div>
 
-                            {editingModel && (
-                                <div className="flex items-center space-x-2 pt-2">
-                                    <input type="checkbox" name="status" id="statusCheck" defaultChecked={editingModel.status === 1} className="w-4 h-4 text-blue-600 rounded" />
-                                    <label htmlFor="statusCheck" className="text-sm font-medium text-gray-700">Model Active</label>
-                                </div>
-                            )}
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Cache Price ($/1M)</label>
+                                            <input type="number" step="0.000001" name="price_cache" defaultValue={editingModel?.price_cache || 0} className="w-full border rounded-lg px-3 py-2" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Time Price ($/sec)</label>
+                                            <input type="number" step="0.000001" name="price_time" defaultValue={editingModel?.price_time || 0} className="w-full border rounded-lg px-3 py-2" />
+                                        </div>
+                                    </div>
 
-                            <div className="flex justify-end gap-3 pt-4 border-t mt-4">
-                                <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 border rounded-lg hover:bg-gray-50">Cancel</button>
-                                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Save</button>
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Request Price ($/req)</label>
+                                            <input type="number" step="0.000001" name="price_request" defaultValue={editingModel?.price_request || 0} className="w-full border rounded-lg px-3 py-2" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Default RPM</label>
+                                            <input type="number" name="default_rpm" defaultValue={editingModel?.default_rpm || 1000} className="w-full border rounded-lg px-3 py-2" placeholder="1000" />
+                                        </div>
+                                    </div>
+
+                                    {editingModel && (
+                                        <div className="flex items-center space-x-2 pt-2">
+                                            <input type="checkbox" name="status" id="statusCheck" defaultChecked={editingModel.status === 1} className="w-4 h-4 text-blue-600 rounded" />
+                                            <label htmlFor="statusCheck" className="text-sm font-medium text-gray-700">Model Active</label>
+                                        </div>
+                                    )}
+
+                                    <div className="flex justify-end gap-3 pt-4 border-t mt-4">
+                                        <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 border rounded-lg hover:bg-gray-50">Cancel</button>
+                                        <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Save</button>
+                                    </div>
+                                </form>
                             </div>
-                        </form>
-                    </div>
+                        </div>
+                    )}
                 </div>
-            )}
-        </div>
-    );
+            );
 };
