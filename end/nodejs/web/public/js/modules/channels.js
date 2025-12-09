@@ -100,9 +100,9 @@ const ChannelForm = ({ channel, onSubmit, onCancel }) => {
 };
 
 const ModelConfigForm = ({ channel, allModels, onSubmit, onCancel }) => {
-    // 1. Parse existing config
     const [enabledModels, setEnabledModels] = useState([]);
     const [filteredAvailable, setFilteredAvailable] = useState([]);
+    const [testingModel, setTestingModel] = useState(null);
 
     useEffect(() => {
         if (!allModels) return;
@@ -149,7 +149,7 @@ const ModelConfigForm = ({ channel, allModels, onSubmit, onCancel }) => {
         
         setEnabledModels(selected);
         setFilteredAvailable(available);
-    }, [allModels, channel]); // Depend on channel object (id/type/config)
+    }, [allModels, channel]);
 
     const addModel = (model) => {
         const defaultRpm = model.default_rpm || 5000;
@@ -160,7 +160,6 @@ const ModelConfigForm = ({ channel, allModels, onSubmit, onCancel }) => {
     const removeModel = (modelName) => {
         const modelInfo = allModels.find(m => m.name === modelName);
         if (modelInfo) {
-            // Check compatibility again to see if it should go back to left list
             let providers = [];
             try {
                 const parsed = JSON.parse(modelInfo.provider);
@@ -188,101 +187,132 @@ const ModelConfigForm = ({ channel, allModels, onSubmit, onCancel }) => {
         ));
     };
 
-            const [testingModel, setTestingModel] = useState(null);
-    
-            const handleTestModel = async (modelName) => {
-                setTestingModel(modelName);
-                try {
-                    // Use direct axios if not in api lib, or add to api lib. 
-                    // Assuming direct call for now to keep it contained.
-                    const res = await axios.post(`/api/admin/channels/${channel.id}/test-model`, { model: modelName });
-                    if (res.data.success) {
-                        setNotify({ msg: `Test passed: ${res.data.duration}ms`, type: 'success' });
-                    } else {
-                        setNotify({ msg: 'Test failed', type: 'error' });
-                    }
-                } catch (err) {
-                    setNotify({ msg: 'Test error: ' + (err.response?.data?.error || err.message), type: 'error' });
-                } finally {
-                    setTestingModel(null);
-                }
+    const handleTestModel = async (modelName) => {
+        setTestingModel(modelName);
+        try {
+            const res = await axios.post(`/api/admin/channels/${channel.id}/test-model`, { model: modelName });
+            if (res.data.success) {
+                // Using alert or a prop notify? Since notify is in parent, we might not have it here. 
+                // Wait, ChannelsManager passes setNotify? No, ModelConfigForm props don't have it.
+                // We should probably rely on console or simplistic alert for this sub-component if we didn't pass setNotify.
+                // Or assume window.Notification exists? No. 
+                // Let's just alert for now or try to use parent's context if passed.
+                alert(`Test passed: ${res.data.duration}ms`);
+            } else {
+                alert('Test failed');
+            }
+        } catch (err) {
+            alert('Test error: ' + (err.response?.data?.error || err.message));
+        } finally {
+            setTestingModel(null);
+        }
+    };
+
+    // [FIX] Define handleSave properly
+    const handleSave = (e) => {
+        e.preventDefault();
+        const newConfigJson = {};
+        enabledModels.forEach(m => {
+            newConfigJson[m.name] = {
+                mapTo: m.mapTo || null,
+                rpm: m.rpm ? parseInt(m.rpm) : null,
+                mode: m.mode
             };
-    
-            return (
-                <div className="flex flex-col h-full">
-                    <div className="flex-1 flex gap-4 overflow-hidden">
-                        {/* Left: Available */}
-                        {/* ... (Left panel code remains same) ... */}
-                        
-                        {/* Right: Configured */}
-                        <div className="flex-1 flex flex-col border rounded-lg bg-white">
-                            {/* ... Header ... */}
-                            <div className="p-3 border-b bg-gray-100 font-bold text-sm text-gray-700 flex justify-between">
-                                <span>Selected Models ({enabledModels.length})</span>
-                            </div>
-                            <div className="flex-1 overflow-y-auto p-0">
-                                <table className="w-full text-left border-collapse">
-                                    <thead className="bg-gray-50 text-xs text-gray-500 uppercase sticky top-0 z-10">
-                                        <tr>
-                                            <th className="p-3 border-b">Model Name</th>
-                                            <th className="p-3 border-b w-32">RPM</th>
-                                            <th className="p-3 border-b w-32">Billing</th>
-                                            <th className="p-3 border-b w-20 text-center">Actions</th>
-                                        </tr>
-                                    </thead>
-                                                                    <tbody className="text-sm">
-                                                                        {enabledModels.map(m => {
-                                                                            const modelInfo = allModels.find(x => x.name === m.name) || {};
-                                                                            const canToken = (modelInfo?.price_input > 0 || modelInfo?.price_output > 0);
-                                                                            const canRequest = (modelInfo?.price_request > 0);                                            const canTime = (modelInfo?.price_time > 0); 
-                                            const canParam = true; 
-                                            const isCurrentInvalid = (m.mode === 'token' && !canToken) || 
-                                                                   (m.mode === 'request' && !canRequest) ||
-                                                                   (m.mode === 'time' && !canTime);
-    
-                                            return (
-                                            <tr key={m.name} className="border-b hover:bg-gray-50 group">
-                                                <td className="p-3 font-medium text-gray-700">{m.name}</td>
-                                                <td className="p-3">
-                                                    <input type="number" className="w-full border rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-500 outline-none min-w-[100px]"
-                                                        placeholder={modelInfo?.default_rpm || 5000}
-                                                        value={m.rpm}
-                                                        onChange={(e) => updateModelConfig(m.name, 'rpm', e.target.value)} />
-                                                </td>
-                                                <td className="p-3">
-                                                    <select className={`w-full border rounded px-1 py-1 text-xs focus:ring-1 focus:ring-blue-500 outline-none ${isCurrentInvalid ? 'border-red-500 bg-red-50' : 'bg-white'}`}
-                                                        value={m.mode}
-                                                        onChange={(e) => updateModelConfig(m.name, 'mode', e.target.value)}>
-                                                        
-                                                        {(canToken || m.mode === 'token') && <option value="token" disabled={!canToken}>Token {!canToken?'(Invalid)':''}</option>}
-                                                        {(canRequest || m.mode === 'request') && <option value="request" disabled={!canRequest}>Request {!canRequest?'(Invalid)':''}</option>}
-                                                        {(canTime || m.mode === 'time') && <option value="time" disabled={!canTime}>Time {!canTime?'(Invalid)':''}</option>}
-                                                        {(canParam || m.mode === 'param') && <option value="param" disabled={!canParam}>Param</option>}
-                                                        
-                                                        {!canToken && !canRequest && !canTime && !canParam && <option disabled>No Pricing</option>}
-                                                    </select>
-                                                </td>
-                                                <td className="p-3 text-center whitespace-nowrap">
-                                                    <button onClick={() => handleTestModel(m.name)} 
-                                                        disabled={testingModel === m.name}
-                                                        className={`text-gray-400 hover:text-blue-600 transition-colors mr-3 ${testingModel === m.name ? 'animate-spin text-blue-500' : ''}`} 
-                                                        title="Test Connection">
-                                                        <i className={`fas ${testingModel === m.name ? 'fa-spinner' : 'fa-play'}`}></i>
-                                                    </button>
-                                                    <button onClick={() => removeModel(m.name)} className="text-gray-400 hover:text-red-500 transition-colors" title="Remove">
-                                                        <i className="fas fa-times"></i>
-                                                    </button>
-                                                </td>
-                                            </tr>
-                                        )})}
-                                    </tbody>
-                                </table>
-                                {enabledModels.length === 0 && <div className="p-8 text-center text-gray-400 text-sm">Click models on the left to add them here</div>}
-                            </div>
-                        </div>
+        });
+        onSubmit(newConfigJson);
+    };
+
+    return (
+        <div className="flex flex-col h-full">
+            <div className="flex-1 flex gap-4 overflow-hidden">
+                {/* Left: Available */}
+                <div className="w-1/3 flex flex-col border rounded-lg bg-gray-50">
+                    <div className="p-3 border-b bg-white font-bold text-sm text-gray-700 flex justify-between">
+                        <span>Available</span>
+                        <span className="text-xs bg-blue-100 text-blue-600 px-2 rounded-full">{filteredAvailable.length}</span>
                     </div>
-    
-                    <div className="py-4 mt-4 border-t flex justify-end gap-3 bg-white">                <button type="button" onClick={onCancel} className="px-4 py-2 border rounded-lg hover:bg-gray-50">Cancel</button>
+                    <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                        {filteredAvailable.map(m => (
+                            <div key={m.id} onClick={() => addModel(m)}
+                                className="flex justify-between items-center p-2 bg-white border rounded cursor-pointer hover:bg-blue-50 group transition-colors">
+                                <span className="text-sm font-medium text-gray-700">{m.name}</span>
+                                <i className="fas fa-arrow-right text-gray-300 group-hover:text-blue-500"></i>
+                            </div>
+                        ))}
+                        {filteredAvailable.length === 0 && <div className="p-4 text-center text-xs text-gray-400">No compatible models</div>}
+                    </div>
+                </div>
+
+                {/* Right: Configured */}
+                <div className="flex-1 flex flex-col border rounded-lg bg-white">
+                    <div className="p-3 border-b bg-gray-100 font-bold text-sm text-gray-700 flex justify-between">
+                        <span>Selected Models ({enabledModels.length})</span>
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-0">
+                        <table className="w-full text-left border-collapse">
+                            <thead className="bg-gray-50 text-xs text-gray-500 uppercase sticky top-0 z-10">
+                                <tr>
+                                    <th className="p-3 border-b">Model Name</th>
+                                    <th className="p-3 border-b w-32">RPM</th>
+                                    <th className="p-3 border-b w-32">Billing</th>
+                                    <th className="p-3 border-b w-20 text-center">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody className="text-sm">
+                                {enabledModels.map(m => {
+                                    const modelInfo = allModels.find(x => x.name === m.name) || {};
+                                    const canToken = (modelInfo?.price_input > 0 || modelInfo?.price_output > 0);
+                                    const canRequest = (modelInfo?.price_request > 0);
+                                    const canTime = (modelInfo?.price_time > 0); 
+                                    const canParam = true; 
+                                    const isCurrentInvalid = (m.mode === 'token' && !canToken) || 
+                                                           (m.mode === 'request' && !canRequest) ||
+                                                           (m.mode === 'time' && !canTime);
+
+                                    return (
+                                    <tr key={m.name} className="border-b hover:bg-gray-50 group">
+                                        <td className="p-3 font-medium text-gray-700">{m.name}</td>
+                                        <td className="p-3">
+                                            <input type="number" className="w-full border rounded px-2 py-1 text-xs focus:ring-1 focus:ring-blue-500 outline-none min-w-[100px]"
+                                                placeholder={modelInfo?.default_rpm || 5000}
+                                                value={m.rpm}
+                                                onChange={(e) => updateModelConfig(m.name, 'rpm', e.target.value)} />
+                                        </td>
+                                        <td className="p-3">
+                                            <select className={`w-full border rounded px-1 py-1 text-xs focus:ring-1 focus:ring-blue-500 outline-none ${isCurrentInvalid ? 'border-red-500 bg-red-50' : 'bg-white'}`}
+                                                value={m.mode}
+                                                onChange={(e) => updateModelConfig(m.name, 'mode', e.target.value)}>
+                                                
+                                                {(canToken || m.mode === 'token') && <option value="token" disabled={!canToken}>Token {!canToken?'(Invalid)':''}</option>}
+                                                {(canRequest || m.mode === 'request') && <option value="request" disabled={!canRequest}>Request {!canRequest?'(Invalid)':''}</option>}
+                                                {(canTime || m.mode === 'time') && <option value="time" disabled={!canTime}>Time {!canTime?'(Invalid)':''}</option>}
+                                                {(canParam || m.mode === 'param') && <option value="param" disabled={!canParam}>Param</option>}
+                                                
+                                                {!canToken && !canRequest && !canTime && !canParam && <option disabled>No Pricing</option>}
+                                            </select>
+                                        </td>
+                                        <td className="p-3 text-center whitespace-nowrap">
+                                            <button onClick={() => handleTestModel(m.name)} 
+                                                disabled={testingModel === m.name}
+                                                className={`text-gray-400 hover:text-blue-600 transition-colors mr-3 ${testingModel === m.name ? 'animate-spin text-blue-500' : ''}`} 
+                                                title="Test Connection">
+                                                <i className={`fas ${testingModel === m.name ? 'fa-spinner' : 'fa-play'}`}></i>
+                                            </button>
+                                            <button onClick={() => removeModel(m.name)} className="text-gray-400 hover:text-red-500 transition-colors" title="Remove">
+                                                <i className="fas fa-times"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                )})}
+                            </tbody>
+                        </table>
+                        {enabledModels.length === 0 && <div className="p-8 text-center text-gray-400 text-sm">Click models on the left to add them here</div>}
+                    </div>
+                </div>
+            </div>
+
+            <div className="py-4 mt-4 border-t flex justify-end gap-3 bg-white">
+                <button type="button" onClick={onCancel} className="px-4 py-2 border rounded-lg hover:bg-gray-50">Cancel</button>
                 <button type="button" onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Save Configuration</button>
             </div>
         </div>
