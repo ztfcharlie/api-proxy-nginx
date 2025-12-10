@@ -207,7 +207,7 @@ func (lc *LogConsumer) processBatch(ctx context.Context, msgs []redis.XMessage) 
 		}
 
 		// 隐私处理：决定入库的内容
-		// ...
+		var reqBody, resBody string
 		
 		// 1. Request Body: 严格遵守隐私开关
 		if saveBody {
