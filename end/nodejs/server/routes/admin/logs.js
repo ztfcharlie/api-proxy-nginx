@@ -245,4 +245,41 @@ router.get('/', async (req, res) => {
     }
 });
 
+/**
+ * 删除或清空日志文件
+ */
+router.delete('/files', async (req, res) => {
+    if (!req.user || req.user.role !== 'admin') return res.status(403).json({ error: "Forbidden" });
+    
+    const { type, filename, action = 'delete' } = req.body;
+    if (!filename) return res.status(400).json({ error: "Filename required" });
+
+    let dir = '';
+    if (type === 'node') dir = '/app/logs';
+    else if (type === 'nginx') dir = '/app/nginx_logs';
+    else return res.status(400).json({ error: "Invalid type" });
+
+    // 防止目录遍历
+    const filePath = path.join(dir, path.basename(filename));
+    
+    if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ error: "File not found" });
+    }
+
+    try {
+        if (action === 'truncate') {
+            await fs.promises.truncate(filePath, 0);
+            logger.info(`[Admin] Truncated log file: ${filename} (${type}) by ${req.user.username}`);
+            res.json({ success: true, message: "File truncated" });
+        } else {
+            await fs.promises.unlink(filePath);
+            logger.info(`[Admin] Deleted log file: ${filename} (${type}) by ${req.user.username}`);
+            res.json({ success: true, message: "File deleted" });
+        }
+    } catch (err) {
+        logger.error(`Failed to ${action} file:`, err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 module.exports = router;
