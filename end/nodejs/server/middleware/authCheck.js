@@ -5,13 +5,18 @@ const JWT_SECRET = process.env.JWT_SECRET || 'default_secret';
 
 // 验证 Token 并获取用户信息
 const authenticate = (req, res, next) => {
+    let token = '';
     const authHeader = req.headers.authorization;
 
-    if (!authHeader) {
-        return res.status(401).json({ error: 'Unauthorized: No token provided' });
+    if (authHeader) {
+        token = authHeader.split(' ')[1]; // Bearer <token>
+    } else if (req.query.token) {
+        token = req.query.token; // ?token=<token>
     }
 
-    const token = authHeader.split(' ')[1]; // Bearer <token>
+    if (!token) {
+        return res.status(401).json({ error: 'Unauthorized: No token provided' });
+    }
 
     try {
         const user = jwt.verify(token, JWT_SECRET);

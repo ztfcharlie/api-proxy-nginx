@@ -93,10 +93,14 @@
 
         async function loadFileList() {
             try {
-                // Using standard fetch since api.js might be tailored for JSON API responses
-                // Assuming session cookie is enough for auth
-                const res = await fetch('/api/admin/logs/files');
-                if (!res.ok) throw new Error('Failed to load files');
+                const token = localStorage.getItem('token');
+                const res = await fetch('/api/admin/logs/files', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!res.ok) {
+                    if (res.status === 401) window.location.href = '/admin/console.html';
+                    throw new Error('Failed to load files');
+                }
                 const data = await res.json();
 
                 renderFileList(data);
@@ -164,7 +168,10 @@
             logContentPre.innerText = 'Loading content...';
 
             try {
-                const res = await fetch(`/api/admin/logs/files/read?type=${type}&filename=${name}`);
+                const token = localStorage.getItem('token');
+                const res = await fetch(`/api/admin/logs/files/read?type=${type}&filename=${name}`, {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
                 if (!res.ok) throw new Error('Read failed');
                 const data = await res.json();
 
