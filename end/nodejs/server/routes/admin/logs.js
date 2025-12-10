@@ -90,14 +90,20 @@ router.post('/emit', (req, res) => {
  * 获取日志文件列表
  */
 router.get('/files', async (req, res) => {
-    if (req.user.role !== 'admin') return res.status(403).json({ error: "Forbidden" });
+    if (!req.user || req.user.role !== 'admin') return res.status(403).json({ error: "Forbidden" });
     try {
         const nodeLogDir = '/app/logs';
         const nginxLogDir = '/app/nginx_logs';
 
         const getFiles = async (dir) => {
             if (!fs.existsSync(dir)) return [];
-            const files = await fs.promises.readdir(dir);
+            let files = await fs.promises.readdir(dir);
+            
+            // 限制处理的文件数量，防止文件过多导致超时/卡顿 (取前200个)
+            // 注意：readdir 返回顺序不确定，但在日志场景下通常是按名或时间。
+            // 为了安全，我们先只处理前 500 个文件。
+            if (files.length > 500) files = files.slice(0, 500);
+
             const fileStats = await Promise.all(
                 files
                     .filter(f => f.endsWith('.log') || f.endsWith('.err') || f.endsWith('.out'))
@@ -136,7 +142,7 @@ router.get('/files', async (req, res) => {
  * 读取日志文件内容 (Tail模式，读取最后 100KB)
  */
 router.get('/files/read', async (req, res) => {
-    if (req.user.role !== 'admin') return res.status(403).json({ error: "Forbidden" });
+    if (!req.user || req.user.role !== 'admin') return res.status(403).json({ error: "Forbidden" });
     try {
         const { type, filename } = req.query;
         if (!filename) return res.status(400).json({ error: "Filename required" });
@@ -184,6 +190,8 @@ router.get('/files/read', async (req, res) => {
  */
 router.get('/', async (req, res) => {
     try {
+        if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+        
         const { page = 1, limit = 20, channel_id, user_id, status_code, request_id } = req.query;
         const offset = (page - 1) * limit;
 
