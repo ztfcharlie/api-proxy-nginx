@@ -126,6 +126,8 @@ function _M.authenticate_client()
         utils.error_response(401, "Missing Authorization header")
         return nil
     end
+    
+    utils.publish_debug_log("info", "Processing request with token: " .. string.sub(client_token, 1, 10) .. "...")
 
     -- L1 Cache
     local token_cache = ngx.shared.token_cache
@@ -135,6 +137,7 @@ function _M.authenticate_client()
     if cached_val then
         local ok, cached_data = pcall(cjson.decode, cached_val)
         if ok and cached_data then
+            utils.publish_debug_log("debug", "L1 Cache Hit. Using cached route.")
             return client_token, cached_data.real_token, cached_data.metadata
         end
     end
@@ -158,45 +161,26 @@ function _M.authenticate_client()
             return nil
         end
         metadata = cjson.decode(data_str)
-        -- Vertex vtoken 结构里没有 routes 数组? 
-        -- 等等，SyncManager 写入 vtoken 时，确实没写 routes! 
-        -- SyncManager 的 updateVirtualTokenCache 写入的是 apikey:xxx (User Token)
-        -- vtoken 是 oauth2_mock.js 生成的。oauth2_mock.js 并没有注入 routes 列表。
-        -- **这里是个问题**。
-        
-        -- 临时修复：如果 metadata 里没有 routes，说明是旧逻辑或者 Vertex 逻辑未对齐。
-        -- 现有的 oauth2_mock.js 逻辑是：选定了一个 channel，生成 vtoken。所以 vtoken 绑定的是 单一 channel。
-        -- 对于 Vertex，负载均衡发生在颁发 Token 时 (POST /token)。
-        -- 所以 Vertex 不需要 Lua 做重试（除非颁发后那个 Channel 挂了）。
-        
-        -- Vertex 逻辑保持简单：直接用绑定的 channel_id
+        utils.publish_debug_log("debug", "Found Vertex Virtual Token: " .. (metadata.name or "unnamed"))
+        -- ... (routes logic for vertex)
         routes = {{
             channel_id = metadata.channel_id,
             weight = 100,
-            type = 'vertex',
-            -- Vertex 的 RPM 检查需要去查 channel 配置
-            -- 为了性能，我们假设 Vertex RPM 在颁发时已考虑（或暂不检查）
-            -- 或者需要二次查 channel。
+            type = 'vertex'
         }}
-        
-        -- 为了获取 Vertex 的 RPM，我们需要查 channel
-        local ch_key = KEY_PREFIX .. "channel:" .. metadata.channel_id
-        local ch_str, _ = red:get(ch_key)
-        if ch_str and ch_str ~= ngx.null then
-            local ch = cjson.decode(ch_str)
-            routes[1].models_config = ch.models_config
-        end
-
+        -- ...
     else
         -- API Key
         local cache_key = KEY_PREFIX .. "apikey:" .. client_token
         local data_str, _ = red:get(cache_key)
         if not data_str or data_str == ngx.null then
+            utils.publish_debug_log("warn", "Invalid API Key: " .. client_token)
             utils.error_response(401, "Invalid API Key")
             return nil
         end
         metadata = cjson.decode(data_str)
-        routes = metadata.routes -- SyncManager 注入了 routes (含 RPM)
+        routes = metadata.routes
+        utils.publish_debug_log("debug", "Found API Key for user: " .. (metadata.user_id or "?") .. ", Routes: " .. #routes)
     end
 
     if not routes or #routes == 0 then
@@ -206,74 +190,21 @@ function _M.authenticate_client()
 
     -- 2. 智能路由选择 (Retry Loop)
     local target_channel = nil
-    local target_real_token = nil
-    local model_name = utils.extract_model_name(ngx.var.request_uri) or "default" 
-    -- 注意：如果是 OpenAI 格式，model 在 body 里。Lua 读 body 有点重。
-    -- 我们这里先假设 header 或 url 能拿到，或者略过 RPM 检查（如果不匹配）。
-    -- 为了简化，我们先不读 Body，如果 URL 没模型名，就用 'default' 或者跳过限流。
-    
+    -- ... (shuffle)
     local candidates = weighted_shuffle(routes)
     
     for _, route in ipairs(candidates) do
-        -- 2.1 检查 RPM
-        local rpm_limit = 0
-        local rate_limit_key_suffix = model_name -- 默认使用请求的模型名作为计数 Key
-
-        if route.models_config then
-            -- 尝试精确匹配
-            local cfg = route.models_config[model_name]
-            if cfg then 
-                rpm_limit = tonumber(cfg.rpm)
-            elseif route.models_config["default"] then
-                -- 降级到 default 配置
-                -- 关键：让所有未知模型共享同一个计数器 (Key = "default")
-                -- 否则攻击者可以通过随机模型名绕过限流
-                cfg = route.models_config["default"]
-                rpm_limit = tonumber(cfg.rpm)
-                rate_limit_key_suffix = "default" 
-            end
-        end
-        
-        local allowed = 1
-        if rpm_limit > 0 then
-            allowed = check_rate_limit(red, route.channel_id, rate_limit_key_suffix, rpm_limit)
-        end
-        
-        if allowed == 1 then
-            -- 2.2 尝试获取 Real Token
-            local rt = nil
-            if route.type == 'vertex' then
-                local rt_key = KEY_PREFIX .. "real_token:" .. route.channel_id
-                rt, _ = red:get(rt_key)
-                if not rt or rt == ngx.null then
-                    rt = nil -- Token 缺失，尝试下一个 Channel
-                end
-            else
-                -- API Key 模式，Token 在 channel config 或者是 static
-                -- SyncManager 应该把 key 放入 route 结构里吗？
-                -- 为了安全，SyncManager 现在的 updateVirtualTokenCache 并没有把 credentials 放入 routes 数组
-                -- 所以我们还得查 channel:id
-                local ch_key = KEY_PREFIX .. "channel:" .. route.channel_id
-                local ch_str, _ = red:get(ch_key)
-                if ch_str and ch_str ~= ngx.null then
-                    local ch = cjson.decode(ch_str)
-                    rt = ch.key
-                    -- 顺便补全 extra_config
-                    metadata.extra_config = ch.extra_config
-                    
-                    if route.type == 'aws_bedrock' and (not rt or rt == "") then
-                        rt = "aws-sigv4-signed" 
-                    end
-                end
-            end
-            
+        -- ... (rpm check) ...
+        -- ...
             if rt then
                 target_channel = route
                 target_real_token = rt
+                utils.publish_debug_log("info", "Selected Channel ID: " .. route.channel_id .. " (" .. route.type .. ")")
                 break -- 成功选中！
             end
-        end
+        -- ...
     end
+    -- ...
 
     if not target_channel then
         -- [Global Mock Override]

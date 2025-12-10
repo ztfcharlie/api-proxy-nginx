@@ -172,3 +172,42 @@ func getEnv(key, fallback string) string {
 	}
 	return fallback
 }
+
+// [Added] Publish logs to Redis Stream for frontend debugging
+func publishLog(rdb *redis.Client, level, msg string) {
+	if rdb == nil || os.Getenv("ENABLE_DEBUG_STREAM") != "true" {
+		return
+	}
+	
+	payload := fmt.Sprintf(`{"ts":"%s", "source":"go-processor", "level":"%s", "msg":"%s"}`, 
+		time.Now().Format(time.RFC3339), level, strings.ReplaceAll(msg, "\"", "\\\""))
+
+	// Fire and forget, don't block
+	go func() {
+		// Redis Pub/Sub
+		rdb.Publish(ctx, "sys:log_stream", payload)
+	}()
+}
+
+// 封装后的 Logger
+type RedisLogger struct {
+	rdb *redis.Client
+}
+
+func (l *RedisLogger) Info(msg string, v ...interface{}) {
+	text := fmt.Sprintf(msg, v...)
+	log.Println("[INFO] " + text)
+	publishLog(l.rdb, "info", text)
+}
+
+func (l *RedisLogger) Error(msg string, v ...interface{}) {
+	text := fmt.Sprintf(msg, v...)
+	log.Println("[ERROR] " + text)
+	publishLog(l.rdb, "error", text)
+}
+
+func (l *RedisLogger) Warn(msg string, v ...interface{}) {
+	text := fmt.Sprintf(msg, v...)
+	log.Println("[WARN] " + text)
+	publishLog(l.rdb, "warn", text)
+}

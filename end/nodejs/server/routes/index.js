@@ -164,4 +164,8 @@ router.get('/', (req, res) => {
     res.send(html);
 });
 
+// Admin Log Routes
+const logsRouter = require('./admin/logs');
+router.use('/api/admin/logs', logsRouter);
+
 module.exports = router;

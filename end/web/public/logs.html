@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>系统实时日志 - Universal AI Gateway</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .log-entry {
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.85rem;
+            border-bottom: 1px solid #2d3748;
+            transition: background-color 0.2s;
+        }
+        .log-entry:hover {
+            background-color: #2d3748;
+        }
+        .log-ts { color: #718096; }
+        .log-source-nginx-lua { color: #68d391; }
+        .log-source-node-admin { color: #63b3ed; }
+        .log-source-go-billing { color: #f6ad55; }
+        .log-source-go-processor { color: #f6e05e; }
+        
+        .level-info { color: #90cdf4; }
+        .level-warn { color: #fbd38d; }
+        .level-error { color: #fc8181; }
+        .level-debug { color: #a0aec0; }
+        
+        /* Auto-scroll anchor */
+        #log-end { height: 1px; }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 h-screen flex flex-col overflow-hidden">
+
+    <!-- Header -->
+    <header class="bg-gray-800 border-b border-gray-700 p-4 flex justify-between items-center shadow-md z-10">
+        <div class="flex items-center space-x-4">
+            <h1 class="text-xl font-bold flex items-center">
+                <i class="fas fa-terminal mr-2 text-green-400"></i>
+                系统实时日志
+            </h1>
+            <div id="connection-status" class="px-2 py-1 rounded text-xs bg-red-900 text-red-200">
+                Disconnected
+            </div>
+        </div>
+        <div class="flex items-center space-x-3">
+            <button id="btn-clear" class="p-2 rounded hover:bg-gray-700 text-gray-400" title="Clear Logs">
+                <i class="fas fa-trash-alt"></i>
+            </button>
+            <button id="btn-pause" class="p-2 rounded hover:bg-gray-700 text-gray-400" title="Pause Scrolling">
+                <i class="fas fa-pause"></i>
+            </button>
+            <div class="relative">
+                <input type="text" id="filter-input" placeholder="Filter logs..." 
+                    class="bg-gray-700 border-none rounded px-3 py-1 text-sm focus:ring-2 focus:ring-blue-500 w-64">
+                <i class="fas fa-search absolute right-3 top-2 text-gray-500 text-xs"></i>
+            </div>
+            <a href="/console.html" class="ml-4 text-gray-400 hover:text-white text-sm">
+                <i class="fas fa-arrow-left mr-1"></i> Back to Console
+            </a>
+        </div>
+    </header>
+
+    <!-- Log Container -->
+    <main class="flex-1 overflow-auto bg-gray-900 p-2 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-900 relative" id="log-container">
+        <div id="logs-list" class="flex flex-col space-y-1 pb-10">
+            <!-- Logs will be injected here -->
+        </div>
+        <div id="log-end"></div>
+    </main>
+
+    <!-- Footer Status -->
+    <footer class="bg-gray-800 border-t border-gray-700 px-4 py-1 text-xs text-gray-500 flex justify-between">
+        <div>
+            Sources: 
+            <span class="mr-2"><span class="w-2 h-2 inline-block rounded-full bg-green-400 mr-1"></span>Nginx</span>
+            <span class="mr-2"><span class="w-2 h-2 inline-block rounded-full bg-blue-400 mr-1"></span>Node.js</span>
+            <span class="mr-2"><span class="w-2 h-2 inline-block rounded-full bg-orange-400 mr-1"></span>Go Core</span>
+        </div>
+        <div id="log-stats">Lines: 0 | Buffer: 0%</div>
+    </footer>
+
+    <script src="/js/lib/api.js"></script>
+    <script>
+        const logContainer = document.getElementById('log-container');
+        const logsList = document.getElementById('logs-list');
+        const statusBadge = document.getElementById('connection-status');
+        const logEnd = document.getElementById('log-end');
+        const btnPause = document.getElementById('btn-pause');
+        const btnClear = document.getElementById('btn-clear');
+        const filterInput = document.getElementById('filter-input');
+        const statsDiv = document.getElementById('log-stats');
+
+        let isPaused = false;
+        let eventSource = null;
+        let logCount = 0;
+        const MAX_LOGS = 2000;
+        let filterText = '';
+
+        // --- Init ---
+        // Verify Admin
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        if (user.role !== 'admin') {
+            alert('Access Denied: Admin privileges required.');
+            window.location.href = '/console.html';
+        }
+
+        // --- Event Source ---
+        function connect() {
+            statusBadge.className = 'px-2 py-1 rounded text-xs bg-yellow-900 text-yellow-200';
+            statusBadge.innerText = 'Connecting...';
+
+            // Use the API token for auth if needed (Cookie is usually enough for SSE if same-origin)
+            // Note: Standard EventSource doesn't support custom headers easily. 
+            // We rely on the session cookie set by login.
+            eventSource = new EventSource('/api/admin/logs/stream');
+
+            eventSource.onopen = () => {
+                statusBadge.className = 'px-2 py-1 rounded text-xs bg-green-900 text-green-200';
+                statusBadge.innerText = 'Live';
+                addLog({ ts: new Date().toISOString(), source: 'system', level: 'info', msg: 'Stream connected.' });
+            };
+
+            eventSource.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    addLog(data);
+                } catch (e) {
+                    console.error('Parse error', e);
+                    // Handle raw text
+                    addLog({ ts: new Date().toISOString(), source: 'raw', level: 'debug', msg: event.data });
+                }
+            };
+
+            eventSource.onerror = (err) => {
+                statusBadge.className = 'px-2 py-1 rounded text-xs bg-red-900 text-red-200';
+                statusBadge.innerText = 'Error - Reconnecting';
+                eventSource.close();
+                setTimeout(connect, 3000);
+            };
+        }
+
+        // --- UI Functions ---
+        function addLog(log) {
+            if (isPaused) return;
+
+            // Filter check
+            if (filterText && !JSON.stringify(log).toLowerCase().includes(filterText)) {
+                return;
+            }
+
+            const div = document.createElement('div');
+            div.className = 'log-entry px-2 py-1 flex items-start space-x-2';
+            
+            // Format Timestamp
+            const time = log.ts ? log.ts.split('T')[1].split('.')[0] : new Date().toLocaleTimeString();
+            
+            // Source Class
+            const sourceClass = `log-source-${log.source}`;
+            const levelClass = `level-${log.level}`;
+            
+            div.innerHTML = `
+                <span class="log-ts w-20 flex-shrink-0 text-xs mt-0.5">${time}</span>
+                <span class="${sourceClass} w-32 flex-shrink-0 font-bold text-xs uppercase mt-0.5">[${log.source}]</span>
+                <span class="${levelClass} w-16 flex-shrink-0 font-bold text-xs uppercase mt-0.5">${log.level}</span>
+                <span class="text-gray-300 break-all whitespace-pre-wrap flex-1">${escapeHtml(log.msg)}</span>
+            `;
+
+            // Metadata tooltip or expansion?
+            if (log.meta && Object.keys(log.meta).length > 0) {
+                 const metaSpan = document.createElement('span');
+                 metaSpan.className = 'text-gray-500 text-xs ml-2';
+                 metaSpan.innerText = JSON.stringify(log.meta);
+                 div.querySelector('span:last-child').appendChild(metaSpan);
+            }
+
+            logsList.appendChild(div);
+            logCount++;
+
+            // Cleanup old logs
+            if (logCount > MAX_LOGS) {
+                logsList.removeChild(logsList.firstChild);
+                logCount--;
+            }
+
+            // Auto Scroll
+            if (!isPaused) {
+                logEnd.scrollIntoView({ behavior: 'smooth' });
+            }
+            
+            updateStats();
+        }
+
+        function escapeHtml(text) {
+            if (!text) return '';
+            return text
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        function updateStats() {
+            statsDiv.innerText = `Lines: ${logCount} | Buffer: ${Math.round(logCount/MAX_LOGS*100)}%`;
+        }
+
+        // --- Controls ---
+        btnPause.onclick = () => {
+            isPaused = !isPaused;
+            btnPause.innerHTML = isPaused ? '<i class="fas fa-play text-green-400"></i>' : '<i class="fas fa-pause"></i>';
+            statusBadge.innerText = isPaused ? 'Paused' : 'Live';
+            statusBadge.className = isPaused ? 'px-2 py-1 rounded text-xs bg-yellow-900 text-yellow-200' : 'px-2 py-1 rounded text-xs bg-green-900 text-green-200';
+        };
+
+        btnClear.onclick = () => {
+            logsList.innerHTML = '';
+            logCount = 0;
+            updateStats();
+        };
+
+        filterInput.oninput = (e) => {
+            filterText = e.target.value.toLowerCase();
+            // Optional: Re-filter existing logs? Too complex for simple DOM list. 
+            // Just applies to new logs for now, or we could hide/show existing.
+            // Let's hide/show existing for better UX.
+            Array.from(logsList.children).forEach(el => {
+                if (el.innerText.toLowerCase().includes(filterText)) {
+                    el.style.display = 'flex';
+                } else {
+                    el.style.display = 'none';
+                }
+            });
+        };
+
+        // Start
+        connect();
+    </script>
+</body>
+</html>

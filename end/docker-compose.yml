@@ -53,6 +53,9 @@ services:
       
       # 全局 Mock 开关
       - ENABLE_MOCK_MODE=${ENABLE_MOCK_MODE:-false}
+      
+      # [Added] 实时日志流开关 (生产环境建议关闭)
+      - ENABLE_DEBUG_STREAM=${ENABLE_DEBUG_STREAM:-false}
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]

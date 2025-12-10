@@ -178,6 +178,27 @@ function _M.log_request()
     end
 end
 
+-- [Debug] 实时调试日志推送到前端 (Pub/Sub)
+function _M.publish_debug_log(level, msg)
+    if os.getenv("ENABLE_DEBUG_STREAM") ~= "true" then return end
+    
+    local ok, err = pcall(function()
+        local red, err = get_redis_connection()
+        if not red then return end
+        
+        local payload = cjson.encode({
+            ts = os.date("%Y-%m-%dT%H:%M:%S.000Z"),
+            source = "nginx-lua",
+            level = level,
+            msg = msg,
+            req_id = ngx.var.my_request_id or "unknown"
+        })
+        
+        red:publish("sys:log_stream", payload)
+        red:set_keepalive(10000, 10)
+    end)
+end
+
 -- 提取模型名称 (支持 Vertex URL 和 OpenAI Body)
 function _M.extract_model_name(uri)
     -- 1. 尝试从 Vertex URL 提取

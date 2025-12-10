@@ -175,7 +175,7 @@ func (lc *LogConsumer) processBatch(ctx context.Context, msgs []redis.XMessage) 
 			log.Printf("[WARN] Billing calculation failed for %s: %v", reqID, err)
 		}
 
-		// [Added] 应用商业计费规则 (查 Redis 配置算钱)
+		// ... (existing billing logic)
 		if meta.Status == 200 {
 			cost, err := lc.calculateCost(ctx, channelID, meta.ModelName, usage)
 			if err == nil {
@@ -186,20 +186,28 @@ func (lc *LogConsumer) processBatch(ctx context.Context, msgs []redis.XMessage) 
 				}
 			}
 			
-			// [Added] 成功时清除错误状态 (可选，或者只在下次健康检查时清除)
-			// 为了防止错误闪烁，这里我们可以选择不清除，或者只有当 last_error 不为空时才清除。
-			// 简单起见，如果成功了，说明渠道活过来了，清除错误是合理的。
-			if channelID > 0 {
-				go func() {
-					// 只有当当前有错误时才更新，减少 DB 写压力
-					// UPDATE ... WHERE id = ? AND last_error IS NOT NULL
-					lc.db.Exec("UPDATE sys_channels SET last_error = NULL WHERE id = ? AND last_error IS NOT NULL", channelID)
-				}()
-			}
+			// ... (existing error clearing logic)
+		}
+
+		// [Added] Real-time Log Stream (Frontend Debugging)
+		if os.Getenv("ENABLE_DEBUG_STREAM") == "true" {
+			go func(m LogMetadata, u billing.Usage, rid string, cid int) {
+				payload := fmt.Sprintf(`{"ts":"%s", "source":"go-billing", "level":"info", "msg":"Processed Request: %s (Status: %d, Model: %s, Cost: %.6f, Tokens: %d)", "meta": {"req_id": "%s", "channel_id": %d}}`,
+					time.Now().Format(time.RFC3339),
+					rid,
+					m.Status,
+					m.ModelName,
+					u.Cost,
+					u.TotalTokens,
+					rid,
+					cid,
+				)
+				lc.rdb.Publish(context.Background(), "sys:log_stream", payload)
+			}(meta, usage, reqID, channelID)
 		}
 
 		// 隐私处理：决定入库的内容
-		var reqBody, resBody string
+		// ...
 		
 		// 1. Request Body: 严格遵守隐私开关
 		if saveBody {

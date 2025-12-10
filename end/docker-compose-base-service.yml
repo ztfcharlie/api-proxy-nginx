@@ -100,6 +100,9 @@ services:
       
       # 隐私开关
       - LOG_SAVE_BODY=${LOG_SAVE_BODY:-false}
+
+      # [Added] 实时日志流开关
+      - ENABLE_DEBUG_STREAM=${ENABLE_DEBUG_STREAM:-false}
       
     volumes:
       - ./logs:/app/logs
