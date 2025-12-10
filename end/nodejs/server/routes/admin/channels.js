@@ -44,6 +44,52 @@ async function validateModelsConfig(modelsConfig) {
         logger.error("validateModelsConfig failed (ignoring):", err);
     }
 }
+
+/**
+ * 获取渠道列表
+ */
+router.get('/', async (req, res) => {
+    try {
+        const { type, status, page = 1, limit = 20 } = req.query;
+        const offset = (page - 1) * limit;
+        
+        let query = "SELECT id, name, type, extra_config, models_config, status, last_error, created_at FROM sys_channels WHERE 1=1";
+        let params = [];
+        
+        if (type) {
+            query += " AND type = ?";
+            params.push(type);
+        }
+        if (status !== undefined) {
+            query += " AND status = ?";
+            params.push(status);
+        }
+        
+        const countQuery = query.replace("SELECT id, name, type, extra_config, models_config, status, last_error, created_at", "SELECT COUNT(*) as total");
+        const [countResult] = await db.query(countQuery, params);
+        
+        query += " ORDER BY id DESC LIMIT ? OFFSET ?";
+        params.push(parseInt(limit), offset);
+        const [channels] = await db.query(query, params);
+        
+        res.json({
+            data: channels,
+            pagination: {
+                total: countResult[0].total,
+                page: parseInt(page),
+                limit: parseInt(limit)
+            }
+        });
+    } catch (err) {
+        logger.error('List channels failed:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+/**
+ * 获取单个渠道详情
+ */
+router.get('/:id', async (req, res) => {
 // ... (rest of file) ...
 /**
  * 更新渠道
