@@ -260,6 +260,10 @@ function _M.authenticate_client()
                     rt = ch.key
                     -- 顺便补全 extra_config
                     metadata.extra_config = ch.extra_config
+                    
+                    if route.type == 'aws_bedrock' and (not rt or rt == "") then
+                        rt = "aws-sigv4-signed" 
+                    end
                 end
             end
             
@@ -335,6 +339,14 @@ function _M.get_api_host(metadata, model_name)
     if type == "deepseek" then return "api.deepseek.com" end
     if type == "anthropic" then return "api.anthropic.com" end
     if type == "qwen" then return "dashscope.aliyuncs.com" end
+    
+    if type == "aws_bedrock" then
+        local region = "us-east-1"
+        if metadata.extra_config and metadata.extra_config.region then
+            region = metadata.extra_config.region
+        end
+        return "bedrock-runtime." .. region .. ".amazonaws.com"
+    end
     
     -- Vertex
     local region = "us-central1"

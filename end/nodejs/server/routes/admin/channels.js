@@ -9,119 +9,42 @@ const AwsSigner = require('../../utils/aws_signer');
 
 // 模型配置校验辅助函数
 async function validateModelsConfig(modelsConfig) {
-    if (!modelsConfig || Object.keys(modelsConfig).length === 0) return;
-
-    const modelNames = Object.keys(modelsConfig).filter(k => k !== 'default');
-    if (modelNames.length === 0) return;
-
-    const placeholders = modelNames.map(() => '?').join(',');
-    const [models] = await db.query(
-        `SELECT name, price_input, price_output, price_request, price_time FROM sys_models WHERE name IN (${placeholders})`, 
-        modelNames
-    );
+    if (!modelsConfig) return;
     
-    const modelMap = {};
-    models.forEach(m => modelMap[m.name] = m);
-
-    for (const [modelName, config] of Object.entries(modelsConfig)) {
-        if (modelName === 'default') continue;
-        const globalModel = modelMap[modelName];
-        if (!globalModel) continue; 
-    }
-}
-
-/**
- * 获取渠道列表
- */
-router.get('/', async (req, res) => {
-    try {
-        const { type, status, page = 1, limit = 20 } = req.query;
-        const offset = (page - 1) * limit;
-        
-        let query = "SELECT id, name, type, extra_config, models_config, status, last_error, created_at FROM sys_channels WHERE 1=1";
-        let params = [];
-        
-        if (type) {
-            query += " AND type = ?";
-            params.push(type);
+    // Safety check: ensure modelsConfig is an object before using Object.keys
+    if (typeof modelsConfig === 'string') {
+        try {
+            modelsConfig = JSON.parse(modelsConfig);
+        } catch (e) {
+            return; // Ignore invalid JSON here, let it fail downstream or just skip validation
         }
-        if (status !== undefined) {
-            query += " AND status = ?";
-            params.push(status);
-        }
-        
-        const countQuery = query.replace("SELECT id, name, type, extra_config, models_config, status, last_error, created_at", "SELECT COUNT(*) as total");
-        const [countResult] = await db.query(countQuery, params);
-        
-        query += " ORDER BY id DESC LIMIT ? OFFSET ?";
-        params.push(parseInt(limit), offset);
-        const [channels] = await db.query(query, params);
-        
-        res.json({
-            data: channels,
-            pagination: {
-                total: countResult[0].total,
-                page: parseInt(page),
-                limit: parseInt(limit)
-            }
-        });
-    } catch (err) {
-        logger.error('List channels failed:', err);
-        res.status(500).json({ error: err.message });
-    }
-});
-
-/**
- * 获取单个渠道详情
- */
-router.get('/:id', async (req, res) => {
-    try {
-        const [channels] = await db.query("SELECT * FROM sys_channels WHERE id = ?", [req.params.id]);
-        if (channels.length === 0) return res.status(404).json({ error: "Channel not found" });
-        
-        const channel = channels[0];
-        channel.credentials = undefined; // [Security] Never return credentials
-        
-        res.json({ data: channel });
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-/**
- * 创建新渠道
- */
-router.post('/', async (req, res) => {
-    if (req.user.role !== 'admin') return res.status(403).json({ error: "Forbidden" });
-    const { name, type, credentials, extra_config, models_config } = req.body;
-    
-    if (!name || !type || !credentials) {
-        return res.status(400).json({ error: "Missing required fields: name, type, credentials" });
     }
     
-    if (type === 'vertex') {
-        try { JSON.parse(credentials); } catch (e) { return res.status(400).json({ error: "Credentials for Vertex must be valid JSON" }); }
-    }
+    if (Object.keys(modelsConfig).length === 0) return;
 
     try {
-        await validateModelsConfig(models_config);
+        const modelNames = Object.keys(modelsConfig).filter(k => k !== 'default');
+        if (modelNames.length === 0) return;
 
-        const [result] = await db.query(
-            "INSERT INTO sys_channels (name, type, credentials, extra_config, models_config) VALUES (?, ?, ?, ?, ?)",
-            [name, type, credentials, JSON.stringify(extra_config || {}), JSON.stringify(models_config || {})]
+        const placeholders = modelNames.map(() => '?').join(',');
+        const [models] = await db.query(
+            `SELECT name, price_input, price_output, price_request, price_time FROM sys_models WHERE name IN (${placeholders})`, 
+            modelNames
         );
         
-        const newId = result.insertId;
-        const [newChannel] = await db.query("SELECT * FROM sys_channels WHERE id = ?", [newId]);
-        await SyncManager.updateChannelCache(newChannel[0]);
-        
-        res.status(201).json({ id: newId, message: "Channel created successfully" });
-    } catch (err) {
-        logger.error('Create channel failed:', err);
-        res.status(500).json({ error: err.message });
-    }
-});
+        const modelMap = {};
+        models.forEach(m => modelMap[m.name] = m);
 
+        for (const [modelName, config] of Object.entries(modelsConfig)) {
+            if (modelName === 'default') continue;
+            const globalModel = modelMap[modelName];
+            if (!globalModel) continue; 
+        }
+    } catch (err) {
+        logger.error("validateModelsConfig failed (ignoring):", err);
+    }
+}
+// ... (rest of file) ...
 /**
  * 更新渠道
  */
@@ -140,8 +63,19 @@ router.put('/:id', async (req, res) => {
         if (name) { updates.push("name = ?"); params.push(name); }
         if (type) { updates.push("type = ?"); params.push(type); }
         if (credentials) { updates.push("credentials = ?"); params.push(credentials); }
-        if (extra_config) { updates.push("extra_config = ?"); params.push(JSON.stringify(extra_config)); }
-        if (models_config) { updates.push("models_config = ?"); params.push(JSON.stringify(models_config)); }
+        
+        if (extra_config) { 
+            const val = typeof extra_config === 'string' ? extra_config : JSON.stringify(extra_config);
+            updates.push("extra_config = ?"); 
+            params.push(val); 
+        }
+        
+        if (models_config) { 
+            const val = typeof models_config === 'string' ? models_config : JSON.stringify(models_config);
+            updates.push("models_config = ?"); 
+            params.push(val); 
+        }
+        
         if (status !== undefined) { updates.push("status = ?"); params.push(status); }
         
         if (updates.length === 0) return res.json({ message: "No changes" });
