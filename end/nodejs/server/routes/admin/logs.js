@@ -4,6 +4,7 @@ const Redis = require('ioredis');
 const logger = require('../../services/LoggerService');
 const fs = require('fs');
 const path = require('path');
+const db = require('../../config/db').dbPool;
 
 // 创建一个专用的 Redis 订阅客户端
 const redisSub = new Redis({
@@ -174,6 +175,64 @@ router.get('/files/read', async (req, res) => {
 
     } catch (err) {
         logger.error('Read log file failed:', err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+/**
+ * 获取请求日志列表 (DB Logs)
+ */
+router.get('/', async (req, res) => {
+    try {
+        const { page = 1, limit = 20, channel_id, user_id, status_code, request_id } = req.query;
+        const offset = (page - 1) * limit;
+
+        let query = "SELECT * FROM sys_request_logs WHERE 1=1";
+        let params = [];
+
+        // 权限控制：普通用户只能看自己的日志
+        if (req.user.role !== 'admin') {
+            query += " AND user_id = ?";
+            params.push(req.user.id);
+        } else if (user_id) {
+            // 管理员可以按用户筛选
+            query += " AND user_id = ?";
+            params.push(user_id);
+        }
+
+        if (channel_id) {
+            query += " AND channel_id = ?";
+            params.push(channel_id);
+        }
+
+        if (status_code) {
+            query += " AND status_code = ?";
+            params.push(status_code);
+        }
+        
+        if (request_id) {
+            query += " AND request_id LIKE ?";
+            params.push(`%${request_id}%`);
+        }
+
+        const countQuery = query.replace("SELECT *", "SELECT COUNT(*) as total");
+        const [countResult] = await db.query(countQuery, params);
+
+        query += " ORDER BY id DESC LIMIT ? OFFSET ?";
+        params.push(parseInt(limit), offset);
+
+        const [logs] = await db.query(query, params);
+
+        res.json({
+            data: logs,
+            pagination: {
+                total: countResult[0].total,
+                page: parseInt(page),
+                limit: parseInt(limit)
+            }
+        });
+    } catch (err) {
+        logger.error('List logs failed:', err);
         res.status(500).json({ error: err.message });
     }
 });
