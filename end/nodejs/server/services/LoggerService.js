@@ -13,7 +13,102 @@ class LoggerService {
         this.initialize();
     }
     
-    // ... (keep existing initialize code) ...
+    initialize() {
+        // 使用Paths配置管理
+        const logDir = Paths.getLogDir();
+        Paths.ensureDirectories();
+
+        // 创建 Winston 日志器
+        this.logger = winston.createLogger({
+            level: process.env.LOG_LEVEL || 'info',
+            format: winston.format.combine(
+                winston.format.timestamp({
+                    format: 'YYYY-MM-DD HH:mm:ss.SSS'
+                }),
+                winston.format.errors({ stack: true }),
+                winston.format.json()
+            ),
+            defaultMeta: {
+                service: 'oauth2-mock',
+                version: '1.0.0',
+                pid: process.pid
+            },
+            transports: [
+                // 错误日志文件
+                new DailyRotateFile({
+                    filename: path.join(logDir, 'error-%DATE%.log'),
+                    datePattern: process.env.LOG_DATE_PATTERN || 'YYYY-MM-DD',
+                    maxSize: process.env.LOG_MAX_SIZE || '20m',
+                    maxFiles: process.env.LOG_MAX_FILES || '14d',
+                    level: 'error',
+                    format: winston.format.combine(
+                        winston.format.timestamp(),
+                        winston.format.json()
+                    )
+                }),
+
+                // 组合日志文件
+                new DailyRotateFile({
+                    filename: path.join(logDir, 'combined-%DATE%.log'),
+                    datePattern: process.env.LOG_DATE_PATTERN || 'YYYY-MM-DD',
+                    maxSize: process.env.LOG_MAX_SIZE || '20m',
+                    maxFiles: process.env.LOG_MAX_FILES || '14d',
+                    format: winston.format.combine(
+                        winston.format.timestamp(),
+                        winston.format.json()
+                    )
+                }),
+
+                // 访问日志文件
+                new DailyRotateFile({
+                    filename: path.join(logDir, 'access-%DATE%.log'),
+                    datePattern: process.env.LOG_DATE_PATTERN || 'YYYY-MM-DD',
+                    maxSize: process.env.LOG_MAX_SIZE || '20m',
+                    maxFiles: process.env.LOG_MAX_FILES || '14d',
+                    level: 'http',
+                    format: winston.format.combine(
+                        winston.format.timestamp(),
+                        winston.format.json()
+                    )
+                }),
+
+                // OAuth2 专用日志文件
+                new DailyRotateFile({
+                    filename: path.join(logDir, 'oauth2-%DATE%.log'),
+                    datePattern: process.env.LOG_DATE_PATTERN || 'YYYY-MM-DD',
+                    maxSize: process.env.LOG_MAX_SIZE || '20m',
+                    maxFiles: process.env.LOG_MAX_FILES || '14d',
+                    level: 'oauth2',
+                    format: winston.format.combine(
+                        winston.format.timestamp(),
+                        winston.format.json()
+                    )
+                })
+            ]
+        });
+
+        // 控制台输出（始终启用，方便Docker查看）
+        this.logger.add(new winston.transports.Console({
+            format: winston.format.combine(
+                winston.format.colorize(),
+                winston.format.timestamp({
+                    format: 'HH:mm:ss.SSS'
+                }),
+                winston.format.printf(({ timestamp, level, message, ...meta }) => {
+                    let msg = `${timestamp} [${level}]: ${message}`;
+                    if (Object.keys(meta).length > 0) {
+                        msg += ` ${JSON.stringify(meta)}`;
+                    }
+                    return msg;
+                })
+            )
+        }));
+
+        // 监听日志轮换事件
+        this.logger.on('rotate', (oldFilename, newFilename) => {
+            console.log(`Log file rotated: ${oldFilename} -> ${newFilename}`);
+        });
+    }
 
     // Redis Pub/Sub Helper
     publishLog(level, message, meta = {}) {
