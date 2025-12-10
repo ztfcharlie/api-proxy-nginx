@@ -13,6 +13,8 @@ services:
     volumes:
       # Node.js服务专用数据目录
       - ./logs:/app/logs
+      # [Added] Nginx 日志目录 (只读挂载)
+      - ../logs:/app/nginx_logs:ro
       - ./tmp:/app/tmp
       # 挂载 .env 文件到容器中（所有配置都在这里）
       - ../.env:/app/.env:ro

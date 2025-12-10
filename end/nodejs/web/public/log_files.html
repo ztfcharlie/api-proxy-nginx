@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>日志文件浏览器 - Universal AI Gateway</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .file-list-item:hover { background-color: #2d3748; cursor: pointer; }
+        .file-list-item.active { background-color: #4a5568; border-left: 4px solid #4299e1; }
+        pre { font-family: 'Consolas', 'Monaco', monospace; font-size: 0.85rem; }
+    </style>
+</head>
+<body class="bg-gray-100 h-screen flex flex-col overflow-hidden">
+
+    <!-- Header -->
+    <header class="bg-white border-b border-gray-200 p-4 flex justify-between items-center shadow-sm z-10">
+        <div class="flex items-center space-x-4">
+            <h1 class="text-xl font-bold text-gray-800 flex items-center">
+                <i class="fas fa-file-alt mr-2 text-blue-500"></i>
+                日志文件浏览器
+            </h1>
+        </div>
+        <div class="flex items-center space-x-3">
+            <button onclick="loadFileList()" class="p-2 rounded hover:bg-gray-100 text-gray-600" title="Refresh List">
+                <i class="fas fa-sync-alt"></i>
+            </button>
+            <a href="/admin/console.html" class="ml-4 text-gray-500 hover:text-gray-800 text-sm">
+                <i class="fas fa-arrow-left mr-1"></i> Back to Console
+            </a>
+        </div>
+    </header>
+
+    <div class="flex flex-1 overflow-hidden">
+        <!-- Sidebar: File List -->
+        <aside class="w-80 bg-gray-800 text-gray-300 flex flex-col border-r border-gray-700 overflow-hidden">
+            <div class="p-3 bg-gray-900 font-bold text-xs uppercase tracking-wider text-gray-500">
+                Log Files
+            </div>
+            <div class="flex-1 overflow-y-auto custom-scrollbar" id="file-list-container">
+                <!-- Injected via JS -->
+                <div class="text-center p-4 text-gray-500">Loading...</div>
+            </div>
+        </aside>
+
+        <!-- Main: Content Viewer -->
+        <main class="flex-1 bg-white flex flex-col relative">
+            <div id="file-header" class="bg-gray-50 border-b border-gray-200 p-3 flex justify-between items-center hidden">
+                <div>
+                    <span class="font-bold text-gray-700" id="current-filename">filename.log</span>
+                    <span class="text-xs text-gray-500 ml-2" id="current-filesize">0 KB</span>
+                </div>
+                <div>
+                     <span class="text-xs text-orange-500 bg-orange-100 px-2 py-1 rounded" id="truncated-badge" style="display:none">
+                        Last 100KB shown
+                     </span>
+                     <button onclick="refreshCurrentFile()" class="ml-2 text-blue-500 hover:text-blue-700 text-sm">
+                        <i class="fas fa-redo"></i> Refresh
+                     </button>
+                </div>
+            </div>
+            
+            <div id="content-area" class="flex-1 overflow-auto p-4 bg-gray-50">
+                <div id="empty-state" class="h-full flex flex-col items-center justify-center text-gray-400">
+                    <i class="fas fa-file-code text-6xl mb-4 text-gray-300"></i>
+                    <p>Select a log file to view content</p>
+                </div>
+                <pre id="log-content" class="hidden whitespace-pre-wrap break-all text-gray-800"></pre>
+            </div>
+        </main>
+    </div>
+
+    <script src="/admin/js/lib/api.js"></script>
+    <script>
+        const fileListContainer = document.getElementById('file-list-container');
+        const fileHeader = document.getElementById('file-header');
+        const currentFilenameSpan = document.getElementById('current-filename');
+        const currentFilesizeSpan = document.getElementById('current-filesize');
+        const truncatedBadge = document.getElementById('truncated-badge');
+        const emptyState = document.getElementById('empty-state');
+        const logContentPre = document.getElementById('log-content');
+
+        let currentFile = null; // { type, name }
+
+        // --- Init ---
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        if (user.role !== 'admin') {
+            alert('Access Denied');
+            window.location.href = '/admin/console.html';
+        }
+
+        async function loadFileList() {
+            try {
+                // Using standard fetch since api.js might be tailored for JSON API responses
+                // Assuming session cookie is enough for auth
+                const res = await fetch('/api/admin/logs/files');
+                if (!res.ok) throw new Error('Failed to load files');
+                const data = await res.json();
+
+                renderFileList(data);
+            } catch (e) {
+                fileListContainer.innerHTML = `<div class="text-red-400 p-4 text-sm">Error: ${e.message}</div>`;
+            }
+        }
+
+        function renderFileList(data) {
+            let html = '';
+
+            // Helper for sections
+            const renderSection = (title, files, type, icon) => {
+                let sectionHtml = `
+                    <div class="px-3 py-2 bg-gray-700 text-xs font-bold text-gray-300 flex items-center sticky top-0">
+                        <i class="${icon} mr-2 w-4"></i> ${title}
+                        <span class="ml-auto bg-gray-600 px-1.5 rounded text-white">${files.length}</span>
+                    </div>
+                `;
+                
+                if (files.length === 0) {
+                    sectionHtml += `<div class="p-3 text-xs text-gray-500 italic">No files found</div>`;
+                } else {
+                    files.forEach(f => {
+                        const size = formatSize(f.size);
+                        const time = new Date(f.mtime).toLocaleString();
+                        const isActive = currentFile && currentFile.name === f.name && currentFile.type === type ? 'active' : '';
+                        
+                        sectionHtml += `
+                            <div class="file-list-item px-4 py-3 border-b border-gray-700 text-sm text-gray-300 ${isActive}" 
+                                 onclick="loadFile('${type}', '${f.name}')">
+                                <div class="font-medium truncate" title="${f.name}">${f.name}</div>
+                                <div class="flex justify-between mt-1 text-xs text-gray-500">
+                                    <span>${size}</span>
+                                    <span>${time.split(' ')[0]}</span>
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+                return sectionHtml;
+            };
+
+            html += renderSection('Node.js Logs', data.node, 'node', 'fab fa-node-js text-green-400');
+            html += renderSection('Nginx Logs', data.nginx, 'nginx', 'fas fa-server text-green-400');
+
+            fileListContainer.innerHTML = html;
+        }
+
+        async function loadFile(type, name) {
+            currentFile = { type, name };
+            
+            // Update UI selection
+            loadFileList().then(() => { 
+                // Restore active class logic implicitly by re-rendering
+                // A better way is to just toggle classes, but re-rendering is cheap here
+            });
+
+            fileHeader.classList.remove('hidden');
+            currentFilenameSpan.innerText = name;
+            currentFilesizeSpan.innerText = 'Loading...';
+            
+            emptyState.classList.add('hidden');
+            logContentPre.classList.remove('hidden');
+            logContentPre.innerText = 'Loading content...';
+
+            try {
+                const res = await fetch(`/api/admin/logs/files/read?type=${type}&filename=${name}`);
+                if (!res.ok) throw new Error('Read failed');
+                const data = await res.json();
+
+                logContentPre.innerText = data.content || '(Empty file)';
+                currentFilesizeSpan.innerText = formatSize(data.size);
+                
+                if (data.truncated) {
+                    truncatedBadge.style.display = 'inline-block';
+                } else {
+                    truncatedBadge.style.display = 'none';
+                }
+                
+                // Scroll to bottom
+                const contentArea = document.getElementById('content-area');
+                contentArea.scrollTop = contentArea.scrollHeight;
+
+            } catch (e) {
+                logContentPre.innerText = `Error reading file: ${e.message}`;
+            }
+        }
+
+        function refreshCurrentFile() {
+            if (currentFile) {
+                loadFile(currentFile.type, currentFile.name);
+            }
+        }
+
+        function formatSize(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // Start
+        loadFileList();
+    </script>
+</body>
+</html>

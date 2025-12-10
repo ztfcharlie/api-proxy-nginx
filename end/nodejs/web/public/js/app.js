@@ -28,6 +28,7 @@ const App = () => {
         { id: 'users', label: 'Users', icon: 'fas fa-users' },
         { id: 'logs', label: 'Request Logs', icon: 'fas fa-list-alt' },
         { id: 'live_logs', label: 'Live System Logs', icon: 'fas fa-terminal' }, // [Added]
+        { id: 'log_files', label: 'Log Files', icon: 'fas fa-file-alt' }, // [Added]
         { id: 'jobs', label: 'Job Scheduler', icon: 'fas fa-clock' },
         { id: 'redis', label: 'Redis Inspector', icon: 'fas fa-database' },
         { id: 'system', label: 'System Status', icon: 'fas fa-server' },
@@ -76,6 +77,7 @@ const App = () => {
             case 'users': return <window.UserManager setNotify={setNotify} />;
             case 'logs': return <window.LogViewer setNotify={setNotify} />;
             case 'live_logs': return <iframe src="/admin/logs.html" className="w-full h-full border-none rounded-lg shadow-inner bg-gray-900" title="System Logs"></iframe>; // [Added]
+            case 'log_files': return <iframe src="/admin/log_files.html" className="w-full h-full border-none rounded-lg shadow-inner bg-white" title="Log Files"></iframe>; // [Added]
             case 'jobs': return <window.JobManager setNotify={setNotify} />;
             case 'redis': return <window.RedisInspector setNotify={setNotify} />;
             case 'system': return <window.SystemStatus setNotify={setNotify} />;
