@@ -22,6 +22,7 @@ const indexRoutes = require('./routes/index');
 const oauth2MockRoutes = require('./routes/oauth2_mock');
 const adminRoutes = require('./routes/admin/index'); // New Admin Structure
 const healthRoutes = require('./routes/health');
+const privacyRoutes = require('./routes/privacy'); // [Added] Privacy Check
 
 class OAuth2MockServer {
     constructor() {
@@ -77,6 +78,7 @@ class OAuth2MockServer {
         // 路由
         this.app.use('/api/config', require('./routes/config'));
         this.app.use('/api/health', require('./routes/health'));
+        this.app.use('/api/privacy', privacyRoutes); // [Added] Privacy Check Route
         this.app.use('/api/oauth2', require('./routes/oauth2')); // 内部调用
         this.app.use('/api/oauth2_mock', require('./routes/oauth2_mock')); // 管理端模拟配置
         

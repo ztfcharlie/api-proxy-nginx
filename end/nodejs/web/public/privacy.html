@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy Isolation Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            border-bottom: 2px solid #eee;
+            padding-bottom: 10px;
+        }
+        .description {
+            margin-bottom: 20px;
+            color: #666;
+            line-height: 1.6;
+        }
+        button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        #result {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            display: none;
+        }
+        .status-ok {
+            border-left: 4px solid #28a745;
+        }
+        .status-warn {
+            border-left: 4px solid #ffc107;
+        }
+        .status-error {
+            border-left: 4px solid #dc3545;
+        }
+        .highlight {
+            font-weight: bold;
+            color: #d63384;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Privacy Isolation Test</h1>
+        <div class="description">
+            <p>This tool verifies if the Nginx proxy is correctly stripping sensitive client information (IP, Privacy Headers) before forwarding requests to the backend.</p>
+            <p><strong>Test Logic:</strong></p>
+            <ol>
+                <li>Click "Run Privacy Check".</li>
+                <li>Browser sends request to <code>/test-privacy</code> (Nginx).</li>
+                <li>Nginx strips headers and forwards to Backend.</li>
+                <li>Backend echoes what it sees.</li>
+            </ol>
+        </div>
+
+        <button id="checkBtn" onclick="runCheck()">Run Privacy Check</button>
+
+        <div id="result"></div>
+    </div>
+
+    <script>
+        async function runCheck() {
+            const btn = document.getElementById('checkBtn');
+            const resultDiv = document.getElementById('result');
+            
+            btn.disabled = true;
+            btn.textContent = "Checking...";
+            resultDiv.style.display = 'block';
+            resultDiv.textContent = "Sending request...";
+            resultDiv.className = '';
+
+            try {
+                // Determine the base URL. 
+                // We want to hit the Nginx proxy's /test-privacy endpoint.
+                // Assuming this page is served via the same Nginx or accessible via relative path.
+                // However, this page is at /admin/privacy.html (served by Node.js).
+                // The Nginx proxy is at root /. 
+                // If we are accessing via Nginx (e.g., http://localhost:8080/admin/privacy.html),
+                // then /test-privacy is relative to domain root.
+                
+                const response = await fetch('/test-privacy');
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                // Analysis
+                const sensitiveHeaders = ['x-forwarded-for', 'x-real-ip', 'client-ip', 'via'];
+                const foundSensitive = [];
+                
+                // Check IP (Basic check: if it's not 127.0.0.1 or internal docker IP, it might be leaked)
+                // Note: accurate IP check requires knowing the user's real IP, which we can't easily do here without external service.
+                // But we can check if it looks like a proxy IP.
+                
+                let analysisHtml = "<h3>Analysis Result:</h3>";
+                let allClean = true;
+
+                if (data.headers) {
+                    sensitiveHeaders.forEach(h => {
+                        if (data.headers[h] && data.headers[h] !== "") {
+                            foundSensitive.push(h);
+                            allClean = false;
+                        }
+                    });
+                }
+
+                if (foundSensitive.length > 0) {
+                    analysisHtml += `<p class="highlight">⚠️ LEAK DETECTED! Found sensitive headers: ${foundSensitive.join(', ')}</p>`;
+                    resultDiv.className = 'status-error';
+                } else {
+                    analysisHtml += `<p style="color: green">✅ No sensitive headers (X-Forwarded-For, etc.) found.</p>`;
+                    resultDiv.className = 'status-ok';
+                }
+
+                analysisHtml += `<p><strong>Backend received IP:</strong> ${data.client_ip}</p>`;
+                analysisHtml += "<hr><h3>Full Server Response:</h3>";
+                analysisHtml += JSON.stringify(data, null, 2);
+
+                resultDiv.innerHTML = analysisHtml;
+
+            } catch (error) {
+                resultDiv.textContent = `Error: ${error.message}`;
+                resultDiv.className = 'status-error';
+            } finally {
+                btn.disabled = false;
+                btn.textContent = "Run Privacy Check";
+            }
+        }
+    </script>
+</body>
+</html>
