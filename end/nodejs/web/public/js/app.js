@@ -31,6 +31,7 @@ const App = () => {
         { id: 'log_files', label: 'Log Files', icon: 'fas fa-file-alt' }, // [Added]
         { id: 'jobs', label: 'Job Scheduler', icon: 'fas fa-clock' },
         { id: 'redis', label: 'Redis Inspector', icon: 'fas fa-database' },
+        { id: 'client_test', label: 'Client Test', icon: 'fas fa-vial' }, // [Added]
         { id: 'system', label: 'System Status', icon: 'fas fa-server' },
         { id: 'account', label: 'Account Center', icon: 'fas fa-user-circle' }
     ];
@@ -80,6 +81,7 @@ const App = () => {
             case 'log_files': return <iframe src="log_files.html" className="w-full h-full border-none rounded-lg shadow-inner bg-white" title="Log Files"></iframe>; // [Fixed] Relative path
             case 'jobs': return <window.JobManager setNotify={setNotify} />;
             case 'redis': return <window.RedisInspector setNotify={setNotify} />;
+            case 'client_test': return <window.ClientTest setNotify={setNotify} />;
             case 'system': return <window.SystemStatus setNotify={setNotify} />;
             case 'account': return <window.AccountCenter setNotify={setNotify} />;
             default: return <window.Dashboard />;
