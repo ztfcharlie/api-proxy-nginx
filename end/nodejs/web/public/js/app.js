@@ -1,44 +1,77 @@
-const { useState, useEffect } = React;
+const { useState, useEffect, useRef } = React;
 
-// Wrapper to safely load ClientTest component with polling
-const ClientTestWrapper = (props) => {
-    const [Component, setComponent] = useState(window.ClientTest);
+// ==========================================
+// UTILITY: Async Component Loader
+// ==========================================
+const AsyncComponentLoader = ({ scriptPath, componentName, props }) => {
+    const [Component, setComponent] = useState(window[componentName]);
+    const [error, setError] = useState(null);
 
     useEffect(() => {
-        if (Component) return;
+        // If component is already loaded globally, use it
+        if (window[componentName]) {
+            setComponent(() => window[componentName]);
+            return;
+        }
 
-        const checkInterval = setInterval(() => {
-            if (window.ClientTest) {
-                setComponent(() => window.ClientTest);
-                clearInterval(checkInterval);
-            }
-        }, 100);
+        // Check if script is already present
+        const existingScript = document.querySelector(`script[src="${scriptPath}"]`);
+        
+        if (!existingScript) {
+            const script = document.createElement('script');
+            script.src = scriptPath;
+            script.type = "text/babel"; // Important for Babel Standalone
+            script.async = true;
 
-        // Safety timeout after 10 seconds
-        const timeout = setTimeout(() => {
-            clearInterval(checkInterval);
-        }, 10000);
+            // Since we are using Babel Standalone, the 'load' event of the script tag 
+            // fires BEFORE Babel compiles and executes it. 
+            // So we need to poll for the window object.
+            script.onload = () => {
+                // Script loaded, start polling for component
+                const pollInterval = setInterval(() => {
+                    if (window[componentName]) {
+                        setComponent(() => window[componentName]);
+                        clearInterval(pollInterval);
+                    }
+                }, 50);
+                
+                // Timeout after 5s
+                setTimeout(() => clearInterval(pollInterval), 5000);
+            };
 
-        return () => {
-            clearInterval(checkInterval);
-            clearTimeout(timeout);
-        };
-    }, [Component]);
+            script.onerror = () => setError("Failed to load script");
+            document.body.appendChild(script);
+        } else {
+            // Script exists but maybe polling is needed (rare race condition)
+             const pollInterval = setInterval(() => {
+                if (window[componentName]) {
+                    setComponent(() => window[componentName]);
+                    clearInterval(pollInterval);
+                }
+            }, 50);
+            setTimeout(() => clearInterval(pollInterval), 5000);
+        }
+    }, [scriptPath, componentName]);
 
+    if (error) return <div className="text-red-500 text-center mt-10">Error: {error}</div>;
+    
     if (!Component) {
         return (
             <div className="flex h-full items-center justify-center text-gray-500">
                 <div className="text-center">
-                    <i className="fas fa-spinner fa-spin text-3xl mb-4 text-blue-500"></i>
-                    <p>Loading Component... <br/><span className="text-xs text-gray-400">(Waiting for script compilation)</span></p>
+                    <i className="fas fa-circle-notch fa-spin text-3xl mb-4 text-blue-500"></i>
+                    <p>Loading Module...</p>
                 </div>
             </div>
         );
     }
+
     return <Component {...props} />;
 };
 
-// Main App Component
+// ==========================================
+// MODULE: Main Application
+// ==========================================
 const App = () => {
     const [user, setUser] = useState(null);
     const [activeView, setActiveView] = useState('dashboard');
@@ -65,11 +98,11 @@ const App = () => {
         { id: 'tokens', label: 'Virtual Tokens', icon: 'fas fa-key' },
         { id: 'users', label: 'Users', icon: 'fas fa-users' },
         { id: 'logs', label: 'Request Logs', icon: 'fas fa-list-alt' },
-        { id: 'live_logs', label: 'Live System Logs', icon: 'fas fa-terminal' }, // [Added]
-        { id: 'log_files', label: 'Log Files', icon: 'fas fa-file-alt' }, // [Added]
+        { id: 'live_logs', label: 'Live System Logs', icon: 'fas fa-terminal' },
+        { id: 'log_files', label: 'Log Files', icon: 'fas fa-file-alt' },
         { id: 'jobs', label: 'Job Scheduler', icon: 'fas fa-clock' },
         { id: 'redis', label: 'Redis Inspector', icon: 'fas fa-database' },
-        { id: 'client_test', label: 'Client Test', icon: 'fas fa-vial' }, // [Added]
+        { id: 'client_test', label: 'Client Test', icon: 'fas fa-vial' },
         { id: 'system', label: 'System Status', icon: 'fas fa-server' },
         { id: 'account', label: 'Account Center', icon: 'fas fa-user-circle' }
     ];
@@ -77,11 +110,9 @@ const App = () => {
     const menuItems = React.useMemo(() => {
         if (!user) return [];
         if (user.role === 'admin') return allMenuItems;
-        // User role visible items
         return allMenuItems.filter(i => ['tokens', 'logs', 'account'].includes(i.id));
     }, [user]);
 
-    // Redirect user from dashboard to tokens if not admin
     useEffect(() => {
         if (user && user.role !== 'admin' && activeView === 'dashboard') {
             setActiveView('tokens');
@@ -94,17 +125,13 @@ const App = () => {
         setUser(null);
     };
 
-    // Render Login View if not authenticated
-    // [CRITICAL FIX] Hooks must be called before conditional return
     if (!user) {
         return <window.LoginView onLogin={setUser} />;
     }
 
-    // View Router
     const renderContent = () => {
-        // Security check for view access
         const isAllowed = menuItems.find(i => i.id === activeView);
-        if (!isAllowed && activeView !== 'dashboard') { // Dashboard might be default fallback
+        if (!isAllowed && activeView !== 'dashboard') {
              return <div className="text-center mt-20 text-red-500">Access Denied</div>;
         }
 
@@ -112,14 +139,15 @@ const App = () => {
             case 'dashboard': return user.role === 'admin' ? <window.Dashboard /> : null;
             case 'channels': return <window.ChannelsManager setNotify={setNotify} />;
             case 'models': return <window.ModelManager setNotify={setNotify} />;
-            case 'tokens': return <window.TokenManager user={user} setNotify={setNotify} />; // Pass user prop
+            case 'tokens': return <window.TokenManager user={user} setNotify={setNotify} />;
             case 'users': return <window.UserManager setNotify={setNotify} />;
             case 'logs': return <window.LogViewer setNotify={setNotify} />;
-            case 'live_logs': return <iframe src="logs.html" className="w-full h-full border-none rounded-lg shadow-inner bg-gray-900" title="System Logs"></iframe>; // [Fixed] Relative path
-            case 'log_files': return <iframe src="log_files.html" className="w-full h-full border-none rounded-lg shadow-inner bg-white" title="Log Files"></iframe>; // [Fixed] Relative path
+            case 'live_logs': return <iframe src="logs.html" className="w-full h-full border-none rounded-lg shadow-inner bg-gray-900" title="System Logs"></iframe>;
+            case 'log_files': return <iframe src="log_files.html" className="w-full h-full border-none rounded-lg shadow-inner bg-white" title="Log Files"></iframe>;
             case 'jobs': return <window.JobManager setNotify={setNotify} />;
             case 'redis': return <window.RedisInspector setNotify={setNotify} />;
-            case 'client_test': return <ClientTestWrapper setNotify={setNotify} />;
+            // Here we use the Async Loader for the modularized component
+            case 'client_test': return <AsyncComponentLoader scriptPath="js/client-test.js" componentName="ClientTest" props={{ setNotify }} />;
             case 'system': return <window.SystemStatus setNotify={setNotify} />;
             case 'account': return <window.AccountCenter setNotify={setNotify} />;
             default: return <window.Dashboard />;
@@ -128,13 +156,11 @@ const App = () => {
 
     return (
         <div className="flex h-screen w-full bg-gray-100">
-            {/* Sidebar */}
             <aside className="w-64 bg-gray-900 text-gray-300 flex flex-col shadow-xl z-20 transition-all duration-300 flex-shrink-0">
                 <div className="h-16 flex items-center px-6 bg-gray-800 border-b border-gray-700 shadow-md">
                     <i className="fas fa-project-diagram text-blue-500 text-xl mr-3"></i>
                     <span className="text-white font-bold text-lg tracking-wide">AI Gateway</span>
                 </div>
-                
                 <nav className="flex-1 py-6 space-y-1 px-3 overflow-y-auto custom-scrollbar">
                     {menuItems.map(item => (
                         <button key={item.id}
@@ -145,17 +171,13 @@ const App = () => {
                         </button>
                     ))}
                 </nav>
-
                 <div className="p-4 border-t border-gray-800">
                     <button onClick={handleLogout} className="w-full flex items-center px-4 py-2 text-sm text-red-400 hover:bg-gray-800 hover:text-red-300 rounded-lg transition-colors duration-200">
                         <i className="fas fa-sign-out-alt w-6 text-center mr-3"></i> Sign Out
                     </button>
                 </div>
             </aside>
-
-            {/* Main Content Area */}
             <main className="flex-1 w-full flex flex-col overflow-hidden relative bg-gray-50">
-                {/* Top Header */}
                 <header className="h-16 bg-white border-b border-gray-200 flex items-center justify-between px-8 shadow-sm z-10 flex-shrink-0">
                     <div className="flex items-center">
                         <h2 className="text-lg font-semibold text-gray-800 capitalize flex items-center">
@@ -170,8 +192,6 @@ const App = () => {
                         </div>
                     </div>
                 </header>
-
-                {/* Content Body */}
                 <div className="flex-1 w-full overflow-hidden p-8 relative">
                     <window.Notification message={notify.msg} type={notify.type} onClose={() => setNotify({ msg: '', type: '' })} />
                     {renderContent()}
