@@ -65,6 +65,7 @@ const getPayload = (vendor, path) => {
 };
 
 // Component Definition
+// Using window assignment for global access in modular setup
 window.ClientTest = ({ setNotify }) => {
     const { useState, useEffect } = React;
 
@@ -83,7 +84,15 @@ window.ClientTest = ({ setNotify }) => {
 
     // Load Virtual Tokens
     useEffect(() => {
-        axios.get('/api/client-test/tokens')
+        // Ensure axios is available
+        const http = window.axios || axios;
+        if (!http) {
+            console.error("Axios not found!");
+            setNotify({ msg: "System Error: HTTP Client missing", type: "error" });
+            return;
+        }
+
+        http.get('/api/client-test/tokens')
             .then(res => setVirtualTokens(res.data))
             .catch(err => console.error("Failed to load tokens", err));
     }, []);
@@ -98,6 +107,7 @@ window.ClientTest = ({ setNotify }) => {
 
     // Submit Request
     const handleSubmit = async () => {
+        const http = window.axios || axios;
         setLoading(true);
         setError(null);
         setResponse(null);
@@ -120,7 +130,7 @@ window.ClientTest = ({ setNotify }) => {
                 return;
             }
 
-            const res = await axios.post('/api/client-test/send', {
+            const res = await http.post('/api/client-test/send', {
                 vendor,
                 baseUrl,
                 path: apiPath,
