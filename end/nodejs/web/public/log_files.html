@@ -26,7 +26,7 @@
             <button onclick="loadFileList()" class="p-2 rounded hover:bg-gray-100 text-gray-600" title="Refresh List">
                 <i class="fas fa-sync-alt"></i>
             </button>
-            <a href="/admin/console.html" class="ml-4 text-gray-500 hover:text-gray-800 text-sm">
+            <a href="console.html" class="ml-4 text-gray-500 hover:text-gray-800 text-sm">
                 <i class="fas fa-arrow-left mr-1"></i> Back to Console
             </a>
         </div>
@@ -78,7 +78,7 @@
     </div>
 
     <script src="https://unpkg.com/axios/dist/axios.min.js"></script>
-    <script src="/admin/js/lib/api.js"></script>
+    <script src="js/lib/api.js"></script>
     <script>
         const fileListContainer = document.getElementById('file-list-container');
         const fileHeader = document.getElementById('file-header');
@@ -94,7 +94,7 @@
         const user = JSON.parse(localStorage.getItem('user') || '{}');
         if (user.role !== 'admin') {
             alert('Access Denied');
-            window.location.href = '/admin/console.html';
+            window.location.href = 'console.html';
         }
 
         async function loadFileList() {
@@ -104,7 +104,7 @@
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 if (!res.ok) {
-                    if (res.status === 401) window.location.href = '/admin/console.html';
+                    if (res.status === 401) window.location.href = 'console.html';
                     throw new Error('Failed to load files');
                 }
                 const data = await res.json();

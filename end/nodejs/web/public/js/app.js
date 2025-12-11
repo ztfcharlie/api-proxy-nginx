@@ -76,8 +76,8 @@ const App = () => {
             case 'tokens': return <window.TokenManager user={user} setNotify={setNotify} />; // Pass user prop
             case 'users': return <window.UserManager setNotify={setNotify} />;
             case 'logs': return <window.LogViewer setNotify={setNotify} />;
-            case 'live_logs': return <iframe src="/admin/logs.html" className="w-full h-full border-none rounded-lg shadow-inner bg-gray-900" title="System Logs"></iframe>; // [Added]
-            case 'log_files': return <iframe src="/admin/log_files.html" className="w-full h-full border-none rounded-lg shadow-inner bg-white" title="Log Files"></iframe>; // [Added]
+            case 'live_logs': return <iframe src="logs.html" className="w-full h-full border-none rounded-lg shadow-inner bg-gray-900" title="System Logs"></iframe>; // [Fixed] Relative path
+            case 'log_files': return <iframe src="log_files.html" className="w-full h-full border-none rounded-lg shadow-inner bg-white" title="Log Files"></iframe>; // [Fixed] Relative path
             case 'jobs': return <window.JobManager setNotify={setNotify} />;
             case 'redis': return <window.RedisInspector setNotify={setNotify} />;
             case 'system': return <window.SystemStatus setNotify={setNotify} />;
