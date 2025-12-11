@@ -23,7 +23,7 @@
         ]
     },
     {
-      "client_token":"gemini-client-key-suzong",
+      "client_token":"gemini-client-key-sunzong",
       "enable":true,
       "service_type": "google",
       "key_filename_gemini":[
