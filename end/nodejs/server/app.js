@@ -56,6 +56,10 @@ class OAuth2MockServer {
 
         this.app.use(express.json({ limit: '10mb' }));
         this.app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+        
+        // [Added] Serve static files for Landing Page (root)
+        this.app.use(express.static(path.join(__dirname, '../web/public')));
+        // [Keep] Serve static files for Admin Console
         this.app.use('/admin', express.static(path.join(__dirname, '../web/public')));
 
         if (process.env.ENABLE_MORGAN !== 'false') {
