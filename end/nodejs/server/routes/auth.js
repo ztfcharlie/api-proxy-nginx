@@ -20,7 +20,7 @@ router.get('/captcha', async (req, res) => {
             noise: 2,
             color: true,
             background: '#cc9966',
-            width: 120,
+            width: 150,
             height: 40
         });
 
