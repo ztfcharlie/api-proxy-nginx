@@ -3,6 +3,11 @@ const LoggerService = require('./LoggerService');
 
 class RedisService {
     constructor() {
+        if (RedisService.instance) {
+            return RedisService.instance;
+        }
+        RedisService.instance = this;
+
         this.redis = null;
         this.subscribers = new Map();
         this.isConnected = false;
@@ -29,6 +34,13 @@ class RedisService {
         };
 
         this.logger = LoggerService;
+    }
+
+    static getInstance() {
+        if (!RedisService.instance) {
+            RedisService.instance = new RedisService();
+        }
+        return RedisService.instance;
     }
 
     async initialize() {

@@ -25,10 +25,11 @@ router.get('/captcha', async (req, res) => {
         });
 
         const id = uuidv4();
-        const client = RedisService.getClient();
+        const redis = RedisService.getInstance();
         
         // 存入 Redis，5分钟过期
-        await client.setex(`captcha:${id}`, 300, captcha.text.toLowerCase());
+        // RedisService.set(key, value, ttl) 会自动处理 keyPrefix
+        await redis.set(`captcha:${id}`, captcha.text.toLowerCase(), 300);
 
         res.json({
             id: id,
@@ -56,9 +57,9 @@ router.post('/login', async (req, res) => {
     }
 
     try {
-        const client = RedisService.getClient();
+        const redis = RedisService.getInstance();
         const redisKey = `captcha:${captchaId}`;
-        const storedCode = await client.get(redisKey);
+        const storedCode = await redis.get(redisKey);
 
         if (!storedCode) {
             return res.status(400).json({ error: 'Verification code expired', code: 'CAPTCHA_EXPIRED' });
@@ -69,7 +70,7 @@ router.post('/login', async (req, res) => {
         }
 
         // 验证成功后立即删除，防止重放
-        await client.del(redisKey);
+        await redis.delete(redisKey);
 
         const [users] = await db.query("SELECT * FROM sys_users WHERE username = ?", [username]);
         if (users.length === 0) {
