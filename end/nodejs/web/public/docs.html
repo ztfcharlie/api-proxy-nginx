@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Protocol Docs - Universal AI Gateway</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        dark: '#0B0C10',
+                        cyan: { 400: '#22d3ee', 500: '#06b6d4' }
+                    }
+                }
+            }
+        }
+    </script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700&family=Rajdhani:wght@300;500;700&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        body { 
+            font-family: 'Rajdhani', sans-serif; 
+            background-color: #050505;
+        }
+        h1, h2, .brand-font { font-family: 'Orbitron', sans-serif; }
+        .mono-font { font-family: 'Fira Code', monospace; }
+
+        .glass-card {
+            background: rgba(30, 41, 59, 0.4);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            transition: all 0.3s ease;
+        }
+
+        .glass-card:hover {
+            transform: translateY(-5px);
+            border-color: rgba(34, 211, 238, 0.3);
+            box-shadow: 0 10px 30px -10px rgba(6, 182, 212, 0.2);
+        }
+        
+        .code-block {
+            background: #0d1117;
+            border: 1px solid #30363d;
+        }
+    </style>
+</head>
+<body class="text-gray-200 antialiased min-h-screen flex flex-col bg-[url('data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAiIGhlaWdodD0iMjAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyI+PGNpcmNsZSBjeD0iMSIgY3k9IjEiIHI9IjEiIGZpbGw9InJnYmEoMjU1LDI1NSwyNTUsMC4wNSkiLz48L3N2Zz4=')]">
+
+    <!-- Nav -->
+    <nav class="border-b border-white/10 bg-black/50 backdrop-blur-lg sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-20 items-center">
+                <a href="/" class="flex items-center space-x-3 group">
+                    <div class="w-8 h-8 bg-cyan-600 rounded flex items-center justify-center text-white text-sm">
+                        <i class="fas fa-cube"></i>
+                    </div>
+                    <span class="brand-font font-bold text-xl tracking-wider text-white">UNIGATE</span>
+                </a>
+                <div class="hidden md:flex space-x-8 items-center">
+                    <a href="/" class="text-gray-400 hover:text-white transition tracking-wide font-medium">HOME</a>
+                    <a href="models.html" class="text-gray-400 hover:text-white transition tracking-wide font-medium">MODELS</a>
+                    <a href="docs.html" class="text-cyan-400 border-b-2 border-cyan-400 pb-1 font-bold tracking-wide">DOCS</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Header -->
+    <div class="relative z-10 py-16 border-b border-white/5 bg-gradient-to-b from-black to-transparent">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <h1 class="text-4xl font-black text-white tracking-widest mb-4">PROTOCOL <span class="text-cyan-500">SPECS</span></h1>
+            <p class="text-xl text-gray-400 max-w-2xl font-light">
+                Native proxy endpoints. Replace the base URL and keep your existing SDKs.
+            </p>
+        </div>
+    </div>
+
+    <!-- Content -->
+    <div class="flex-1 py-12 relative z-10">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                
+                <!-- OpenAI -->
+                <a href="https://platform.openai.com/docs/api-reference" target="_blank" class="glass-card rounded-xl p-8 group">
+                    <div class="flex items-center justify-between mb-6">
+                        <div class="flex items-center gap-4">
+                            <div class="w-12 h-12 bg-green-500/10 rounded-lg flex items-center justify-center text-green-400 text-2xl border border-green-500/20 group-hover:border-green-500 transition-colors">
+                                <i class="fas fa-robot"></i>
+                            </div>
+                            <h3 class="brand-font font-bold text-xl text-white group-hover:text-green-400 transition">OpenAI Protocol</h3>
+                        </div>
+                        <i class="fas fa-external-link-alt text-gray-600 group-hover:text-white transition"></i>
+                    </div>
+                    <p class="text-gray-400 mb-6 font-light">Full compatibility with Chat Completions API. Drop-in replacement for official Python/Node.js libraries.</p>
+                    <div class="code-block rounded p-3 font-mono text-xs text-gray-300">
+                        <span class="text-gray-500">POST</span> https://your-gateway.com<span class="text-green-400">/v1/chat/completions</span>
+                    </div>
+                </a>
+
+                <!-- Vertex AI -->
+                <a href="https://cloud.google.com/vertex-ai/docs/generative-ai/model-reference/gemini" target="_blank" class="glass-card rounded-xl p-8 group">
+                    <div class="flex items-center justify-between mb-6">
+                        <div class="flex items-center gap-4">
+                            <div class="w-12 h-12 bg-blue-500/10 rounded-lg flex items-center justify-center text-blue-400 text-2xl border border-blue-500/20 group-hover:border-blue-500 transition-colors">
+                                <i class="fab fa-google"></i>
+                            </div>
+                            <h3 class="brand-font font-bold text-xl text-white group-hover:text-blue-400 transition">Vertex AI (Gemini)</h3>
+                        </div>
+                        <i class="fas fa-external-link-alt text-gray-600 group-hover:text-white transition"></i>
+                    </div>
+                    <p class="text-gray-400 mb-6 font-light">Direct pipe to Google's TPU infrastructure. Supports both REST and GRPC protocols.</p>
+                    <div class="code-block rounded p-3 font-mono text-xs text-gray-300 truncate">
+                        <span class="text-gray-500">POST</span> ...<span class="text-blue-400">/v1/projects/{id}/locations/{loc}/publishers/google/models/...</span>
+                    </div>
+                </a>
+
+                <!-- Anthropic -->
+                <a href="https://docs.anthropic.com/claude/reference/getting-started-with-the-api" target="_blank" class="glass-card rounded-xl p-8 group">
+                    <div class="flex items-center justify-between mb-6">
+                        <div class="flex items-center gap-4">
+                            <div class="w-12 h-12 bg-purple-500/10 rounded-lg flex items-center justify-center text-purple-400 text-2xl border border-purple-500/20 group-hover:border-purple-500 transition-colors">
+                                <i class="fas fa-brain"></i>
+                            </div>
+                            <h3 class="brand-font font-bold text-xl text-white group-hover:text-purple-400 transition">Anthropic Claude</h3>
+                        </div>
+                        <i class="fas fa-external-link-alt text-gray-600 group-hover:text-white transition"></i>
+                    </div>
+                    <p class="text-gray-400 mb-6 font-light">Access Claude 3 Opus/Sonnet with native message format support.</p>
+                    <div class="code-block rounded p-3 font-mono text-xs text-gray-300">
+                        <span class="text-gray-500">POST</span> https://your-gateway.com<span class="text-purple-400">/v1/messages</span>
+                    </div>
+                </a>
+
+                <!-- Azure -->
+                <a href="https://learn.microsoft.com/en-us/azure/ai-services/openai/reference" target="_blank" class="glass-card rounded-xl p-8 group">
+                    <div class="flex items-center justify-between mb-6">
+                        <div class="flex items-center gap-4">
+                            <div class="w-12 h-12 bg-cyan-500/10 rounded-lg flex items-center justify-center text-cyan-400 text-2xl border border-cyan-500/20 group-hover:border-cyan-500 transition-colors">
+                                <i class="fab fa-microsoft"></i>
+                            </div>
+                            <h3 class="brand-font font-bold text-xl text-white group-hover:text-cyan-400 transition">Azure OpenAI</h3>
+                        </div>
+                        <i class="fas fa-external-link-alt text-gray-600 group-hover:text-white transition"></i>
+                    </div>
+                    <p class="text-gray-400 mb-6 font-light">Enterprise endpoints with Deployment ID routing support.</p>
+                    <div class="code-block rounded p-3 font-mono text-xs text-gray-300">
+                        <span class="text-gray-500">POST</span> ...<span class="text-cyan-400">/openai/deployments/{id}/chat/completions</span>
+                    </div>
+                </a>
+
+            </div>
+        </div>
+    </div>
+</body>
+</html>

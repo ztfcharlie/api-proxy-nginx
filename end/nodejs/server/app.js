@@ -79,6 +79,7 @@ class OAuth2MockServer {
         this.app.use('/api/config', require('./routes/config'));
         this.app.use('/api/health', require('./routes/health'));
         this.app.use('/api/privacy', privacyRoutes); // [Added] Privacy Check Route
+        this.app.use('/api/public', require('./routes/public_api')); // [Added] Public API for Landing Page
         this.app.use('/api/oauth2', require('./routes/oauth2')); // 内部调用
         this.app.use('/api/oauth2_mock', require('./routes/oauth2_mock')); // 管理端模拟配置
         

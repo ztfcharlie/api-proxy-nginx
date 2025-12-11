@@ -1,13 +1,191 @@
 <!DOCTYPE html>
-<html>
+<html lang="en" class="dark">
 <head>
-    <meta http-equiv="refresh" content="0; url=console.html" />
-    <script type="text/javascript">
-        window.location.href = "console.html";
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Universal AI Gateway - Next Gen Interface</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        dark: '#0B0C10',
+                        light: '#66FCF1',
+                        gray: '#C5C6C7',
+                        navy: '#1F2833',
+                        cyan: {
+                            400: '#22d3ee',
+                            500: '#06b6d4',
+                        }
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'float': 'float 6s ease-in-out infinite',
+                    },
+                    keyframes: {
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0)' },
+                            '50%': { transform: 'translateY(-20px)' },
+                        }
+                    }
+                }
+            }
+        }
     </script>
-    <title>Redirecting to Admin Console...</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;700;900&family=Rajdhani:wght@300;500;700&display=swap" rel="stylesheet">
+    <style>
+        body { 
+            font-family: 'Rajdhani', sans-serif; 
+            background-color: #050505;
+            overflow-x: hidden;
+        }
+        h1, h2, h3, .brand-font { font-family: 'Orbitron', sans-serif; }
+        
+        /* Tech Grid Background */
+        .bg-grid {
+            background-size: 50px 50px;
+            background-image: linear-gradient(to right, rgba(34, 211, 238, 0.05) 1px, transparent 1px),
+                              linear-gradient(to bottom, rgba(34, 211, 238, 0.05) 1px, transparent 1px);
+            mask-image: radial-gradient(circle at center, black 40%, transparent 100%);
+        }
+        
+        .glass-card {
+            background: rgba(30, 41, 59, 0.4);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            box-shadow: 0 0 15px rgba(6, 182, 212, 0.1);
+        }
+        
+        .glass-card:hover {
+            border-color: rgba(34, 211, 238, 0.5);
+            box-shadow: 0 0 30px rgba(6, 182, 212, 0.2);
+        }
+
+        .text-glow {
+            text-shadow: 0 0 10px rgba(34, 211, 238, 0.5);
+        }
+        
+        .btn-glow:hover {
+            box-shadow: 0 0 20px rgba(34, 211, 238, 0.6);
+        }
+    </style>
 </head>
-<body>
-    If you are not redirected automatically, follow this <a href="console.html">link to the Admin Console</a>.
+<body class="text-gray-200 antialiased selection:bg-cyan-500 selection:text-black">
+
+    <!-- Background Effects -->
+    <div class="fixed inset-0 z-0">
+        <div class="absolute inset-0 bg-grid"></div>
+        <div class="absolute top-0 left-1/4 w-96 h-96 bg-purple-600 rounded-full mix-blend-screen filter blur-[128px] opacity-20 animate-pulse-slow"></div>
+        <div class="absolute bottom-0 right-1/4 w-96 h-96 bg-cyan-600 rounded-full mix-blend-screen filter blur-[128px] opacity-20 animate-pulse-slow" style="animation-delay: 2s;"></div>
+    </div>
+
+    <!-- Navigation -->
+    <nav class="fixed w-full z-50 top-0 border-b border-white/10 bg-black/50 backdrop-blur-lg">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-20 items-center">
+                <a href="/" class="flex items-center space-x-3 group">
+                    <div class="w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-lg flex items-center justify-center text-white text-xl shadow-lg shadow-cyan-500/20 group-hover:shadow-cyan-500/50 transition duration-300">
+                        <i class="fas fa-cube"></i>
+                    </div>
+                    <span class="brand-font font-bold text-2xl tracking-wider text-white group-hover:text-cyan-400 transition">UNIGATE</span>
+                </a>
+                <div class="hidden md:flex space-x-8 items-center">
+                    <a href="/" class="text-cyan-400 border-b-2 border-cyan-400 pb-1 font-bold tracking-wide">HOME</a>
+                    <a href="models.html" class="text-gray-400 hover:text-white hover:text-glow font-medium transition tracking-wide">MODELS</a>
+                    <a href="docs.html" class="text-gray-400 hover:text-white hover:text-glow font-medium transition tracking-wide">DOCS</a>
+                </div>
+                <div>
+                    <a href="console.html" class="px-5 py-2 rounded border border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10 hover:border-cyan-400 transition duration-300 font-bold tracking-wider text-sm">
+                        CONSOLE_LOGIN
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <div class="relative z-10 pt-32 pb-20 sm:pt-48 sm:pb-32 overflow-hidden">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+            <div class="inline-block px-4 py-1.5 rounded-full border border-cyan-500/30 bg-cyan-900/10 text-cyan-400 text-sm font-bold tracking-widest mb-8 animate-float">
+                SYSTEM ONLINE // V3.1.0 READY
+            </div>
+            <h1 class="text-5xl sm:text-7xl md:text-8xl font-black text-white tracking-tighter mb-8 leading-tight">
+                UNIFIED <br>
+                <span class="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-500 to-purple-600 text-glow">INTELLIGENCE</span>
+            </h1>
+            <p class="mt-4 text-xl sm:text-2xl text-gray-400 max-w-3xl mx-auto mb-12 font-light leading-relaxed">
+                Connect your infrastructure to the neural network of the future. 
+                <span class="text-white">Zero latency.</span> 
+                <span class="text-white">Enterprise security.</span> 
+                <span class="text-white">Infinite scale.</span>
+            </p>
+            <div class="flex flex-col sm:flex-row justify-center gap-6">
+                <a href="docs.html" class="group relative px-8 py-4 bg-cyan-600 text-black font-bold text-lg rounded-sm overflow-hidden btn-glow transition-all duration-300">
+                    <div class="absolute inset-0 w-full h-full bg-white/20 group-hover:translate-x-full transition-transform duration-500 -skew-x-12 origin-left"></div>
+                    START INTEGRATION
+                    <i class="fas fa-bolt ml-2"></i>
+                </a>
+                <a href="models.html" class="px-8 py-4 border border-white/20 hover:border-cyan-400 text-white font-bold text-lg rounded-sm hover:bg-white/5 transition duration-300 backdrop-blur-sm">
+                    BROWSE MATRIX
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feature Grid -->
+    <div class="relative z-10 py-24 border-t border-white/5 bg-black/20">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <!-- Card 1 -->
+                <div class="glass-card p-8 rounded-xl group transition-all duration-300 transform hover:-translate-y-2">
+                    <div class="w-14 h-14 bg-gray-900/50 rounded-lg flex items-center justify-center text-cyan-400 text-2xl mb-6 border border-white/10 group-hover:border-cyan-500/50 group-hover:text-cyan-300 transition-colors">
+                        <i class="fas fa-microchip"></i>
+                    </div>
+                    <h3 class="text-2xl font-bold text-white mb-4 group-hover:text-cyan-400 transition-colors">Neural Proxy</h3>
+                    <p class="text-gray-400 leading-relaxed font-light">
+                        Direct pipe to OpenAI, Vertex, and Claude. Built on Nginx/Lua core for sub-millisecond overhead.
+                    </p>
+                </div>
+                <!-- Card 2 -->
+                <div class="glass-card p-8 rounded-xl group transition-all duration-300 transform hover:-translate-y-2">
+                    <div class="w-14 h-14 bg-gray-900/50 rounded-lg flex items-center justify-center text-purple-400 text-2xl mb-6 border border-white/10 group-hover:border-purple-500/50 group-hover:text-purple-300 transition-colors">
+                        <i class="fas fa-user-secret"></i>
+                    </div>
+                    <h3 class="text-2xl font-bold text-white mb-4 group-hover:text-purple-400 transition-colors">Stealth Mode</h3>
+                    <p class="text-gray-400 leading-relaxed font-light">
+                        Automatic stripping of sensitive headers and IP signatures. Your infrastructure remains a ghost.
+                    </p>
+                </div>
+                <!-- Card 3 -->
+                <div class="glass-card p-8 rounded-xl group transition-all duration-300 transform hover:-translate-y-2">
+                    <div class="w-14 h-14 bg-gray-900/50 rounded-lg flex items-center justify-center text-emerald-400 text-2xl mb-6 border border-white/10 group-hover:border-emerald-500/50 group-hover:text-emerald-300 transition-colors">
+                        <i class="fas fa-network-wired"></i>
+                    </div>
+                    <h3 class="text-2xl font-bold text-white mb-4 group-hover:text-emerald-400 transition-colors">Universal Protocol</h3>
+                    <p class="text-gray-400 leading-relaxed font-light">
+                        One API standard to rule them all. Switch providers instantly without refactoring your client code.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="relative z-10 border-t border-white/10 bg-black/80 py-12">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col md:flex-row justify-between items-center">
+            <div class="mb-4 md:mb-0 text-center md:text-left">
+                <span class="brand-font font-bold text-xl text-white tracking-widest">UNIGATE SYSTEMS</span>
+                <p class="text-gray-600 text-xs mt-2 font-mono">EST. 2024 // ALL RIGHTS RESERVED</p>
+            </div>
+            <div class="flex space-x-6">
+                <a href="#" class="text-gray-500 hover:text-cyan-400 transition transform hover:scale-110"><i class="fab fa-github text-2xl"></i></a>
+                <a href="#" class="text-gray-500 hover:text-cyan-400 transition transform hover:scale-110"><i class="fab fa-discord text-2xl"></i></a>
+            </div>
+        </div>
+    </footer>
+
 </body>
 </html>
