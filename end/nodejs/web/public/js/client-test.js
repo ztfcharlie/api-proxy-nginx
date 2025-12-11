@@ -67,10 +67,10 @@ const getPayload = (vendor, path) => {
 // Component Definition
 // Using window assignment for global access in modular setup
 window.ClientTest = ({ setNotify }) => {
-    const { useState, useEffect } = React;
+    const { useState, useEffect } = window.React;
 
     const [vendor, setVendor] = useState('openai');
-    const [baseUrl, setBaseUrl] = useState(window.location.origin); // Default to current host
+    const [baseUrl, setBaseUrl] = useState(window.location.origin); 
     const [apiPath, setApiPath] = useState('/v1/chat/completions');
     const [tokenType, setTokenType] = useState('manual');
     const [apiKey, setApiKey] = useState('');
@@ -84,11 +84,10 @@ window.ClientTest = ({ setNotify }) => {
 
     // Load Virtual Tokens
     useEffect(() => {
-        // Ensure axios is available
-        const http = window.axios || axios;
+        const http = window.axios;
         if (!http) {
             console.error("Axios not found!");
-            setNotify({ msg: "System Error: HTTP Client missing", type: "error" });
+            if(setNotify) setNotify({ msg: "System Error: HTTP Client missing", type: "error" });
             return;
         }
 
@@ -106,48 +105,50 @@ window.ClientTest = ({ setNotify }) => {
     };
 
     // Submit Request
-    const handleSubmit = async () => {
-        const http = window.axios || axios;
+    const handleSubmit = () => {
+        const http = window.axios;
         setLoading(true);
         setError(null);
         setResponse(null);
 
+        let parsedPayload;
         try {
-            let parsedPayload;
-            try {
-                parsedPayload = JSON.parse(payload);
-            } catch (e) {
-                setNotify({ msg: "Payload must be valid JSON", type: "error" });
-                setLoading(false);
-                return;
-            }
+            parsedPayload = JSON.parse(payload);
+        } catch (e) {
+            if(setNotify) setNotify({ msg: "Payload must be valid JSON", type: "error" });
+            setLoading(false);
+            return;
+        }
 
-            const tokenToSend = tokenType === 'virtual' ? selectedVirtualTokenId : apiKey;
+        const tokenToSend = tokenType === 'virtual' ? selectedVirtualTokenId : apiKey;
 
-            if (!tokenToSend) {
-                setNotify({ msg: "Please provide an API Key or select a Virtual Token", type: "warning" });
-                setLoading(false);
-                return;
-            }
+        if (!tokenToSend) {
+            if(setNotify) setNotify({ msg: "Please provide an API Key or select a Virtual Token", type: "warning" });
+            setLoading(false);
+            return;
+        }
 
-            const res = await http.post('/api/client-test/send', {
-                vendor,
-                baseUrl,
-                path: apiPath,
-                apiKey: tokenToSend, // This handles both raw key and virtual token ID (string)
-                payload: parsedPayload
-            });
-
+        // Using standard Promise chain instead of async/await to avoid runtime requirements
+        http.post('/api/client-test/send', {
+            vendor: vendor,
+            baseUrl: baseUrl,
+            path: apiPath,
+            apiKey: tokenToSend,
+            payload: parsedPayload
+        })
+        .then(res => {
             setResponse(res.data);
-            setNotify({ msg: "Request sent successfully!", type: "success" });
-        } catch (err) {
+            if(setNotify) setNotify({ msg: "Request sent successfully!", type: "success" });
+        })
+        .catch(err => {
             console.error(err);
             const errMsg = err.response?.data?.error || err.message;
             setError(err.response?.data || { error: errMsg });
-            setNotify({ msg: `Request Failed: ${errMsg}`, type: "error" });
-        } finally {
+            if(setNotify) setNotify({ msg: `Request Failed: ${errMsg}`, type: "error" });
+        })
+        .finally(() => {
             setLoading(false);
-        }
+        });
     };
 
     return (
@@ -290,3 +291,6 @@ window.ClientTest = ({ setNotify }) => {
         </div>
     );
 };
+
+// Signal that component is loaded
+console.log('ClientTest Component Loaded Successfully');

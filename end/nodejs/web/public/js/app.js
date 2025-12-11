@@ -1,14 +1,36 @@
 const { useState, useEffect } = React;
 
-// Wrapper to safely load ClientTest component
+// Wrapper to safely load ClientTest component with polling
 const ClientTestWrapper = (props) => {
-    const Component = window.ClientTest;
+    const [Component, setComponent] = useState(window.ClientTest);
+
+    useEffect(() => {
+        if (Component) return;
+
+        const checkInterval = setInterval(() => {
+            if (window.ClientTest) {
+                setComponent(() => window.ClientTest);
+                clearInterval(checkInterval);
+            }
+        }, 100);
+
+        // Safety timeout after 10 seconds
+        const timeout = setTimeout(() => {
+            clearInterval(checkInterval);
+        }, 10000);
+
+        return () => {
+            clearInterval(checkInterval);
+            clearTimeout(timeout);
+        };
+    }, [Component]);
+
     if (!Component) {
         return (
             <div className="flex h-full items-center justify-center text-gray-500">
                 <div className="text-center">
                     <i className="fas fa-spinner fa-spin text-3xl mb-4 text-blue-500"></i>
-                    <p>Loading Component... (If stuck, please refresh)</p>
+                    <p>Loading Component... <br/><span className="text-xs text-gray-400">(Waiting for script compilation)</span></p>
                 </div>
             </div>
         );
