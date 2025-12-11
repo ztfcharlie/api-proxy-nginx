@@ -1,7 +1,8 @@
 // API Definitions
 window.api = {
     auth: {
-        login: (username, password) => axios.post('/api/auth/login', { username, password }),
+        login: (data) => axios.post('/api/auth/login', data), // Updated to accept object with captcha
+        getCaptcha: () => axios.get('/api/auth/captcha'),     // Added captcha fetch
         changePassword: (oldPassword, newPassword) => axios.post('/api/auth/password', { oldPassword, newPassword }),
         me: () => axios.get('/api/auth/me')
     },

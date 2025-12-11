@@ -1,18 +1,42 @@
-const { useState } = React;
+const { useState, useEffect } = React;
 
 window.LoginView = ({ onLogin }) => {
     const [creds, setCreds] = useState({ username: '', password: '' });
+    const [captchaData, setCaptchaData] = useState({ id: '', image: '' });
+    const [captchaCode, setCaptchaCode] = useState('');
     const [error, setError] = useState('');
+
+    const refreshCaptcha = async () => {
+        try {
+            const res = await window.api.auth.getCaptcha();
+            setCaptchaData(res.data);
+            setCaptchaCode(''); // Clear input on refresh
+        } catch (err) {
+            console.error("Failed to load captcha", err);
+        }
+    };
+
+    useEffect(() => {
+        refreshCaptcha();
+    }, []);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        setError('');
         try {
-            const res = await window.api.auth.login(creds.username, creds.password);
+            const res = await window.api.auth.login({
+                username: creds.username,
+                password: creds.password,
+                captchaId: captchaData.id,
+                captchaCode: captchaCode
+            });
             localStorage.setItem('token', res.data.token);
             localStorage.setItem('user', JSON.stringify(res.data.user));
             onLogin(res.data.user);
         } catch (err) {
             setError(err.response?.data?.error || 'Login failed');
+            // Refresh captcha on failure to prevent replay attacks and ensure fresh challenge
+            refreshCaptcha();
         }
     };
 
@@ -32,6 +56,22 @@ window.LoginView = ({ onLogin }) => {
                         <input type="password" required className="w-full border rounded-lg px-3 py-2 mt-1 focus:ring-2 focus:ring-blue-500 outline-none"
                             value={creds.password} onChange={e => setCreds({...creds, password: e.target.value})} />
                     </div>
+                    
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700">Verification Code</label>
+                        <div className="flex space-x-2 mt-1">
+                            <input type="text" required className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none uppercase"
+                                placeholder="Enter code"
+                                value={captchaCode} onChange={e => setCaptchaCode(e.target.value)} />
+                            <div 
+                                className="w-32 h-10 bg-gray-100 rounded cursor-pointer overflow-hidden border" 
+                                onClick={refreshCaptcha}
+                                title="Click to refresh"
+                                dangerouslySetInnerHTML={{ __html: captchaData.image }}
+                            ></div>
+                        </div>
+                    </div>
+
                     <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 transition-colors">Sign In</button>
                 </form>
             </div>

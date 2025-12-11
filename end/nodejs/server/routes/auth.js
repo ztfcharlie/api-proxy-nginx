@@ -2,22 +2,75 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const svgCaptcha = require('svg-captcha');
+const { v4: uuidv4 } = require('uuid');
 const db = require('../config/db').dbPool;
+const RedisService = require('../services/RedisService');
 const { authenticate } = require('../middleware/authCheck');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'default_secret';
 
 /**
+ * 获取验证码
+ */
+router.get('/captcha', async (req, res) => {
+    try {
+        const captcha = svgCaptcha.create({
+            size: 4,
+            noise: 2,
+            color: true,
+            background: '#cc9966',
+            width: 120,
+            height: 40
+        });
+
+        const id = uuidv4();
+        const client = RedisService.getClient();
+        
+        // 存入 Redis，5分钟过期
+        await client.setex(`captcha:${id}`, 300, captcha.text.toLowerCase());
+
+        res.json({
+            id: id,
+            image: captcha.data
+        });
+    } catch (err) {
+        console.error('Captcha Error:', err);
+        res.status(500).json({ error: 'Failed to generate captcha' });
+    }
+});
+
+/**
  * 登录
  */
 router.post('/login', async (req, res) => {
-    const { username, password } = req.body;
+    const { username, password, captchaId, captchaCode } = req.body;
 
     if (!username || !password) {
         return res.status(400).json({ error: 'Username and password are required' });
     }
 
+    // 验证码校验
+    if (!captchaId || !captchaCode) {
+        return res.status(400).json({ error: 'Verification code is required' });
+    }
+
     try {
+        const client = RedisService.getClient();
+        const redisKey = `captcha:${captchaId}`;
+        const storedCode = await client.get(redisKey);
+
+        if (!storedCode) {
+            return res.status(400).json({ error: 'Verification code expired', code: 'CAPTCHA_EXPIRED' });
+        }
+
+        if (storedCode !== captchaCode.toLowerCase()) {
+            return res.status(400).json({ error: 'Invalid verification code', code: 'CAPTCHA_INVALID' });
+        }
+
+        // 验证成功后立即删除，防止重放
+        await client.del(redisKey);
+
         const [users] = await db.query("SELECT * FROM sys_users WHERE username = ?", [username]);
         if (users.length === 0) {
             return res.status(401).json({ error: 'Invalid credentials' });
