@@ -60,11 +60,11 @@ window.LoginView = ({ onLogin }) => {
                     <div>
                         <label className="block text-sm font-medium text-gray-700">Verification Code</label>
                         <div className="flex space-x-2 mt-1">
-                            <input type="text" required className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none uppercase"
+                            <input type="text" required className="flex-1 border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none uppercase min-w-0"
                                 placeholder="Enter code"
                                 value={captchaCode} onChange={e => setCaptchaCode(e.target.value)} />
                             <div 
-                                className="w-32 h-10 bg-gray-100 rounded cursor-pointer overflow-hidden border" 
+                                className="w-32 h-10 bg-gray-100 rounded cursor-pointer overflow-hidden border flex-shrink-0" 
                                 onClick={refreshCaptcha}
                                 title="Click to refresh"
                                 dangerouslySetInnerHTML={{ __html: captchaData.image }}
