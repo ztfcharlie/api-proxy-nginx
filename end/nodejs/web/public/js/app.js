@@ -1,5 +1,21 @@
 const { useState, useEffect } = React;
 
+// Wrapper to safely load ClientTest component
+const ClientTestWrapper = (props) => {
+    const Component = window.ClientTest;
+    if (!Component) {
+        return (
+            <div className="flex h-full items-center justify-center text-gray-500">
+                <div className="text-center">
+                    <i className="fas fa-spinner fa-spin text-3xl mb-4 text-blue-500"></i>
+                    <p>Loading Component... (If stuck, please refresh)</p>
+                </div>
+            </div>
+        );
+    }
+    return <Component {...props} />;
+};
+
 // Main App Component
 const App = () => {
     const [user, setUser] = useState(null);
@@ -81,7 +97,7 @@ const App = () => {
             case 'log_files': return <iframe src="log_files.html" className="w-full h-full border-none rounded-lg shadow-inner bg-white" title="Log Files"></iframe>; // [Fixed] Relative path
             case 'jobs': return <window.JobManager setNotify={setNotify} />;
             case 'redis': return <window.RedisInspector setNotify={setNotify} />;
-            case 'client_test': return <window.ClientTest setNotify={setNotify} />;
+            case 'client_test': return <ClientTestWrapper setNotify={setNotify} />;
             case 'system': return <window.SystemStatus setNotify={setNotify} />;
             case 'account': return <window.AccountCenter setNotify={setNotify} />;
             default: return <window.Dashboard />;
