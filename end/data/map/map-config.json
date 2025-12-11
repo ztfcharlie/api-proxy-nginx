@@ -21,6 +21,17 @@
             "key_weight":1
           }
         ]
+    },
+    {
+      "client_token":"gemini-client-key-suzong",
+      "enable":true,
+      "service_type": "google",
+      "key_filename_gemini":[
+          {
+            "key_filename":"hulaoban-202504.json",
+            "key_weight":1
+          }
+        ]
     }
   ],
 
@@ -30,6 +41,10 @@
       "models":[
         {
           "model":"gemini-embedding-001",
+          "domain": "us-central1-aiplatform.googleapis.com"
+        },
+        {
+          "model":"gemini-2.5-flash",
           "domain": "us-central1-aiplatform.googleapis.com"
         },
         {
