@@ -38,8 +38,25 @@ function _M.remove_privacy_headers()
         ngx.req.clear_header(header)
     end
 
+    -- [Added] 智能伪装 User-Agent (Updated to 2024 versions)
+    local api_host = ngx.var.api_host or ""
+    local fake_ua = "python-requests/2.31.0" -- 默认通用 UA
+
+    if string.find(api_host, "googleapis.com") then
+        -- Google Vertex AI (SDK v1.43.0)
+        fake_ua = "google-cloud-aiplatform/1.43.0 proto/1.0.0 grpc/1.62.0 python/3.11.0"
+    elseif string.find(api_host, "openai.com") or string.find(api_host, "azure.com") then
+        -- OpenAI / Azure OpenAI (SDK v1.14.0)
+        fake_ua = "OpenAI/Python 1.14.0"
+    elseif string.find(api_host, "anthropic.com") then
+        -- Anthropic Claude (SDK v0.20.0)
+        fake_ua = "anthropic-python/0.20.0"
+    end
+
+    ngx.req.set_header("User-Agent", fake_ua)
+
     if config.should_test_output("upstream_headers") then
-        ngx.log(ngx.INFO, "[TEST] Removed privacy headers: ", table.concat(privacy_headers, ", "))
+        ngx.log(ngx.INFO, "[TEST] Removed privacy headers and set fake UA: ", fake_ua)
     end
 end
 
