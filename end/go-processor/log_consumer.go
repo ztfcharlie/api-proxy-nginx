@@ -15,6 +15,13 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+const (
+	StreamKey      = "stream:api_logs"
+	ConsumerGroup  = "log_processor_group"
+	ConsumerName   = "worker-1"
+	KeyModelPrices = "oauth2:model_prices" // Moved to top
+)
+
 // LogConsumer 负责消费 Redis Stream 并写入 MySQL
 type LogConsumer struct {
 	rdb    *redis.Client
@@ -27,11 +34,12 @@ type LogMetadata struct {
 	KeyFilename          string      `json:"key_filename"` // Channel ID
 	ModelName            string      `json:"model_name"`
 	Status               int         `json:"status"`
-	UpstreamResponseTime interface{} `json:"upstream_response_time"` // Handle string or float
-	RequestTime          interface{} `json:"request_time"`           // Handle string or float
+	UpstreamResponseTime interface{} `json:"upstream_response_time"`
+	RequestTime          interface{} `json:"request_time"`
 	IP                   string      `json:"ip"`
 	UserAgent            string      `json:"user_agent"`
-	URI                  string      `json:"uri"` // Request URI from Lua
+	URI                  string      `json:"uri"`
+	ContentType          string      `json:"content_type"` // [Added]
 }
 
 // Helper to safe convert interface to float64
@@ -107,15 +115,11 @@ func (lc *LogConsumer) updateChannelError(channelID int, errorMsg string) {
 	if channelID <= 0 {
 		return
 	}
-	// 截断错误信息防止过长
 	if len(errorMsg) > 255 {
 		errorMsg = errorMsg[:252] + "..."
 	}
 	
-	// 异步执行更新，不阻塞主流程
 	go func() {
-		// 这里可以加一个简单的缓存去重，防止短时间内重复更新同一个错误
-		// 但为了实时性，直接更新 DB
 		_, err := lc.db.Exec("UPDATE sys_channels SET last_error = ?, updated_at = NOW() WHERE id = ?", errorMsg, channelID)
 		if err != nil {
 			log.Printf("[WARN] Failed to update channel error: %v", err)
@@ -131,7 +135,6 @@ func (lc *LogConsumer) publishDebug(level, msg string) {
 	payload := fmt.Sprintf(`{"ts":"%s", "source":"go-consumer", "level":"%s", "msg":"%s"}`, 
 		time.Now().Format(time.RFC3339), level, strings.ReplaceAll(msg, "\"", "\\\""))
 	
-	// Non-blocking publish
 	go func() {
 		lc.rdb.Publish(context.Background(), "sys:log_stream", payload)
 	}()
@@ -141,7 +144,6 @@ func (lc *LogConsumer) processBatch(ctx context.Context, msgs []redis.XMessage) 
 	log.Printf("[DEBUG] processBatch received %d messages", len(msgs))
 	lc.publishDebug("info", fmt.Sprintf("Received batch of %d messages", len(msgs)))
 
-	// ... (existing variable declarations) ...
 	saveBody := os.Getenv("LOG_SAVE_BODY") == "true"
 
 	var valueStrings []string
@@ -175,17 +177,24 @@ func (lc *LogConsumer) processBatch(ctx context.Context, msgs []redis.XMessage) 
 		channelID := 0
 		fmt.Sscanf(meta.KeyFilename, "%d", &channelID)
 
+		// [Added] Resolve User ID from Token
+		userID := 0
+		if tokenKey != "" {
+			err := lc.db.QueryRowContext(ctx, "SELECT user_id FROM sys_virtual_tokens WHERE token_key = ?", tokenKey).Scan(&userID)
+			if err != nil && err != sql.ErrNoRows {
+				log.Printf("[WARN] Failed to resolve user_id for token %s: %v", tokenKey, err)
+			}
+		}
+
 		// [Added] 错误状态上报
 		if meta.Status >= 400 && channelID > 0 {
 			var errMsg string
-			// 尝试从响应体解析错误
 			if len(resBodyRaw) > 0 {
-				// 尝试解析常见 JSON 错误格式
 				var jsonErr struct {
 					Error struct {
 						Message string `json:"message"`
 					} `json:"error"`
-					Message string `json:"message"` // some APIs return flat message
+					Message string `json:"message"`
 				}
 				if json.Unmarshal([]byte(resBodyRaw), &jsonErr) == nil {
 					if jsonErr.Error.Message != "" {
@@ -196,7 +205,6 @@ func (lc *LogConsumer) processBatch(ctx context.Context, msgs []redis.XMessage) 
 				}
 			}
 			
-			// 如果没解析出来，用原始 body 或状态码
 			if errMsg == "" {
 				if len(resBodyRaw) > 0 && len(resBodyRaw) < 100 {
 					errMsg = fmt.Sprintf("[%d] %s", meta.Status, resBodyRaw)
@@ -209,50 +217,39 @@ func (lc *LogConsumer) processBatch(ctx context.Context, msgs []redis.XMessage) 
 		}
 
 		// [Modified] 使用计费引擎计算 Token 和费用
-		usage, err := lc.engine.Calculate(meta.ModelName, meta.URI, []byte(reqBodyRaw), []byte(resBodyRaw), meta.Status)
+		// Added 'meta.ContentType' to arguments
+		usage, err := lc.engine.Calculate(meta.ModelName, meta.URI, []byte(reqBodyRaw), []byte(resBodyRaw), meta.ContentType, meta.Status)
 		if err != nil {
 			log.Printf("[WARN] Billing calculation failed for %s: %v", reqID, err)
 		}
 
-		// ... (existing billing logic)
 		if meta.Status == 200 {
-			// [Fix] Use getModelConfig
-			cfg, found := lc.getModelConfig(ctx, channelID, meta.ModelName)
-			cost := 0.0
-			
-			if found {
-				// Calculate Cost
-				// ... (logic moved to calculateCost, but we need to call it or duplicate logic? 
-                // calculateCost now calls getModelConfig internally. So we can just call calculateCost)
-                // Wait, I refactored calculateCost to call getModelConfig. So I should just call calculateCost.
-				c, err := lc.calculateCost(ctx, channelID, meta.ModelName, usage)
-				if err == nil {
-					cost = c
-					usage.Cost = cost
+			cost, err := lc.calculateCost(ctx, channelID, meta.ModelName, usage)
+			if err == nil {
+				usage.Cost = cost
+			} else {
+				if err != redis.Nil {
+					log.Printf("[WARN] Cost calculation failed for %s: %v", reqID, err)
 				}
+			}
+			
+			// [Added] Async Task Handling
+			cfg, found := lc.getModelConfig(ctx, channelID, meta.ModelName)
+			if found && cfg.IsAsync {
+				var provider string
+				lc.db.QueryRowContext(ctx, "SELECT `type` FROM sys_channels WHERE id = ?", channelID).Scan(&provider)
 				
-				// [Added] Async Task Handling
-				if cfg.IsAsync {
-					// 1. Identify Provider (Query DB)
-					var provider string
-					lc.db.QueryRowContext(ctx, "SELECT `type` FROM sys_channels WHERE id = ?", channelID).Scan(&provider)
-					
-					// 2. Extract Task ID
-					taskID := extractUpstreamTaskID(provider, resBodyRaw)
-					
-					if taskID != "" {
-						// 3. Save to DB
-						_, err := lc.db.ExecContext(ctx, 
-							"INSERT INTO sys_async_tasks (request_id, user_id, channel_id, provider, upstream_task_id, pre_cost, response_json) VALUES (?, ?, ?, ?, ?, ?, ?)",
-							reqID, userID, channelID, provider, taskID, cost, resBodyRaw)
-							
-						if err != nil {
-							log.Printf("[WARN] Failed to save async task: %v", err)
-						} else {
-							// 4. Cache Route in Redis (24h)
-							lc.rdb.Set(ctx, fmt.Sprintf("oauth2:task_route:%s", taskID), channelID, 24*time.Hour)
-							lc.publishDebug("info", fmt.Sprintf("Async Task Created: %s (%s)", taskID, provider))
-						}
+				taskID := extractUpstreamTaskID(provider, resBodyRaw)
+				if taskID != "" {
+					_, err := lc.db.ExecContext(ctx, 
+						"INSERT INTO sys_async_tasks (request_id, user_id, channel_id, provider, upstream_task_id, pre_cost, response_json) VALUES (?, ?, ?, ?, ?, ?, ?)",
+						reqID, userID, channelID, provider, taskID, usage.Cost, resBodyRaw)
+						
+					if err != nil {
+						log.Printf("[WARN] Failed to save async task: %v", err)
+					} else {
+						lc.rdb.Set(ctx, fmt.Sprintf("oauth2:task_route:%s", taskID), channelID, 24*time.Hour)
+						lc.publishDebug("info", fmt.Sprintf("Async Task Created: %s (%s)", taskID, provider))
 					}
 				}
 			}
@@ -275,17 +272,14 @@ func (lc *LogConsumer) processBatch(ctx context.Context, msgs []redis.XMessage) 
 			}(meta, usage, reqID, channelID)
 		}
 
-		// 隐私处理：决定入库的内容
 		var reqBody, resBody string
 		
-		// 1. Request Body: 严格遵守隐私开关
 		if saveBody {
 			reqBody = limitString(reqBodyRaw, 2000)
 		} else {
 			reqBody = "" 
 		}
 
-		// 2. Response Body: 成功时遵守开关，失败时(非200)强制记录以便排查
 		if saveBody || meta.Status != 200 {
 			resBody = limitString(resBodyRaw, 2000)
 		} else {
@@ -298,16 +292,6 @@ func (lc *LogConsumer) processBatch(ctx context.Context, msgs []redis.XMessage) 
 		
 		durationMs := int(reqTime * 1000)
 		upstreamDurationMs := int(upTime * 1000)
-
-		// [Fix] Resolve User ID from Token
-		userID := 0
-		if tokenKey != "" {
-			// Simple DB lookup (for production, adding a cache here would be better)
-			err := lc.db.QueryRowContext(ctx, "SELECT user_id FROM sys_virtual_tokens WHERE token_key = ?", tokenKey).Scan(&userID)
-			if err != nil && err != sql.ErrNoRows {
-				log.Printf("[WARN] Failed to resolve user_id for token %s: %v", tokenKey, err)
-			}
-		}
 
 		// 构建 SQL 值
 		valueStrings = append(valueStrings, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
@@ -342,26 +326,16 @@ func (lc *LogConsumer) processBatch(ctx context.Context, msgs []redis.XMessage) 
 		if err != nil {
 			log.Printf("[ERROR] Batch insert failed: %v", err)
 			lc.publishDebug("error", fmt.Sprintf("DB Insert Failed: %v", err))
-			// 插入失败暂不 ACK
 		} else {
-			// 成功，批量 ACK
 			lc.rdb.XAck(ctx, StreamKey, ConsumerGroup, ackIDs...)
 			msg := fmt.Sprintf("Successfully saved %d logs to DB", len(valueStrings))
 			log.Println("[INFO] " + msg)
 			lc.publishDebug("info", msg)
 		}
 	} else if len(ackIDs) > 0 {
-		// 全是无效数据，直接 ACK
 		lc.rdb.XAck(ctx, StreamKey, ConsumerGroup, ackIDs...)
 		lc.publishDebug("warn", "Batch contained only invalid data, skipped.")
 	}
-}
-
-func limitString(s string, n int) string {
-	if len(s) > n {
-		return s[:n] + "...(truncated)"
-	}
-	return s
 }
 
 // ChannelConfigRedis 定义 Redis 中存储的 Channel 结构 (部分)
@@ -369,21 +343,16 @@ type ChannelConfigRedis struct {
 	ModelsConfig map[string]ModelBillingConfig `json:"models_config"`
 }
 
-// ModelBillingConfig 定义具体的计费规则
-// 假设结构: { "mode": "token", "input": 0.0001, "output": 0.0002 } 或 { "mode": "request", "price": 0.01 }
 type ModelBillingConfig struct {
-	Mode        string  `json:"mode"` // "token" or "request"
-	InputPrice  float64 `json:"input"`  // per 1k tokens
+	Mode        string  `json:"mode"` 
+	InputPrice  float64 `json:"input"`
 	OutputPrice float64 `json:"output"`
-	Price       float64 `json:"price"`  // per request
+	Price       float64 `json:"price"`
 	IsAsync     bool    `json:"is_async"` // [Added] Async Task Flag
 }
 
-// ... (ChannelConfigRedis struct) ...
-
 // [Refactor] 获取模型配置 (全局 + 渠道覆盖)
 func (lc *LogConsumer) getModelConfig(ctx context.Context, channelID int, model string) (ModelBillingConfig, bool) {
-	// 1. 获取全局配置
 	var globalCfg ModelBillingConfig
 	var globalFound bool
 	
@@ -402,7 +371,6 @@ func (lc *LogConsumer) getModelConfig(ctx context.Context, channelID int, model 
 		return ModelBillingConfig{}, false
 	}
 
-	// 2. 渠道覆盖
 	finalCfg := globalCfg
 	
 	if channelID > 0 {
@@ -423,14 +391,12 @@ func (lc *LogConsumer) getModelConfig(ctx context.Context, channelID int, model 
 		if chConfig.ModelsConfig != nil {
 			if c, ok := chConfig.ModelsConfig[model]; ok {
 				if c.Mode != "" { finalCfg.Mode = c.Mode }
-				// 这里可以继续覆盖 Price/IsAsync 等，如果需要渠道级别的特殊配置
 			} else if c, ok := chConfig.ModelsConfig["default"]; ok {
 				if c.Mode != "" { finalCfg.Mode = c.Mode }
 			}
 		}
 	}
 	
-	// Default mode
 	if finalCfg.Mode == "" { finalCfg.Mode = "token" }
 	
 	return finalCfg, true
@@ -442,7 +408,6 @@ func (lc *LogConsumer) calculateCost(ctx context.Context, channelID int, model s
 		return 0, nil
 	}
 
-	// 3. 计算最终费用
 	var cost float64
 	const PriceUnitDivisor = 1000000.0 
 
@@ -470,20 +435,9 @@ func extractUpstreamTaskID(provider, jsonBody string) string {
 		return ""
 	}
 	
-	// Suno / Luma / Sora: usually "id"
-	if v, ok := data["id"].(string); ok {
-		return v
-	}
-	
-	// Midjourney (some proxies): "task_id" or "result"
-	if v, ok := data["task_id"].(string); ok {
-		return v
-	}
-	
-	// Runway: "uuid" (sometimes)
-	if v, ok := data["uuid"].(string); ok {
-		return v
-	}
+	if v, ok := data["id"].(string); ok { return v }
+	if v, ok := data["task_id"].(string); ok { return v }
+	if v, ok := data["uuid"].(string); ok { return v }
 	
 	return ""
 }
