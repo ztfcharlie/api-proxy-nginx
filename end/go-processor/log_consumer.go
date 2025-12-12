@@ -437,9 +437,14 @@ func extractUpstreamTaskID(provider, jsonBody string) string {
 		return ""
 	}
 	
-	if v, ok := data["id"].(string); ok { return v }
-	if v, ok := data["task_id"].(string); ok { return v }
-	if v, ok := data["uuid"].(string); ok { return v }
+	// Priority list of keys to check
+	keys := []string{"id", "task_id", "taskId", "uuid", "generation_id", "result"}
+	
+	for _, key := range keys {
+		if v, ok := data[key].(string); ok && v != "" {
+			return v
+		}
+	}
 	
 	return ""
 }
