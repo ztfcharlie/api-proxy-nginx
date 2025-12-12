@@ -165,10 +165,14 @@
             };
 
             return (
-                <div className="flex flex-col h-full p-6 space-y-4">
+                <div className="flex flex-col h-full p-6 space-y-4 relative">
                     {notify && (
-                        <div className={`p-4 mb-4 rounded-md ${notify.type === 'error' ? 'bg-red-50 text-red-700 border border-red-200' : 'bg-green-50 text-green-700 border border-green-200'}`}>
-                            {notify.msg}
+                        <div className={`fixed top-4 left-1/2 transform -translate-x-1/2 px-6 py-3 rounded-lg shadow-xl z-50 transition-all duration-300 ${notify.type === 'error' ? 'bg-red-600 text-white' : 'bg-green-600 text-white'}`}>
+                            <div className="flex items-center space-x-2">
+                                <i className={`fas ${notify.type === 'error' ? 'fa-exclamation-circle' : 'fa-check-circle'}`}></i>
+                                <span className="font-bold">{notify.msg}</span>
+                                <button onClick={() => setNotify(null)} className="ml-4 hover:text-gray-200"><i className="fas fa-times"></i></button>
+                            </div>
                         </div>
                     )}
                     
