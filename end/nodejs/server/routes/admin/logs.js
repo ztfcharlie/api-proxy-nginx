@@ -10,7 +10,8 @@ const db = require('../../config/db').dbPool;
 const redisSub = new Redis({
     host: process.env.REDIS_HOST || 'api-proxy-redis',
     port: process.env.REDIS_PORT || 6379,
-    password: process.env.REDIS_PASSWORD
+    password: process.env.REDIS_PASSWORD,
+    db: process.env.REDIS_DB || 0 // Explicitly set DB from env
 });
 
 // 存储活跃的 SSE 连接

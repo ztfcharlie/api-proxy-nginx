@@ -197,6 +197,13 @@ end
 
 -- [Debug] 实时调试日志推送到前端 (Pub/Sub)
 function _M.publish_debug_log(level, msg)
+    -- Also log to stderr for backup visibility
+    if level == "error" or level == "warn" then
+        ngx.log(ngx.ERR, "[DEBUG-STREAM] ", msg)
+    else
+        ngx.log(ngx.INFO, "[DEBUG-STREAM] ", msg)
+    end
+
     if os.getenv("ENABLE_DEBUG_STREAM") ~= "true" then return end
     
     local ok, err = pcall(function()
