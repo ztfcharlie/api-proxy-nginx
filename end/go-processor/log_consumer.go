@@ -23,15 +23,34 @@ type LogConsumer struct {
 }
 
 type LogMetadata struct {
-	ClientToken          string  `json:"client_token"`
-	KeyFilename          string  `json:"key_filename"` // Channel ID
-	ModelName            string  `json:"model_name"`
-	Status               int     `json:"status"`
-	UpstreamResponseTime float64 `json:"upstream_response_time"`
-	RequestTime          float64 `json:"request_time"`
-	IP                   string  `json:"ip"`
-	UserAgent            string  `json:"user_agent"`
-	URI                  string  `json:"uri"` // Request URI from Lua
+	ClientToken          string      `json:"client_token"`
+	KeyFilename          string      `json:"key_filename"` // Channel ID
+	ModelName            string      `json:"model_name"`
+	Status               int         `json:"status"`
+	UpstreamResponseTime interface{} `json:"upstream_response_time"` // Handle string or float
+	RequestTime          interface{} `json:"request_time"`           // Handle string or float
+	IP                   string      `json:"ip"`
+	UserAgent            string      `json:"user_agent"`
+	URI                  string      `json:"uri"` // Request URI from Lua
+}
+
+// Helper to safe convert interface to float64
+func toFloat64(v interface{}) float64 {
+	if v == nil {
+		return 0
+	}
+	switch i := v.(type) {
+	case float64:
+		return i
+	case string:
+		var f float64
+		fmt.Sscanf(i, "%f", &f)
+		return f
+	case int:
+		return float64(i)
+	default:
+		return 0
+	}
 }
 
 func NewLogConsumer(rdb *redis.Client, db *sql.DB) *LogConsumer {
@@ -243,8 +262,12 @@ func (lc *LogConsumer) processBatch(ctx context.Context, msgs []redis.XMessage) 
 			resBody = ""
 		}
 		
-		durationMs := int(meta.RequestTime * 1000)
-		upstreamDurationMs := int(meta.UpstreamResponseTime * 1000)
+		// [Fix] Safe type conversion
+		reqTime := toFloat64(meta.RequestTime)
+		upTime := toFloat64(meta.UpstreamResponseTime)
+		
+		durationMs := int(reqTime * 1000)
+		upstreamDurationMs := int(upTime * 1000)
 
 		// 构建 SQL 值
 		valueStrings = append(valueStrings, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
