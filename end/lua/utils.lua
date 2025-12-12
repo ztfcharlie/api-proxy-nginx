@@ -114,68 +114,57 @@ end
 
 -- [Log] 异步发送日志到 Redis Stream
 function _M.log_request()
-    -- 仅在后台运行，防止错误中断请求
-    local ok, err = pcall(function()
+    -- 1. 在主线程捕获所有需要的变量 (Timer 中无法访问 ngx.var)
+    local metadata = {
+        client_token = ngx.var.client_token,
+        key_filename = ngx.var.key_filename,
+        model_name = ngx.var.model_name,
+        api_host = ngx.var.api_host,
+        method = ngx.var.request_method,
+        uri = ngx.var.request_uri,
+        status = ngx.status,
+        request_time = ngx.var.request_time,
+        upstream_status = ngx.var.upstream_status,
+        upstream_response_time = ngx.var.upstream_response_time or 0,
+        ip = ngx.var.remote_addr,
+        user_agent = ngx.var.http_user_agent,
+        request_id = ngx.var.my_request_id or ngx.var.request_id
+    }
+
+    -- Request Body
+    local req_body = ngx.req.get_body_data()
+    if not req_body then
+        local req_file = ngx.req.get_body_file()
+        if req_file then req_body = "[FILE]: " .. req_file else req_body = "" end
+    end
+
+    -- Response Body (from ctx)
+    local res_body = ngx.ctx.buffered_response or ""
+
+    -- 2. 启动异步定时器执行 Redis 操作
+    local ok, err = ngx.timer.at(0, function(premature)
+        if premature then return end
+        
         local red, err = get_redis_connection()
         if not red then
-            ngx.log(ngx.ERR, "[LOG] Failed to connect to Redis for logging: ", err)
+            ngx.log(ngx.ERR, "[LOG] Failed to connect to Redis: ", err)
             return
         end
 
-        -- 1. 收集元数据
-        local metadata = {
-            client_token = ngx.var.client_token,
-            key_filename = ngx.var.key_filename,
-            model_name = ngx.var.model_name,
-            api_host = ngx.var.api_host,
-            method = ngx.var.request_method,
-            uri = ngx.var.request_uri,
-            status = ngx.status,
-            request_time = ngx.var.request_time,
-            upstream_status = ngx.var.upstream_status,
-            upstream_response_time = ngx.var.upstream_response_time or 0,
-            ip = ngx.var.remote_addr,
-            user_agent = ngx.var.http_user_agent
-        }
+        -- 截断
+        if #req_body > 100000 then req_body = string.sub(req_body, 1, 100000) .. "..." end
+        if #res_body > 100000 then res_body = string.sub(res_body, 1, 100000) .. "..." end
 
-        -- 2. 获取 Request Body
-        -- ngx.req.get_body_data() 在内存中，get_body_file() 在磁盘中
-        local req_body = ngx.req.get_body_data()
-        if not req_body then
-            local req_file = ngx.req.get_body_file()
-            if req_file then
-                -- 暂时不读取大文件，标记为文件路径
-                req_body = "[FILE]: " .. req_file
-            else
-                req_body = ""
-            end
-        end
-
-        -- 3. 获取 Response Body
-        -- 优先使用 stream_handler 拼接的完整 buffer
-        -- 如果没有 buffer (非流式请求且没经过 body_filter)，尝试 ngx.arg (这在 log_by_lua 无效)
-        -- 注意：对于非流式普通请求，Nginx 默认不保留 Body 给 log_by_lua。
-        -- 但因为我们有 body_filter_by_lua 并在 stream_handler 里统一做了处理，理论上 buffered_response 应该有值。
-        -- 如果是普通请求但没触发 stream 逻辑，可能需要检查。
-        local res_body = ngx.ctx.buffered_response or ""
-        
-        -- 截断超大 Body 防止 Redis 拒绝
-        if #req_body > 100000 then req_body = string.sub(req_body, 1, 100000) .. "...(truncated)" end
-        if #res_body > 100000 then res_body = string.sub(res_body, 1, 100000) .. "...(truncated)" end
-
-        -- 4. 429 频率监测 (即时计数)
-        if ngx.status == 429 then
-            local token_prefix = string.sub(ngx.var.client_token or "unknown", 1, 10)
-            -- 增加计数: alert:429:token:xxx
+        -- 429 计数
+        if metadata.status == 429 then
+            local token_prefix = string.sub(metadata.client_token or "unknown", 1, 10)
             red:incr("alert:429:token:" .. token_prefix)
-            red:expire("alert:429:token:" .. token_prefix, 3600) -- 1小时过期
+            red:expire("alert:429:token:" .. token_prefix, 3600)
         end
 
-        -- 5. 发送 Stream 消息 (XADD)
-        -- Stream Key: stream:api_logs
-        -- MAXLEN ~ 100000
+        -- XADD
         local res, err = red:xadd("stream:api_logs", "MAXLEN", "~", "100000", "*",
-            "req_id", ngx.var.my_request_id or ngx.var.request_id,
+            "req_id", metadata.request_id,
             "ts", ngx.time(),
             "meta", cjson.encode(metadata),
             "req_body", req_body,
@@ -183,15 +172,14 @@ function _M.log_request()
         )
 
         if not res then
-            ngx.log(ngx.ERR, "[LOG] Failed to XADD to stream: ", err)
+            ngx.log(ngx.ERR, "[LOG] Failed to XADD: ", err)
         end
 
-        -- 连接池归还
         red:set_keepalive(10000, 10)
     end)
 
     if not ok then
-        ngx.log(ngx.ERR, "[LOG] Lua error in log_request: ", err)
+        ngx.log(ngx.ERR, "[LOG] Failed to create timer: ", err)
     end
 end
 

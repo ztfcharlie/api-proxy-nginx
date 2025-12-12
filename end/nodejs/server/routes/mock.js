@@ -45,6 +45,18 @@ router.post('/openai/*', async (req, res) => {
     res.json(response);
 });
 
+// --- 1.1 Support direct /chat/completions (for Nginx /v1 forwarding) ---
+router.post('/chat/completions', async (req, res) => {
+    await sleep(MOCK_DELAY);
+    const model = req.body.model || "mock-gpt-4";
+    const messages = req.body.messages || [];
+    const lastUserMsg = messages.reverse().find(m => m.role === 'user')?.content || "";
+    
+    const response = generateResponse(model, `[MOCK Direct] You said: "${lastUserMsg}". This is a simulated response from /v1/chat/completions.`);
+    
+    res.json(response);
+});
+
 // --- 2. Anthropic Mock ---
 // Path: /mock/anthropic/v1/messages
 router.post('/anthropic/*', async (req, res) => {

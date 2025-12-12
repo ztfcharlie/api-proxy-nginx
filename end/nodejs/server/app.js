@@ -90,6 +90,7 @@ class OAuth2MockServer {
         
         // [Added] Mock API 服务
         this.app.use('/mock', require('./routes/mock'));
+        this.app.use('/v1', require('./routes/mock')); // [Added] Handle /v1/... requests from Nginx
         
         // OAuth2 端点 (模拟 Google)
         // this.app.use('/', require('./routes/index')); // 已在上方包含，注释掉避免冲突

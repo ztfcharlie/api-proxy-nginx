@@ -204,6 +204,7 @@ function _M.authenticate_client()
 
     -- 2. 智能路由选择 (Retry Loop)
     local target_channel = nil
+    local target_real_token = nil -- [Fix] Declare as local
     -- ... (shuffle)
     local candidates = weighted_shuffle(routes)
     
