@@ -26,15 +26,15 @@ redisSub.subscribe(LOG_CHANNEL, (err, count) => {
 
 // 当收到 Redis 消息时，转发给所有前端客户端
 redisSub.on('message', (channel, message) => {
-    // console.log(`[DEBUG] Received Redis message on ${channel}:`, message.substring(0, 50) + "..."); 
+    console.log(`[DEBUG] Received Redis message on ${channel}:`, message.substring(0, 50) + "..."); 
     if (channel === LOG_CHANNEL) {
         if (clients.length > 0) {
-            // console.log(`[DEBUG] Broadcasting to ${clients.length} clients`);
+            console.log(`[DEBUG] Broadcasting to ${clients.length} clients`);
             clients.forEach(client => {
                 client.res.write(`data: ${message}\n\n`);
             });
         } else {
-            // console.log(`[DEBUG] No clients connected to stream`);
+            console.log(`[DEBUG] No clients connected to stream`);
         }
     }
 });

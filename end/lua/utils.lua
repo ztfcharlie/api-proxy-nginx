@@ -181,16 +181,22 @@ function _M.log_request()
         end
 
         -- [Added] Also Publish to Live Logs (Pub/Sub)
-        -- Construct a simplified payload for the UI
         local live_payload = cjson.encode({
-            ts = os.date("!%Y-%m-%dT%H:%M:%S.000Z"), -- UTC
+            ts = os.date("!%Y-%m-%dT%H:%M:%S.000Z"),
             source = "nginx-access",
             level = "info",
             msg = string.format("%s %s -> %s (%d) [%sms]", 
                 metadata.method, metadata.uri, metadata.upstream_status or "-", metadata.status, metadata.request_time),
             meta = metadata
         })
-        red:publish("sys:log_stream", live_payload)
+        
+        local sub_count, pub_err = red:publish("sys:log_stream", live_payload)
+        if not sub_count then
+            ngx.log(ngx.ERR, "[LOG] Redis publish error: ", pub_err)
+        elseif sub_count == 0 then
+            -- 关键诊断日志：如果没有订阅者，说明 Node.js 没连上
+            ngx.log(ngx.ERR, "[LOG] Published to 0 subscribers! Check Node.js Redis DB settings.")
+        end
 
         red:set_keepalive(10000, 10)
     end)
@@ -229,6 +235,10 @@ function _M.publish_debug_log(level, msg)
         local res, pub_err = red:publish("sys:log_stream", payload)
         if not res then
             ngx.log(ngx.ERR, "[DEBUG-STREAM] Redis publish failed: ", pub_err)
+        elseif res == 0 then
+            ngx.log(ngx.ERR, "[DEBUG-STREAM] Published to 0 subscribers! Node.js is not listening!")
+        else
+            -- ngx.log(ngx.ERR, "[DEBUG-STREAM] Successfully published to " .. res .. " subscribers")
         end
 
         red:set_keepalive(10000, 10)
