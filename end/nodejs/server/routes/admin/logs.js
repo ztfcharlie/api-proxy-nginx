@@ -52,8 +52,12 @@ router.get('/stream', (req, res) => {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
         'Connection': 'keep-alive',
-        'X-Accel-Buffering': 'no' // Nginx 必须配置
+        'X-Accel-Buffering': 'no', // Nginx 必须配置
+        'Content-Encoding': 'identity' // 禁用 Compression 中间件
     });
+
+    // 如果使用了 compression 中间件，它会劫持 res.write，我们需要 flush
+    if (res.flush) res.flush();
 
     res.write('data: {"source":"system", "level":"info", "msg":"Connected to Realtime Log Stream..."}\n\n');
     // Padding to flush buffers
