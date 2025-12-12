@@ -4,6 +4,36 @@ const { useState, useEffect } = React;
 // MODULE: Main Application
 // ==========================================
 const App = () => {
+    // [STYLE ADJUSTMENT] Global Font Scaling for Admin Console
+    useEffect(() => {
+        const style = document.createElement('style');
+        style.innerHTML = `
+            body, #root { font-size: 13px !important; } /* ~80% of standard 16px */
+            
+            /* Adjust Headings */
+            h1 { font-size: 1.5rem !important; }
+            h2 { font-size: 1.25rem !important; }
+            h3 { font-size: 1.1rem !important; }
+            
+            /* Adjust Icons */
+            .fas, .fab, .far { font-size: 0.9em !important; }
+            
+            /* Tighten Sidebar */
+            .nav-item { padding-top: 0.5rem !important; padding-bottom: 0.5rem !important; }
+            
+            /* Tighten Table Cells */
+            td, th { padding: 0.5rem 0.75rem !important; }
+            
+            /* Adjust Inputs */
+            input, select, textarea { font-size: 13px !important; padding: 0.4rem !important; }
+            
+            /* Custom Scrollbar update for smaller content */
+            .custom-scrollbar::-webkit-scrollbar { width: 5px; }
+        `;
+        document.head.appendChild(style);
+        return () => document.head.removeChild(style);
+    }, []);
+
     const [user, setUser] = useState(null);
     const [activeView, setActiveView] = useState('dashboard');
     const [notify, setNotify] = useState({ msg: '', type: '' });
