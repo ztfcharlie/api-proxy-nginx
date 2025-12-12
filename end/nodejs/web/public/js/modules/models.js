@@ -30,6 +30,7 @@ window.ModelManager = ({ setNotify }) => {
         const formData = new FormData(e.target);
         const data = Object.fromEntries(formData.entries());
         data.status = data.status === 'on' ? 1 : 0;
+        data.is_async = data.is_async === 'on' ? 1 : 0; // [Added] Handle async flag
         
         // Collect providers
         const selectedProviders = [];
@@ -184,7 +185,10 @@ window.ModelManager = ({ setNotify }) => {
                         <tbody className="divide-y divide-gray-200">
                             {processedModels.map(m => (
                                 <tr key={m.id} className="hover:bg-gray-50">
-                                    <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">{m.name}</td>
+                                    <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap flex items-center">
+                                        {m.name}
+                                        {m.is_async === 1 && <i className="fas fa-bolt text-purple-500 ml-2" title="Async Task Model"></i>}
+                                    </td>
                                     <td className="px-4 py-3 text-gray-500 whitespace-normal max-w-xs leading-tight">
                                         {renderProviders(m.provider)}
                                     </td>
@@ -289,14 +293,21 @@ window.ModelManager = ({ setNotify }) => {
                                         </div>
                                     </div>
 
-                                    {editingModel && (
-                                        <div className="flex items-center space-x-2 pt-2">
-                                            <input type="checkbox" name="status" id="statusCheck" defaultChecked={editingModel.status === 1} className="w-4 h-4 text-blue-600 rounded" />
-                                            <label htmlFor="statusCheck" className="text-sm font-medium text-gray-700">Model Active</label>
+                                    {/* Status & Async Flags */}
+                                    <div className="flex items-center space-x-6 pt-2 bg-gray-50 p-3 rounded-lg border border-gray-200">
+                                        <div className="flex items-center space-x-2">
+                                            <input type="checkbox" name="status" id="statusCheck" defaultChecked={editingModel ? editingModel.status === 1 : true} className="w-4 h-4 text-blue-600 rounded" />
+                                            <label htmlFor="statusCheck" className="text-sm font-medium text-gray-700">Active</label>
                                         </div>
-                                    )}
+                                        <div className="flex items-center space-x-2">
+                                            <input type="checkbox" name="is_async" id="asyncCheck" defaultChecked={editingModel ? editingModel.is_async === 1 : false} className="w-4 h-4 text-purple-600 rounded" />
+                                            <label htmlFor="asyncCheck" className="text-sm font-medium text-gray-700 flex items-center">
+                                                Async Task <i className="fas fa-bolt ml-1 text-xs text-purple-500" title="Enable for video/audio generation tasks"></i>
+                                            </label>
+                                        </div>
+                                    </div>
 
-                                    <div className="flex justify-end gap-3 pt-4 border-t mt-4">
+                                    <div className="flex justify-end gap-3 pt-4 mt-4">
                                         <button type="button" onClick={() => setShowModal(false)} className="px-4 py-2 border rounded-lg hover:bg-gray-50">Cancel</button>
                                         <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Save</button>
                                     </div>
