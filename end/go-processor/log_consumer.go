@@ -136,19 +136,20 @@ func (lc *LogConsumer) processBatch(ctx context.Context, msgs []redis.XMessage) 
 		
 		// ...
 
-		// 解析 Metadata
-		var meta LogMetadata
-		if err := json.Unmarshal([]byte(metaStr), &meta); err != nil {
-			log.Printf("[WARN] Failed to parse metadata for req %s", reqID)
-			lc.publishDebug("warn", fmt.Sprintf("Failed to parse metadata for req %s: %v", reqID, err))
-			ackIDs = append(ackIDs, msg.ID)
-			continue
-		}
+		        // 解析 Metadata
+				var meta LogMetadata
+				if err := json.Unmarshal([]byte(metaStr), &meta); err != nil {
+					log.Printf("[WARN] Failed to parse metadata for req %s", reqID)
+					lc.publishDebug("warn", fmt.Sprintf("Failed to parse metadata for req %s: %v", reqID, err))
+					ackIDs = append(ackIDs, msg.ID)
+					continue
+				}
 		
-		// ...
-
-		// 处理字段
-		tokenKey := ""
+				// [Fix] Restore body extraction
+				reqBodyRaw, _ := values["req_body"].(string)
+				resBodyRaw, _ := values["res_body"].(string)
+				
+				// 处理字段		tokenKey := ""
 		if strings.HasPrefix(meta.ClientToken, "sk-") {
 			tokenKey = meta.ClientToken
 		}
