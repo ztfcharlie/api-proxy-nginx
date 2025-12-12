@@ -4,48 +4,6 @@ const { useState, useEffect } = React;
 // MODULE: Main Application
 // ==========================================
 const App = () => {
-    // [STYLE ADJUSTMENT] Global Font Scaling for Admin Console
-    useEffect(() => {
-        const style = document.createElement('style');
-        style.id = 'admin-font-scaling';
-        style.innerHTML = `
-            /* Force Base Font Size */
-            html, body, #root, .flex, .grid, div, span, p, a, button, input, select, textarea, li { 
-                font-size: 13px !important; 
-                line-height: 1.5 !important;
-            }
-            
-            /* Override Tailwind Text Sizes where necessary */
-            .text-sm { font-size: 12px !important; }
-            .text-xs { font-size: 11px !important; }
-            .text-lg { font-size: 16px !important; }
-            .text-xl { font-size: 18px !important; }
-            .text-2xl { font-size: 20px !important; }
-
-            /* Tighten Layout Spacing */
-            .p-4 { padding: 0.75rem !important; } /* 1rem -> 0.75rem */
-            .p-6 { padding: 1.25rem !important; } /* 1.5rem -> 1.25rem */
-            .p-8 { padding: 1.5rem !important; } /* 2rem -> 1.5rem */
-            .space-y-4 > :not([hidden]) ~ :not([hidden]) { --tw-space-y-reverse: 0; margin-top: 0.75rem !important; }
-            
-            /* Icons */
-            .fas, .fab, .far { font-size: 13px !important; }
-            
-            /* Table Compactness */
-            td, th { padding-top: 6px !important; padding-bottom: 6px !important; }
-        `;
-        
-        // Remove existing if any (to prevent duplicates on hot reload)
-        const existing = document.getElementById('admin-font-scaling');
-        if (existing) existing.remove();
-        
-        document.head.appendChild(style);
-        return () => {
-            const el = document.getElementById('admin-font-scaling');
-            if (el) el.remove();
-        };
-    }, []);
-
     const [user, setUser] = useState(null);
     const [activeView, setActiveView] = useState('dashboard');
     const [notify, setNotify] = useState({ msg: '', type: '' });
