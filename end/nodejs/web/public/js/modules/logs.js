@@ -138,8 +138,8 @@ window.LogViewer = ({ setNotify }) => {
                                 <td className="px-6 py-4 font-medium text-gray-900">{log.model}</td>
                                 <td className="px-6 py-4 text-gray-600 font-bold text-xs">{log.username || `UID: ${log.user_id}`}</td>
                                 <td className="px-6 py-4 text-gray-600">
-                                    <div className="font-mono text-xs break-all" title={log.token_key}>
-                                        {log.token_name || log.token_key || '-'}
+                                    <div className="font-mono text-xs break-all">
+                                        {log.token_name || (log.token_key ? '...' + log.token_key.slice(-6) : '-')}
                                     </div>
                                 </td>
                                 <td className="px-6 py-4">
