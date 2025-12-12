@@ -252,33 +252,47 @@ function _M.extract_model_name(uri)
     if model_name then return model_name end
 
     -- 2. 尝试从 Request Body 提取 (OpenAI Style)
-    -- 只有在 Content-Type 是 application/json 时才尝试
-    local headers = ngx.req.get_headers()
-    local content_type = headers["content-type"]
-    if not content_type or not string.find(content_type, "application/json") then
-        return "default"
-    end
-
-    -- 强制读取 Body
     ngx.req.read_body()
     local body_data = ngx.req.get_body_data()
 
-    if not body_data then
-        -- Body 可能被写入了临时文件 (太大了)
-        return "default"
+    -- 辅助函数：正则匹配
+    local function find_model(text)
+        return text:match('"model"%s*:%s*"([^"]+)"')
     end
 
-    -- 从环境变量获取限制，默认 512KB
-    local limit_str = os.getenv("LUA_BODY_PARSE_LIMIT")
-    local parse_limit = tonumber(limit_str) or 524288
+    if body_data then
+        local m = find_model(body_data)
+        if m then return m end
+    else
+        local body_file = ngx.req.get_body_file()
+        if body_file then
+            local file, err = io.open(body_file, "r")
+            if file then
+                local chunk_size = 4096
+                local buffer = ""
+                local overlap = 128 -- 跨边界缓冲区大小
 
-    if #body_data > parse_limit then
-        return "default"
-    end
+                while true do
+                    local chunk = file:read(chunk_size)
+                    if not chunk then break end
+                    
+                    local data_to_scan = buffer .. chunk
+                    local m = find_model(data_to_scan)
+                    if m then
+                        file:close()
+                        return m
+                    end
 
-    local ok, json_body = pcall(cjson.decode, body_data)
-    if ok and json_body and json_body.model then
-        return json_body.model
+                    -- 准备下一次迭代的缓冲区：保留当前块的最后部分
+                    if #chunk >= overlap then
+                        buffer = string.sub(chunk, -overlap)
+                    else
+                        buffer = buffer .. chunk -- 如果块太小，全保留
+                    end
+                end
+                file:close()
+            end
+        end
     end
 
     return "default"
