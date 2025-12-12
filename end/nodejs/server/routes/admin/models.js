@@ -25,7 +25,8 @@ async function syncModelPricesToRedis() {
                 mode: mode,
                 input: parseFloat(m.price_input || 0),
                 output: parseFloat(m.price_output || 0),
-                price: parseFloat(m.price_request || m.price_time || 0) // Unified price field for non-token modes
+                price: parseFloat(m.price_request || m.price_time || 0),
+                is_async: m.is_async === 1 // [Added] Async flag
             };
         });
 
@@ -68,15 +69,15 @@ router.get('/', async (req, res) => {
  * 创建模型
  */
 router.post('/', async (req, res) => {
-    const { provider, name, price_input, price_output, price_cache, price_time, price_request, default_rpm } = req.body;
+    const { provider, name, price_input, price_output, price_cache, price_time, price_request, default_rpm, is_async } = req.body;
     if (!provider || !name) return res.status(400).json({ error: "Missing provider or name" });
     
     try {
         await db.query(
             `INSERT INTO sys_models 
-            (provider, name, price_input, price_output, price_cache, price_time, price_request, default_rpm) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-            [provider, name, price_input||0, price_output||0, price_cache||0, price_time||0, price_request||0, default_rpm||1000]
+            (provider, name, price_input, price_output, price_cache, price_time, price_request, default_rpm, is_async) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            [provider, name, price_input||0, price_output||0, price_cache||0, price_time||0, price_request||0, default_rpm||1000, is_async?1:0]
         );
         
         // [Sync] Update Redis
@@ -170,7 +171,7 @@ router.put('/:id', async (req, res) => {
         }
 
         // 4. 执行更新
-        const allowed = ['price_input', 'price_output', 'price_cache', 'price_time', 'price_request', 'default_rpm', 'status', 'name', 'provider'];
+        const allowed = ['price_input', 'price_output', 'price_cache', 'price_time', 'price_request', 'default_rpm', 'status', 'name', 'provider', 'is_async'];
         const updates = [];
         const params = [];
         

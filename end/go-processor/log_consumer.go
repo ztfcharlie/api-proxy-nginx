@@ -216,16 +216,46 @@ func (lc *LogConsumer) processBatch(ctx context.Context, msgs []redis.XMessage) 
 
 		// ... (existing billing logic)
 		if meta.Status == 200 {
-			cost, err := lc.calculateCost(ctx, channelID, meta.ModelName, usage)
-			if err == nil {
-				usage.Cost = cost
-			} else {
-				if err != redis.Nil {
-					log.Printf("[WARN] Cost calculation failed for %s: %v", reqID, err)
+			// [Fix] Use getModelConfig
+			cfg, found := lc.getModelConfig(ctx, channelID, meta.ModelName)
+			cost := 0.0
+			
+			if found {
+				// Calculate Cost
+				// ... (logic moved to calculateCost, but we need to call it or duplicate logic? 
+                // calculateCost now calls getModelConfig internally. So we can just call calculateCost)
+                // Wait, I refactored calculateCost to call getModelConfig. So I should just call calculateCost.
+				c, err := lc.calculateCost(ctx, channelID, meta.ModelName, usage)
+				if err == nil {
+					cost = c
+					usage.Cost = cost
+				}
+				
+				// [Added] Async Task Handling
+				if cfg.IsAsync {
+					// 1. Identify Provider (Query DB)
+					var provider string
+					lc.db.QueryRowContext(ctx, "SELECT `type` FROM sys_channels WHERE id = ?", channelID).Scan(&provider)
+					
+					// 2. Extract Task ID
+					taskID := extractUpstreamTaskID(provider, resBodyRaw)
+					
+					if taskID != "" {
+						// 3. Save to DB
+						_, err := lc.db.ExecContext(ctx, 
+							"INSERT INTO sys_async_tasks (request_id, user_id, channel_id, provider, upstream_task_id, pre_cost, response_json) VALUES (?, ?, ?, ?, ?, ?, ?)",
+							reqID, userID, channelID, provider, taskID, cost, resBodyRaw)
+							
+						if err != nil {
+							log.Printf("[WARN] Failed to save async task: %v", err)
+						} else {
+							// 4. Cache Route in Redis (24h)
+							lc.rdb.Set(ctx, fmt.Sprintf("oauth2:task_route:%s", taskID), channelID, 24*time.Hour)
+							lc.publishDebug("info", fmt.Sprintf("Async Task Created: %s (%s)", taskID, provider))
+						}
+					}
 				}
 			}
-			
-			// ... (existing error clearing logic)
 		}
 
 		// [Added] Real-time Log Stream (Frontend Debugging)
@@ -346,15 +376,14 @@ type ModelBillingConfig struct {
 	InputPrice  float64 `json:"input"`  // per 1k tokens
 	OutputPrice float64 `json:"output"`
 	Price       float64 `json:"price"`  // per request
+	IsAsync     bool    `json:"is_async"` // [Added] Async Task Flag
 }
 
 // ... (ChannelConfigRedis struct) ...
 
-// 全局模型价格缓存 Key
-const KeyModelPrices = "oauth2:model_prices"
-
-func (lc *LogConsumer) calculateCost(ctx context.Context, channelID int, model string, u billing.Usage) (float64, error) {
-	// 1. 获取全局价格 (基准)
+// [Refactor] 获取模型配置 (全局 + 渠道覆盖)
+func (lc *LogConsumer) getModelConfig(ctx context.Context, channelID int, model string) (ModelBillingConfig, bool) {
+	// 1. 获取全局配置
 	var globalCfg ModelBillingConfig
 	var globalFound bool
 	
@@ -370,76 +399,91 @@ func (lc *LogConsumer) calculateCost(ctx context.Context, channelID int, model s
 	}
 
 	if !globalFound {
-		// 如果全局都没定义这个模型的价格，那就真的没法算钱了
-		// (或者默认免费)
-		return 0, nil
+		return ModelBillingConfig{}, false
 	}
 
-	// 2. 获取渠道特定的计费模式
-	// 默认继承全局配置的模式 (通常是 token)
-	billingMode := globalCfg.Mode 
-	if billingMode == "" {
-		billingMode = "token" 
-	}
+	// 2. 渠道覆盖
+	finalCfg := globalCfg
 	
-	// 检查渠道是否有特殊配置 (比如强制按次计费)
 	if channelID > 0 {
 		key := fmt.Sprintf("oauth2:channel:%d", channelID)
 		val, err := lc.rdb.Get(ctx, key).Result()
 		
 		var chConfig ChannelConfigRedis
-		// var loadedFromDB bool // Unused
 		
 		if err == nil {
 			json.Unmarshal([]byte(val), &chConfig)
 		} else if err == redis.Nil {
-			// 降级查库
 			var modelsConfigStr string
 			if lc.db.QueryRowContext(ctx, "SELECT models_config FROM sys_channels WHERE id = ?", channelID).Scan(&modelsConfigStr) == nil && modelsConfigStr != "" {
 				json.Unmarshal([]byte(modelsConfigStr), &chConfig.ModelsConfig)
-				// loadedFromDB = true
 			}
 		}
 
 		if chConfig.ModelsConfig != nil {
 			if c, ok := chConfig.ModelsConfig[model]; ok {
-				if c.Mode != "" {
-					billingMode = c.Mode
-				}
-				// 如果渠道覆盖了价格 (例如按次计费的特殊价格)，也可以在这里读取
-				// 但根据您的描述，渠道通常不设折扣，只设模式
-				// 如果有特殊需求，可以：if c.Price > 0 { globalCfg.Price = c.Price }
+				if c.Mode != "" { finalCfg.Mode = c.Mode }
+				// 这里可以继续覆盖 Price/IsAsync 等，如果需要渠道级别的特殊配置
 			} else if c, ok := chConfig.ModelsConfig["default"]; ok {
-				if c.Mode != "" {
-					billingMode = c.Mode
-				}
+				if c.Mode != "" { finalCfg.Mode = c.Mode }
 			}
 		}
+	}
+	
+	// Default mode
+	if finalCfg.Mode == "" { finalCfg.Mode = "token" }
+	
+	return finalCfg, true
+}
+
+func (lc *LogConsumer) calculateCost(ctx context.Context, channelID int, model string, u billing.Usage) (float64, error) {
+	cfg, found := lc.getModelConfig(ctx, channelID, model)
+	if !found {
+		return 0, nil
 	}
 
 	// 3. 计算最终费用
 	var cost float64
-	// [Modified] 将计费单位统一为 1M (百万) Token
 	const PriceUnitDivisor = 1000000.0 
 
-	if billingMode == "request" {
-		// 按次计费: 优先用全局定义的单次价格
-		cost = globalCfg.Price
-	} else if billingMode == "time" {
-		// [Added] 按时长计费 (Audio)
-		// Price 是每秒价格
-		cost = u.AudioSeconds * globalCfg.Price
+	if cfg.Mode == "request" {
+		cost = cfg.Price
+	} else if cfg.Mode == "time" {
+		cost = u.AudioSeconds * cfg.Price
 	} else {
-		// 按量计费: 使用全局定义的 Input/Output 价格
-		inputCost := (float64(u.PromptTokens) / PriceUnitDivisor) * globalCfg.InputPrice
-		outputCost := (float64(u.CompletionTokens) / PriceUnitDivisor) * globalCfg.OutputPrice
+		inputCost := (float64(u.PromptTokens) / PriceUnitDivisor) * cfg.InputPrice
+		outputCost := (float64(u.CompletionTokens) / PriceUnitDivisor) * cfg.OutputPrice
 		cost = inputCost + outputCost
 		
-		// 图片/视频特殊处理
-		if u.Images > 0 && globalCfg.Price > 0 {
-			cost += float64(u.Images) * globalCfg.Price
+		if u.Images > 0 && cfg.Price > 0 {
+			cost += float64(u.Images) * cfg.Price
 		}
 	}
 
 	return cost, nil
+}
+
+// Helper to extract task ID from different providers
+func extractUpstreamTaskID(provider, jsonBody string) string {
+	var data map[string]interface{}
+	if err := json.Unmarshal([]byte(jsonBody), &data); err != nil {
+		return ""
+	}
+	
+	// Suno / Luma / Sora: usually "id"
+	if v, ok := data["id"].(string); ok {
+		return v
+	}
+	
+	// Midjourney (some proxies): "task_id" or "result"
+	if v, ok := data["task_id"].(string); ok {
+		return v
+	}
+	
+	// Runway: "uuid" (sometimes)
+	if v, ok := data["uuid"].(string); ok {
+		return v
+	}
+	
+	return ""
 }
