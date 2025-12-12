@@ -15,12 +15,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-const (
-	StreamKey      = "stream:api_logs"
-	ConsumerGroup  = "log_processor_group"
-	ConsumerName   = "worker-1"
-	KeyModelPrices = "oauth2:model_prices" // Moved to top
-)
+const KeyModelPrices = "oauth2:model_prices" // Kept as it might not be in main.go
 
 // LogConsumer 负责消费 Redis Stream 并写入 MySQL
 type LogConsumer struct {
@@ -426,6 +421,13 @@ func (lc *LogConsumer) calculateCost(ctx context.Context, channelID int, model s
 	}
 
 	return cost, nil
+}
+
+func limitString(s string, n int) string {
+	if len(s) > n {
+		return s[:n] + "...(truncated)"
+	}
+	return s
 }
 
 // Helper to extract task ID from different providers
