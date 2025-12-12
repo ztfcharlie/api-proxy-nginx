@@ -150,6 +150,7 @@ CREATE TABLE `sys_models` (
   `price_request` decimal(12,6) DEFAULT 0.000000 COMMENT '每次请求价格',
   `default_rpm` int(11) DEFAULT 1000 COMMENT '默认RPM限制',
   `status` tinyint(4) DEFAULT 1 COMMENT '1:启用, 0:禁用',
+  `is_async` tinyint(4) DEFAULT 0 COMMENT '0不是异步模型 1异步模型',
   `created_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
   `updated_at` timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (`id`),
@@ -186,5 +187,22 @@ CREATE TABLE `sys_request_logs` (
   KEY `idx_created` (`created_at`),
   KEY `idx_status` (`status_code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS sys_async_tasks (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    request_id VARCHAR(64) NOT NULL,
+    user_id INT NOT NULL,
+    channel_id INT NOT NULL,
+    provider VARCHAR(32) NOT NULL,
+    upstream_task_id VARCHAR(128) NOT NULL,
+    pre_cost DECIMAL(20, 8) DEFAULT 0,
+    status VARCHAR(20) DEFAULT 'PENDING',
+    response_json TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    INDEX idx_status (status),
+    INDEX idx_req (request_id),
+    INDEX idx_upstream (upstream_task_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 SET FOREIGN_KEY_CHECKS = 1;
