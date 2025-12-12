@@ -270,7 +270,7 @@ window.TokenManager = ({ user, setNotify }) => {
                     
                     {isAdmin && (
                         <button onClick={() => { setEditingToken(null); setShowModal(true); }} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-sm ml-2">
-                            <i className="fas fa-plus mr-2"></i>Issue
+                            <i className="fas fa-plus mr-2"></i>New
                         </button>
                     )}
                 </div>
@@ -343,7 +343,7 @@ window.TokenManager = ({ user, setNotify }) => {
                 <div className="fixed inset-0 modal-backdrop flex items-center justify-center z-50 fade-in px-4">
                     <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
                         <div className="px-6 py-4 border-b flex justify-between items-center bg-gray-50">
-                            <h3 className="text-lg font-bold text-gray-800">{editingToken ? (isAdmin ? 'Edit Token' : 'Manage Token') : 'Issue Token'}</h3>
+                            <h3 className="text-lg font-bold text-gray-800">{editingToken ? (isAdmin ? 'Edit Token' : 'Manage Token') : 'Create Token'}</h3>
                             <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-600"><i className="fas fa-times"></i></button>
                         </div>
                         <div className="p-6 overflow-y-auto">

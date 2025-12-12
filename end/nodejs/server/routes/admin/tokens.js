@@ -108,7 +108,7 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
     // [RBAC] Only admin can create tokens
     if (req.user.role !== 'admin') {
-        return res.status(403).json({ error: "Forbidden: Only admins can issue tokens" });
+        return res.status(403).json({ error: "Forbidden: Only admins can create tokens" });
     }
 
     const { user_id, name, type, routes, limit_config } = req.body;
