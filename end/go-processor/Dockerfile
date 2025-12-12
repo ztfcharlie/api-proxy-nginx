@@ -6,10 +6,13 @@ WORKDIR /app
 # 预先复制 go.mod 和 go.sum 以利用缓存
 COPY go.mod go.sum ./
 # 下载依赖
-RUN go mod download && go mod tidy
+RUN go mod download
 
 # 复制源码
 COPY . .
+
+# 整理依赖 (必须在源码复制后)
+RUN go mod tidy
 
 # 编译静态二进制文件
 # CGO_ENABLED=0 确保不依赖 libc，可以直接在 scratch/alpine 运行
