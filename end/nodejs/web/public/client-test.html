@@ -113,7 +113,7 @@
 
             const handleVendorChange = (newVendor) => {
                 setVendor(newVendor);
-                const defaultPath = PATH_SUGGESTIONS[newVendor]?.[0] || '';
+                const defaultPath = (PATH_SUGGESTIONS[newVendor] && PATH_SUGGESTIONS[newVendor][0]) || '';
                 setApiPath(defaultPath);
                 setPayload(getPayload(newVendor, defaultPath));
             };
@@ -154,8 +154,8 @@
                 })
                 .catch(err => {
                     console.error(err);
-                    const errMsg = err.response?.data?.error || err.message;
-                    setError(err.response?.data || { error: errMsg });
+                    const errMsg = (err.response && err.response.data && err.response.data.error) || err.message;
+                    setError((err.response && err.response.data) || { error: errMsg });
                     setNotify({ msg: `Request Failed: ${errMsg}`, type: "error" });
                 })
                 .finally(() => {
