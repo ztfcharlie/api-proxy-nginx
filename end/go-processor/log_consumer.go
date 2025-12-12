@@ -104,7 +104,24 @@ func (lc *LogConsumer) updateChannelError(channelID int, errorMsg string) {
 	}()
 }
 
+// [Added] Helper to publish debug logs to Redis
+func (lc *LogConsumer) publishDebug(level, msg string) {
+	if os.Getenv("ENABLE_DEBUG_STREAM") != "true" {
+		return
+	}
+	payload := fmt.Sprintf(`{"ts":"%s", "source":"go-consumer", "level":"%s", "msg":"%s"}`, 
+		time.Now().Format(time.RFC3339), level, strings.ReplaceAll(msg, "\"", "\\\""))
+	
+	// Non-blocking publish
+	go func() {
+		lc.rdb.Publish(context.Background(), "sys:log_stream", payload)
+	}()
+}
+
 func (lc *LogConsumer) processBatch(ctx context.Context, msgs []redis.XMessage) {
+	log.Printf("[DEBUG] processBatch received %d messages", len(msgs))
+	lc.publishDebug("info", fmt.Sprintf("Received batch of %d messages", len(msgs)))
+
 	// ... (existing variable declarations) ...
 	saveBody := os.Getenv("LOG_SAVE_BODY") == "true"
 
@@ -116,16 +133,19 @@ func (lc *LogConsumer) processBatch(ctx context.Context, msgs []redis.XMessage) 
 		values := msg.Values
 		reqID, _ := values["req_id"].(string)
 		metaStr, _ := values["meta"].(string)
-		reqBodyRaw, _ := values["req_body"].(string)
-		resBodyRaw, _ := values["res_body"].(string)
+		
+		// ...
 
 		// 解析 Metadata
 		var meta LogMetadata
 		if err := json.Unmarshal([]byte(metaStr), &meta); err != nil {
 			log.Printf("[WARN] Failed to parse metadata for req %s", reqID)
+			lc.publishDebug("warn", fmt.Sprintf("Failed to parse metadata for req %s: %v", reqID, err))
 			ackIDs = append(ackIDs, msg.ID)
 			continue
 		}
+		
+		// ...
 
 		// 处理字段
 		tokenKey := ""
@@ -258,15 +278,19 @@ func (lc *LogConsumer) processBatch(ctx context.Context, msgs []redis.XMessage) 
 		_, err := lc.db.ExecContext(ctx, stmt, valueArgs...)
 		if err != nil {
 			log.Printf("[ERROR] Batch insert failed: %v", err)
+			lc.publishDebug("error", fmt.Sprintf("DB Insert Failed: %v", err))
 			// 插入失败暂不 ACK
 		} else {
 			// 成功，批量 ACK
 			lc.rdb.XAck(ctx, StreamKey, ConsumerGroup, ackIDs...)
-			log.Printf("[INFO] Processed and saved %d logs", len(valueStrings))
+			msg := fmt.Sprintf("Successfully saved %d logs to DB", len(valueStrings))
+			log.Println("[INFO] " + msg)
+			lc.publishDebug("info", msg)
 		}
 	} else if len(ackIDs) > 0 {
 		// 全是无效数据，直接 ACK
 		lc.rdb.XAck(ctx, StreamKey, ConsumerGroup, ackIDs...)
+		lc.publishDebug("warn", "Batch contained only invalid data, skipped.")
 	}
 }
 
