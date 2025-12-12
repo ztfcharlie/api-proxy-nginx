@@ -6,21 +6,6 @@ const { BedrockRuntimeClient, InvokeModelCommand } = require("@aws-sdk/client-be
 const { GoogleAuth } = require('google-auth-library');
 const db = require('../config/db').dbPool;
 
-// 辅助函数：根据 ID 获取虚拟 Token 的内容 (Token Key)
-// 注意：这里只获取虚拟 Token 本身，绝不查找真实渠道的 Key
-async function getVirtualTokenContent(id) {
-    try {
-        const [rows] = await db.query(`SELECT token_key FROM sys_virtual_tokens WHERE id = ?`, [id]);
-        if (rows.length > 0) {
-            return rows[0].token_key;
-        }
-        return null;
-    } catch (e) {
-        console.error('Error fetching virtual token:', e);
-        return null;
-    }
-}
-
 // 核心路由：发送测试请求
 router.post('/send', async (req, res) => {
     const { vendor, baseUrl, apiKey, path: apiPath, payload } = req.body;
@@ -130,8 +115,8 @@ router.post('/send', async (req, res) => {
         else {
             const headers = { 'Content-Type': 'application/json' };
             
-            // 确保 realCredentials 是字符串
-            const keyString = typeof realCredentials === 'object' ? JSON.stringify(realCredentials) : realCredentials;
+            // 确保 clientCredential 是字符串
+            const keyString = typeof clientCredential === 'object' ? JSON.stringify(clientCredential) : clientCredential;
 
             if (vendor === 'anthropic') {
                 headers['x-api-key'] = keyString;
