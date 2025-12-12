@@ -6,7 +6,7 @@ WORKDIR /app
 # 预先复制 go.mod 和 go.sum 以利用缓存
 COPY go.mod go.sum ./
 # 下载依赖
-RUN go mod download
+RUN go mod download && go mod tidy
 
 # 复制源码
 COPY . .
