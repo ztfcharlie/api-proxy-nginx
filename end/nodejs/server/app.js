@@ -13,6 +13,7 @@ const LoggerService = require('./services/LoggerService');
 const ServiceAccountManager = require('./services/ServiceAccountManager'); 
 const SyncManager = require('./services/SyncManager');
 const { CacheService } = require('./services/CacheService');
+const WebSocketService = require('./services/WebSocketService'); // [Added]
 
 const { errorHandler } = require('./middleware/errorHandler');
 const { loggingMiddleware } = require('./middleware/logging');
@@ -174,6 +175,9 @@ class OAuth2MockServer {
                     port: this.port,
                     env: this.nodeEnv
                 });
+                
+                // [Added] Start WebSocket Service
+                WebSocketService.initialize(this.server);
             });
             
             this.setupGracefulShutdown();
