@@ -122,7 +122,8 @@ window.LogViewer = ({ setNotify }) => {
                         <tr>
                             <th className="px-6 py-3 text-left font-bold text-gray-500">Time</th>
                             <th className="px-6 py-3 text-left font-bold text-gray-500">Model</th>
-                            <th className="px-6 py-3 text-left font-bold text-gray-500">User/Token</th>
+                            <th className="px-6 py-3 text-left font-bold text-gray-500">User</th>
+                            <th className="px-6 py-3 text-left font-bold text-gray-500">Token</th>
                             <th className="px-6 py-3 text-left font-bold text-gray-500">Status</th>
                             <th className="px-6 py-3 text-left font-bold text-gray-500">Duration</th>
                             <th className="px-6 py-3 text-left font-bold text-gray-500">Cost</th>
@@ -135,9 +136,9 @@ window.LogViewer = ({ setNotify }) => {
                             <tr key={log.id} className="hover:bg-gray-50">
                                 <td className="px-6 py-4 text-gray-500 whitespace-nowrap">{new Date(log.created_at).toLocaleString()}</td>
                                 <td className="px-6 py-4 font-medium text-gray-900">{log.model}</td>
+                                <td className="px-6 py-4 text-gray-600 font-bold text-xs">{log.username || `UID: ${log.user_id}`}</td>
                                 <td className="px-6 py-4 text-gray-600">
-                                    <div className="text-xs font-bold text-gray-700">{log.username || `UID: ${log.user_id}`}</div>
-                                    <div className="text-xs text-gray-500 truncate w-32" title={log.token_key}>
+                                    <div className="truncate w-24 font-mono text-xs" title={log.token_key}>
                                         {log.token_name || (log.token_key ? log.token_key.substring(0, 10) + '...' : '-')}
                                     </div>
                                 </td>
