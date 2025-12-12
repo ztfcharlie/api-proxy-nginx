@@ -77,8 +77,11 @@ local function weighted_shuffle(routes)
     
     -- 1. 过滤并计算总权重
     for _, r in ipairs(routes) do
-        if r.weight > 0 then
-            total_weight = total_weight + r.weight
+        local weight = tonumber(r.weight) or 0 -- 安全转换，默认为 0
+        if weight > 0 then
+            total_weight = total_weight + weight
+            -- 确保 r.weight 是数字，方便后续使用
+            r.weight = weight 
             table.insert(weighted_list, r)
         end
     end
