@@ -1,12 +1,13 @@
 module api-proxy/go-processor
 
-go 1.24.0
+go 1.21
 
 require (
 	github.com/go-sql-driver/mysql v1.7.1
 	github.com/golang-jwt/jwt/v5 v5.2.0
-	github.com/pkoukk/tiktoken-go v0.1.6 // [Added] Tokenizer
 	github.com/redis/go-redis/v9 v9.3.0
+	github.com/tiktoken-go/tokenizer v0.7.0 // Direct dependency now
+	golang.org/x/image v0.34.0 // Direct dependency
 )
 
 require (
