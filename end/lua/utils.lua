@@ -181,21 +181,29 @@ function _M.log_request()
         end
 
         -- [Added] Also Publish to Live Logs (Pub/Sub)
-        local live_payload = cjson.encode({
+        local safe_meta = {
+            model = metadata.model_name,
+            ip = metadata.ip,
+            ua = metadata.user_agent,
+            token = string.sub(metadata.client_token or "", 1, 10) .. "..."
+        }
+
+        local ok_encode, live_payload = pcall(cjson.encode, {
             ts = os.date("!%Y-%m-%dT%H:%M:%S.000Z"),
             source = "nginx-access",
             level = "info",
             msg = string.format("%s %s -> %s (%d) [%sms]", 
                 metadata.method, metadata.uri, metadata.upstream_status or "-", metadata.status, metadata.request_time),
-            meta = metadata
+            meta = safe_meta
         })
-        
-        local sub_count, pub_err = red:publish("sys:log_stream", live_payload)
-        if not sub_count then
-            ngx.log(ngx.ERR, "[LOG] Redis publish error: ", pub_err)
-        elseif sub_count == 0 then
-            -- 关键诊断日志：如果没有订阅者，说明 Node.js 没连上
-            ngx.log(ngx.ERR, "[LOG] Published to 0 subscribers! Check Node.js Redis DB settings.")
+
+        if ok_encode then
+            local sub_count, pub_err = red:publish("sys:log_stream", live_payload)
+            if not sub_count then
+                ngx.log(ngx.ERR, "[LOG] Redis publish error: ", pub_err)
+            end
+        else
+            ngx.log(ngx.ERR, "[LOG] Failed to encode live payload: ", live_payload)
         end
 
         red:set_keepalive(10000, 10)

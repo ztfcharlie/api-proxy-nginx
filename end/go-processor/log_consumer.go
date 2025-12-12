@@ -269,11 +269,21 @@ func (lc *LogConsumer) processBatch(ctx context.Context, msgs []redis.XMessage) 
 		durationMs := int(reqTime * 1000)
 		upstreamDurationMs := int(upTime * 1000)
 
+		// [Fix] Resolve User ID from Token
+		userID := 0
+		if tokenKey != "" {
+			// Simple DB lookup (for production, adding a cache here would be better)
+			err := lc.db.QueryRowContext(ctx, "SELECT user_id FROM sys_virtual_tokens WHERE token_key = ?", tokenKey).Scan(&userID)
+			if err != nil && err != sql.ErrNoRows {
+				log.Printf("[WARN] Failed to resolve user_id for token %s: %v", tokenKey, err)
+			}
+		}
+
 		// 构建 SQL 值
 		valueStrings = append(valueStrings, "(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)")
 		valueArgs = append(valueArgs, 
 			reqID, 
-			0, // user_id
+			userID, // [Fix] Use resolved user_id
 			channelID,
 			tokenKey,
 			meta.ModelName,
