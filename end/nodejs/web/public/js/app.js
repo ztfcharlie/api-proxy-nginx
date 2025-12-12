@@ -1,66 +1,42 @@
-const { useState, useEffect, useRef } = React;
+const { useState, useEffect } = React;
 
 // ==========================================
-// UTILITY: Async Component Loader
+// UTILITY: Safe Component Wrapper
+// Handles waiting for Babel to compile external modules
 // ==========================================
-const AsyncComponentLoader = ({ scriptPath, componentName, props }) => {
+const ComponentWrapper = ({ componentName, props }) => {
     const [Component, setComponent] = useState(window[componentName]);
-    const [error, setError] = useState(null);
 
     useEffect(() => {
-        // If component is already loaded globally, use it
+        // If already available, set immediately
         if (window[componentName]) {
             setComponent(() => window[componentName]);
             return;
         }
 
-        // Check if script is already present
-        const existingScript = document.querySelector(`script[src="${scriptPath}"]`);
-        
-        if (!existingScript) {
-            const script = document.createElement('script');
-            script.src = scriptPath;
-            script.type = "text/babel"; // Important for Babel Standalone
-            script.async = true;
+        // Poll for the component availability
+        const timer = setInterval(() => {
+            if (window[componentName]) {
+                setComponent(() => window[componentName]);
+                clearInterval(timer);
+            }
+        }, 50);
 
-            // Since we are using Babel Standalone, the 'load' event of the script tag 
-            // fires BEFORE Babel compiles and executes it. 
-            // So we need to poll for the window object.
-            script.onload = () => {
-                // Script loaded, start polling for component
-                const pollInterval = setInterval(() => {
-                    if (window[componentName]) {
-                        setComponent(() => window[componentName]);
-                        clearInterval(pollInterval);
-                    }
-                }, 50);
-                
-                // Timeout after 5s
-                setTimeout(() => clearInterval(pollInterval), 5000);
-            };
+        // Stop polling after 10 seconds to save resources
+        const timeout = setTimeout(() => clearInterval(timer), 10000);
 
-            script.onerror = () => setError("Failed to load script");
-            document.body.appendChild(script);
-        } else {
-            // Script exists but maybe polling is needed (rare race condition)
-             const pollInterval = setInterval(() => {
-                if (window[componentName]) {
-                    setComponent(() => window[componentName]);
-                    clearInterval(pollInterval);
-                }
-            }, 50);
-            setTimeout(() => clearInterval(pollInterval), 5000);
-        }
-    }, [scriptPath, componentName]);
+        return () => {
+            clearInterval(timer);
+            clearTimeout(timeout);
+        };
+    }, [componentName]);
 
-    if (error) return <div className="text-red-500 text-center mt-10">Error: {error}</div>;
-    
     if (!Component) {
         return (
             <div className="flex h-full items-center justify-center text-gray-500">
                 <div className="text-center">
-                    <i className="fas fa-circle-notch fa-spin text-3xl mb-4 text-blue-500"></i>
-                    <p>Loading Module...</p>
+                    <i className="fas fa-spinner fa-spin text-3xl mb-4 text-blue-500"></i>
+                    <p>Loading Module... <br/><span className="text-xs text-gray-400">(Compiling {componentName})</span></p>
                 </div>
             </div>
         );
@@ -146,8 +122,8 @@ const App = () => {
             case 'log_files': return <iframe src="log_files.html" className="w-full h-full border-none rounded-lg shadow-inner bg-white" title="Log Files"></iframe>;
             case 'jobs': return <window.JobManager setNotify={setNotify} />;
             case 'redis': return <window.RedisInspector setNotify={setNotify} />;
-            // Here we use the Async Loader for the modularized component
-            case 'client_test': return <AsyncComponentLoader scriptPath="js/client-test.js" componentName="ClientTest" props={{ setNotify }} />;
+            // Use simple Wrapper that waits for window.ClientTest
+            case 'client_test': return <ComponentWrapper componentName="ClientTest" props={{ setNotify }} />;
             case 'system': return <window.SystemStatus setNotify={setNotify} />;
             case 'account': return <window.AccountCenter setNotify={setNotify} />;
             default: return <window.Dashboard />;
