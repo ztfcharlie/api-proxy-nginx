@@ -74,6 +74,9 @@ func (sm *SyncManager) Start(ctx context.Context) {
 	// 立即运行一次
 	sm.performSync(ctx)
 
+	// 启动高频看门狗
+	go sm.startWatchdog(ctx)
+
 	// 每 5 分钟执行一次全量对账
 	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
@@ -85,6 +88,35 @@ func (sm *SyncManager) Start(ctx context.Context) {
 			return
 		case <-ticker.C:
 			sm.performSync(ctx)
+		}
+	}
+}
+
+// [Added] startWatchdog 高频监控关键缓存
+func (sm *SyncManager) startWatchdog(ctx context.Context) {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	
+	log.Println("[INFO] Watchdog started (5s interval)")
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			// 检查关键 Key: oauth2:model_prices
+			exists, err := sm.rdb.Exists(ctx, "oauth2:model_prices").Result()
+			if err != nil {
+				log.Printf("[WARN] Watchdog Redis check failed: %v", err)
+				continue
+			}
+			
+			if exists == 0 {
+				log.Println("[WARN] Watchdog Alert: Critical cache 'oauth2:model_prices' missing! Triggering sync...")
+				sm.performSync(ctx)
+				// 冷却 10 秒，防止并发重复触发
+				time.Sleep(10 * time.Second)
+			}
 		}
 	}
 }
