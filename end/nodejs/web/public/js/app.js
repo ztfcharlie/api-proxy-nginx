@@ -1,51 +1,6 @@
 const { useState, useEffect } = React;
 
 // ==========================================
-// UTILITY: Safe Component Wrapper
-// Handles waiting for Babel to compile external modules
-// ==========================================
-const ComponentWrapper = ({ componentName, props }) => {
-    const [Component, setComponent] = useState(window[componentName]);
-
-    useEffect(() => {
-        // If already available, set immediately
-        if (window[componentName]) {
-            setComponent(() => window[componentName]);
-            return;
-        }
-
-        // Poll for the component availability
-        const timer = setInterval(() => {
-            if (window[componentName]) {
-                setComponent(() => window[componentName]);
-                clearInterval(timer);
-            }
-        }, 50);
-
-        // Stop polling after 10 seconds to save resources
-        const timeout = setTimeout(() => clearInterval(timer), 10000);
-
-        return () => {
-            clearInterval(timer);
-            clearTimeout(timeout);
-        };
-    }, [componentName]);
-
-    if (!Component) {
-        return (
-            <div className="flex h-full items-center justify-center text-gray-500">
-                <div className="text-center">
-                    <i className="fas fa-spinner fa-spin text-3xl mb-4 text-blue-500"></i>
-                    <p>Loading Module... <br/><span className="text-xs text-gray-400">(Compiling {componentName})</span></p>
-                </div>
-            </div>
-        );
-    }
-
-    return <Component {...props} />;
-};
-
-// ==========================================
 // MODULE: Main Application
 // ==========================================
 const App = () => {
@@ -122,8 +77,8 @@ const App = () => {
             case 'log_files': return <iframe src="log_files.html" className="w-full h-full border-none rounded-lg shadow-inner bg-white" title="Log Files"></iframe>;
             case 'jobs': return <window.JobManager setNotify={setNotify} />;
             case 'redis': return <window.RedisInspector setNotify={setNotify} />;
-            // Use simple Wrapper that waits for window.ClientTest
-            case 'client_test': return <ComponentWrapper componentName="ClientTest" props={{ setNotify }} />;
+            // Iframe integration for complete isolation and stability
+            case 'client_test': return <iframe src="client-test.html" className="w-full h-full border-none rounded-lg shadow-inner bg-gray-50" title="Client Test Tool"></iframe>;
             case 'system': return <window.SystemStatus setNotify={setNotify} />;
             case 'account': return <window.AccountCenter setNotify={setNotify} />;
             default: return <window.Dashboard />;
