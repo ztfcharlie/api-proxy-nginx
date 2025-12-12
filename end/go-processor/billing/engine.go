@@ -7,6 +7,7 @@ type Engine struct {
 func NewEngine() *Engine {
 	return &Engine{
 		strategies: []Strategy{
+			&AudioProvider{},     // [Added] Audio support
 			&OpenAIProvider{},
 			&AzureProvider{},
 			&AnthropicProvider{}, // Claude
@@ -19,10 +20,10 @@ func NewEngine() *Engine {
 }
 
 // Calculate 自动选择策略并计算
-func (e *Engine) Calculate(model string, path string, reqBody, resBody []byte, statusCode int) (Usage, error) {
+func (e *Engine) Calculate(model string, path string, reqBody, resBody []byte, contentType string, statusCode int) (Usage, error) {
 	for _, s := range e.strategies {
 		if s.CanHandle(model, path) {
-			return s.Calculate(model, reqBody, resBody, statusCode)
+			return s.Calculate(model, reqBody, resBody, contentType, statusCode)
 		}
 	}
 	// 默认返回空，不报错，因为有些请求可能就是不计费的 (如 health check)

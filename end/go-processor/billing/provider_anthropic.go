@@ -34,7 +34,7 @@ type claudeStreamEvent struct {
 	} `json:"delta"`
 }
 
-func (s *AnthropicProvider) Calculate(model string, reqBody, resBody []byte, statusCode int) (Usage, error) {
+func (s *AnthropicProvider) Calculate(model string, reqBody, resBody []byte, contentType string, statusCode int) (Usage, error) {
 	var u Usage
 
 	if statusCode != 200 || len(resBody) == 0 {

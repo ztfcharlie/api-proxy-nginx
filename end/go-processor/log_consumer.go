@@ -425,6 +425,10 @@ func (lc *LogConsumer) calculateCost(ctx context.Context, channelID int, model s
 	if billingMode == "request" {
 		// 按次计费: 优先用全局定义的单次价格
 		cost = globalCfg.Price
+	} else if billingMode == "time" {
+		// [Added] 按时长计费 (Audio)
+		// Price 是每秒价格
+		cost = u.AudioSeconds * globalCfg.Price
 	} else {
 		// 按量计费: 使用全局定义的 Input/Output 价格
 		inputCost := (float64(u.PromptTokens) / PriceUnitDivisor) * globalCfg.InputPrice

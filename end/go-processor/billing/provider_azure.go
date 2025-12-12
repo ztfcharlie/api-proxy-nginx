@@ -15,7 +15,7 @@ func (s *AzureProvider) CanHandle(model string, path string) bool {
 	return strings.Contains(path, "/openai/deployments/")
 }
 
-func (s *AzureProvider) Calculate(model string, reqBody, resBody []byte, statusCode int) (Usage, error) {
+func (s *AzureProvider) Calculate(model string, reqBody, resBody []byte, contentType string, statusCode int) (Usage, error) {
 	// Azure 的响应体结构与 OpenAI 基本一致 (除了 Content Filter)
 	// 我们可以直接复用 OpenAI 的逻辑，或者 copy 一份以防万一
 	

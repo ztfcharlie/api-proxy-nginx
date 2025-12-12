@@ -24,7 +24,7 @@ type vertexResponse struct {
 	} `json:"usageMetadata"`
 }
 
-func (s *VertexProvider) Calculate(model string, reqBody, resBody []byte, statusCode int) (Usage, error) {
+func (s *VertexProvider) Calculate(model string, reqBody, resBody []byte, contentType string, statusCode int) (Usage, error) {
 	var u Usage
 	if statusCode != 200 || len(resBody) == 0 {
 		return u, nil

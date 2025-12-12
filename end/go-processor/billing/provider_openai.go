@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"log"
 	"strings"
-
-	"github.com/pkoukk/tiktoken-go"
 )
 
 type OpenAIProvider struct{}
@@ -17,6 +15,11 @@ type openAIResponse struct {
 		CompletionTokens int `json:"completion_tokens"`
 		TotalTokens      int `json:"total_tokens"`
 	} `json:"usage"`
+	Choices []struct {
+		Message struct {
+			Content string `json:"content"`
+		} `json:"message"`
+	} `json:"choices"`
 }
 
 func (s *OpenAIProvider) CanHandle(model string, path string) bool {
@@ -28,7 +31,7 @@ func (s *OpenAIProvider) CanHandle(model string, path string) bool {
 	return isOpenAIModel && isOpenAIPath
 }
 
-func (s *OpenAIProvider) Calculate(model string, reqBody, resBody []byte, statusCode int) (Usage, error) {
+func (s *OpenAIProvider) Calculate(model string, reqBody, resBody []byte, contentType string, statusCode int) (Usage, error) {
 	var u Usage
 	if statusCode != 200 || len(resBody) == 0 {
 		return u, nil
@@ -72,47 +75,47 @@ func (s *OpenAIProvider) Calculate(model string, reqBody, resBody []byte, status
 		}
 	}
 
-	// 如果 API 没返回 Usage (或者是旧版流式)，则进行估算
+	// 如果 API 没返回 Usage (或者是旧版流式)，则进行本地计算
 	if !foundUsage {
-		log.Printf("[Billing] Usage missing for %s, estimating...", model)
-		return s.estimateTokens(model, reqBody, resBody)
+		log.Printf("[Billing] Usage missing for %s, calculating locally...", model)
+		return s.estimateTokens(model, reqBody, resBody, isStream)
 	}
 
 	return u, nil
 }
 
-func (s *OpenAIProvider) estimateTokens(model string, reqBody, resBody []byte) (Usage, error) {
+func (s *OpenAIProvider) estimateTokens(model string, reqBody, resBody []byte, isStream bool) (Usage, error) {
 	var u Usage
 	
-	// 尝试加载 tokenizer
-	tkm, err := tiktoken.EncodingForModel(model)
-	if err != nil {
-		// fallback
-		tkm, _ = tiktoken.GetEncoding("cl100k_base")
-	}
-
-	// 简单的估算：Input
-	// 这里的 reqBody 可能是 JSON，需要解析出 content
-	// 为简化，直接计算整个 JSON string 的 token 可能会偏大，但作为兜底尚可
-	// 或者尝试解析 JSON
+	// 1. Calculate Prompt Tokens
 	type chatRequest struct {
-		Messages []struct {
-			Content string `json:"content"`
-		} `json:"messages"`
+		Messages []map[string]interface{} `json:"messages"` // Use map for flexibility
 	}
 	var req chatRequest
-	if json.Unmarshal(reqBody, &req) == nil && len(req.Messages) > 0 {
-		for _, msg := range req.Messages {
-			u.PromptTokens += len(tkm.Encode(msg.Content, nil, nil))
-		}
+	if err := json.Unmarshal(reqBody, &req); err == nil {
+		u.PromptTokens = CountMessageTokens(req.Messages, model)
 	} else {
-		// 解析失败，直接算 string
-		u.PromptTokens = len(tkm.Encode(string(reqBody), nil, nil))
+		// Fallback: raw text count
+		u.PromptTokens = CountTextToken(string(reqBody), model)
 	}
 
-	// Output
-	u.CompletionTokens = len(tkm.Encode(string(resBody), nil, nil))
-	u.TotalTokens = u.PromptTokens + u.CompletionTokens
+	// 2. Calculate Completion Tokens
+	if isStream {
+		// Use our ported stream parser
+		tokens, _ := ParseSSEAndCount(resBody, model)
+		u.CompletionTokens = tokens
+	} else {
+		// Regular JSON
+		var resp openAIResponse
+		if err := json.Unmarshal(resBody, &resp); err == nil && len(resp.Choices) > 0 {
+			content := resp.Choices[0].Message.Content
+			u.CompletionTokens = CountTextToken(content, model)
+		} else {
+			// Fallback: raw text count
+			u.CompletionTokens = CountTextToken(string(resBody), model)
+		}
+	}
 
+	u.TotalTokens = u.PromptTokens + u.CompletionTokens
 	return u, nil
 }

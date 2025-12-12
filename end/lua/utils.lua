@@ -128,6 +128,7 @@ function _M.log_request()
         upstream_response_time = ngx.var.upstream_response_time or 0,
         ip = ngx.var.remote_addr,
         user_agent = ngx.var.http_user_agent,
+        content_type = ngx.var.content_type, -- [Added] for multipart parsing
         request_id = ngx.var.my_request_id or ngx.var.request_id
     }
 

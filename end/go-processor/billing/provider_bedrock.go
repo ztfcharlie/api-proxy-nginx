@@ -28,7 +28,7 @@ type bedrockTitanResponse struct {
 	OutputTokenCount int `json:"resultsTokenCount"`
 }
 
-func (s *BedrockProvider) Calculate(model string, reqBody, resBody []byte, statusCode int) (Usage, error) {
+func (s *BedrockProvider) Calculate(model string, reqBody, resBody []byte, contentType string, statusCode int) (Usage, error) {
 	var u Usage
 	if statusCode != 200 || len(resBody) == 0 {
 		return u, nil

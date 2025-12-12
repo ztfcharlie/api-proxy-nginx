@@ -12,7 +12,7 @@ func (s *DeepSeekProvider) CanHandle(model string, path string) bool {
 	return strings.Contains(model, "deepseek")
 }
 
-func (s *DeepSeekProvider) Calculate(model string, reqBody, resBody []byte, statusCode int) (Usage, error) {
+func (s *DeepSeekProvider) Calculate(model string, reqBody, resBody []byte, contentType string, statusCode int) (Usage, error) {
 	// DeepSeek 逻辑与 OpenAI 99% 相似
 	// 但我们可以针对 DeepSeek 的 Cache Token 做特殊处理 (未来)
 	
