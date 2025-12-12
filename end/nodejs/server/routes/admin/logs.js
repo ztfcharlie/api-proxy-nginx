@@ -56,6 +56,13 @@ router.get('/stream', (req, res) => {
     });
 
     res.write('data: {"source":"system", "level":"info", "msg":"Connected to Realtime Log Stream..."}\n\n');
+    // Padding to flush buffers
+    res.write(':' + ' '.repeat(2048) + '\n\n');
+
+    // [Added] Heartbeat to keep connection alive and prevent Nginx buffering issues
+    const heartbeat = setInterval(() => {
+        res.write(': heartbeat\n\n');
+    }, 30000);
 
     const clientId = Date.now();
     const newClient = {
@@ -66,6 +73,7 @@ router.get('/stream', (req, res) => {
 
     // 连接关闭时清理
     req.on('close', () => {
+        clearInterval(heartbeat);
         clients = clients.filter(c => c.id !== clientId);
     });
 });
