@@ -196,7 +196,10 @@ function _M.publish_debug_log(level, msg)
     
     local ok, err = pcall(function()
         local red, err = get_redis_connection()
-        if not red then return end
+        if not red then 
+            ngx.log(ngx.ERR, "[DEBUG-STREAM] Redis connect failed: ", err)
+            return 
+        end
         
         local payload = cjson.encode({
             ts = os.date("%Y-%m-%dT%H:%M:%S.000Z"),
@@ -206,7 +209,11 @@ function _M.publish_debug_log(level, msg)
             req_id = ngx.var.my_request_id or "unknown"
         })
         
-        red:publish("sys:log_stream", payload)
+        local res, pub_err = red:publish("sys:log_stream", payload)
+        if not res then
+            ngx.log(ngx.ERR, "[DEBUG-STREAM] Redis publish failed: ", pub_err)
+        end
+
         red:set_keepalive(10000, 10)
     end)
 end
