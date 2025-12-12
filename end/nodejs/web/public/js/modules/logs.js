@@ -65,7 +65,9 @@ window.LogViewer = ({ setNotify }) => {
                             <div><span className="font-bold text-gray-500">Status:</span> <span className={log.status_code===200?'text-green-600':'text-red-600 font-bold'}>{log.status_code}</span></div>
                             <div><span className="font-bold text-gray-500">Duration:</span> {log.duration_ms}ms</div>
                             <div><span className="font-bold text-gray-500">Upstream:</span> {log.upstream_duration_ms}ms</div>
-                            <div><span className="font-bold text-gray-500">Tokens:</span> {log.total_tokens}</div>
+                            <div><span className="font-bold text-gray-500">Input Tokens:</span> {log.prompt_tokens}</div>
+                            <div><span className="font-bold text-gray-500">Output Tokens:</span> {log.completion_tokens}</div>
+                            <div><span className="font-bold text-gray-500">Total Tokens:</span> {log.total_tokens}</div>
                             <div><span className="font-bold text-gray-500">Cost:</span> ${log.cost}</div>
                             <div className="col-span-2"><span className="font-bold text-gray-500">IP/UA:</span> {log.ip} <span className="text-xs text-gray-400 block truncate">{log.user_agent}</span></div>
                         </div>
@@ -123,7 +125,7 @@ window.LogViewer = ({ setNotify }) => {
                             <th className="px-6 py-3 text-left font-bold text-gray-500">User/Token</th>
                             <th className="px-6 py-3 text-left font-bold text-gray-500">Status</th>
                             <th className="px-6 py-3 text-left font-bold text-gray-500">Duration</th>
-                            <th className="px-6 py-3 text-left font-bold text-gray-500">Tokens</th>
+                            <th className="px-6 py-3 text-left font-bold text-gray-500">Tokens (In/Out/Total)</th>
                             <th className="px-6 py-3 text-right font-bold text-gray-500">Action</th>
                         </tr>
                     </thead>
@@ -133,8 +135,10 @@ window.LogViewer = ({ setNotify }) => {
                                 <td className="px-6 py-4 text-gray-500 whitespace-nowrap">{new Date(log.created_at).toLocaleString()}</td>
                                 <td className="px-6 py-4 font-medium text-gray-900">{log.model}</td>
                                 <td className="px-6 py-4 text-gray-600">
-                                    <div className="text-xs text-gray-400">UID: {log.user_id}</div>
-                                    <div className="truncate w-24 font-mono text-xs" title={log.token_key}>{log.token_key ? log.token_key.substring(0, 8) + '...' : '-'}</div>
+                                    <div className="text-xs font-bold text-gray-700">{log.username || `UID: ${log.user_id}`}</div>
+                                    <div className="text-xs text-gray-500 truncate w-32" title={log.token_key}>
+                                        {log.token_name || (log.token_key ? log.token_key.substring(0, 10) + '...' : '-')}
+                                    </div>
                                 </td>
                                 <td className="px-6 py-4">
                                     <span className={`px-2 py-1 rounded text-xs font-bold ${log.status_code === 200 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
@@ -142,7 +146,11 @@ window.LogViewer = ({ setNotify }) => {
                                     </span>
                                 </td>
                                 <td className="px-6 py-4 text-gray-500">{log.duration_ms}ms</td>
-                                <td className="px-6 py-4 text-gray-500">{log.total_tokens}</td>
+                                <td className="px-6 py-4 text-gray-500 font-mono text-xs">
+                                    <span className="text-blue-600" title="Input">{log.prompt_tokens}</span> / 
+                                    <span className="text-green-600" title="Output">{log.completion_tokens}</span> / 
+                                    <span className="font-bold">{log.total_tokens}</span>
+                                </td>
                                 <td className="px-6 py-4 text-right">
                                     <button onClick={() => viewDetail(log)} className="text-blue-600 hover:underline">View</button>
                                 </td>

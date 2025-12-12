@@ -214,46 +214,102 @@ router.get('/', async (req, res) => {
         const { page = 1, limit = 20, channel_id, user_id, status_code, request_id } = req.query;
         const offset = (page - 1) * limit;
 
-        let query = "SELECT * FROM sys_request_logs WHERE 1=1";
+        // [Modified] Join tables for better display
+        let query = `
+            SELECT l.*, u.username, t.name as token_name
+            FROM sys_request_logs l
+            LEFT JOIN sys_users u ON l.user_id = u.id
+            LEFT JOIN sys_virtual_tokens t ON l.token_key = t.token_key
+            WHERE 1=1
+        `;
         let params = [];
 
         // 权限控制：普通用户只能看自己的日志
         if (req.user.role !== 'admin') {
-            query += " AND user_id = ?";
+            query += " AND l.user_id = ?";
             params.push(req.user.id);
         } else if (user_id) {
             // 管理员可以按用户筛选
-            query += " AND user_id = ?";
+            query += " AND l.user_id = ?";
             params.push(user_id);
         }
 
         if (channel_id) {
-            query += " AND channel_id = ?";
+            query += " AND l.channel_id = ?";
             params.push(channel_id);
         }
 
         if (status_code) {
-            query += " AND status_code = ?";
+            query += " AND l.status_code = ?";
             params.push(status_code);
         }
         
         if (request_id) {
-            query += " AND request_id LIKE ?";
+            query += " AND l.request_id LIKE ?";
             params.push(`%${request_id}%`);
         }
 
-        const countQuery = query.replace("SELECT *", "SELECT COUNT(*) as total");
-        const [countResult] = await db.query(countQuery, params);
+        // Count Query (Simplified)
+        const countQuery = `
+            SELECT COUNT(*) as total 
+            FROM sys_request_logs l 
+            WHERE 1=1 
+            ${req.user.role !== 'admin' ? 'AND l.user_id = ?' : ''}
+            ${user_id ? 'AND l.user_id = ?' : ''}
+            ${channel_id ? 'AND l.channel_id = ?' : ''}
+            ${status_code ? 'AND l.status_code = ?' : ''}
+            ${request_id ? 'AND l.request_id LIKE ?' : ''}
+        `;
+        
+        // Re-use params for count query appropriately (this is tricky with dynamic params)
+        // Better strategy: construct WHERE clause dynamically and reuse it.
+        // But for quick fix, let's keep the params order consistent.
+        // Wait, params order matches the additions. So countQuery needs exact same WHERE conditions.
+        
+        // Let's rewrite the logic to share WHERE clause string
+        let whereClause = "WHERE 1=1";
+        let queryParams = [];
 
-        query += " ORDER BY id DESC LIMIT ? OFFSET ?";
-        params.push(parseInt(limit), offset);
+        if (req.user.role !== 'admin') {
+            whereClause += " AND l.user_id = ?";
+            queryParams.push(req.user.id);
+        } else if (user_id) {
+            whereClause += " AND l.user_id = ?";
+            queryParams.push(user_id);
+        }
+        if (channel_id) {
+            whereClause += " AND l.channel_id = ?";
+            queryParams.push(channel_id);
+        }
+        if (status_code) {
+            whereClause += " AND l.status_code = ?";
+            queryParams.push(status_code);
+        }
+        if (request_id) {
+            whereClause += " AND l.request_id LIKE ?";
+            queryParams.push(`%${request_id}%`);
+        }
 
-        const [logs] = await db.query(query, params);
+        const countRes = await db.query(`SELECT COUNT(*) as total FROM sys_request_logs l ${whereClause}`, queryParams);
+        
+        query = `
+            SELECT l.*, u.username, t.name as token_name
+            FROM sys_request_logs l
+            LEFT JOIN sys_users u ON l.user_id = u.id
+            LEFT JOIN sys_virtual_tokens t ON l.token_key = t.token_key
+            ${whereClause}
+            ORDER BY l.id DESC LIMIT ? OFFSET ?
+        `;
+        
+        // Clone params for data query and add limit/offset
+        const dataParams = [...queryParams, parseInt(limit), offset];
+
+        const [logs] = await db.query(query, dataParams);
 
         res.json({
             data: logs,
             pagination: {
-                total: countResult[0].total,
+                total: countRes[0][0].total,
                 page: parseInt(page),
                 limit: parseInt(limit)
             }
