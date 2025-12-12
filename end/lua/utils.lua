@@ -150,6 +150,11 @@ function _M.log_request()
             ngx.log(ngx.ERR, "[LOG] Failed to connect to Redis: ", err)
             return
         end
+        
+        -- [DEBUG] Confirm Redis Connection Details
+        -- Unfortunately red object doesn't expose host/port directly easily, but we can verify DB
+        -- Or just log what config thinks it is
+        -- ngx.log(ngx.ERR, "[DEBUG-STREAM] Redis Connected. DB: ", config.get_redis_config().db)
 
         -- 截断
         if #req_body > 100000 then req_body = string.sub(req_body, 1, 100000) .. "..." end
@@ -174,6 +179,18 @@ function _M.log_request()
         if not res then
             ngx.log(ngx.ERR, "[LOG] Failed to XADD: ", err)
         end
+
+        -- [Added] Also Publish to Live Logs (Pub/Sub)
+        -- Construct a simplified payload for the UI
+        local live_payload = cjson.encode({
+            ts = os.date("!%Y-%m-%dT%H:%M:%S.000Z"), -- UTC
+            source = "nginx-access",
+            level = "info",
+            msg = string.format("%s %s -> %s (%d) [%sms]", 
+                metadata.method, metadata.uri, metadata.upstream_status or "-", metadata.status, metadata.request_time),
+            meta = metadata
+        })
+        red:publish("sys:log_stream", live_payload)
 
         red:set_keepalive(10000, 10)
     end)
