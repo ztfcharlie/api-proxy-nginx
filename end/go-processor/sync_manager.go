@@ -121,6 +121,13 @@ func (sm *SyncManager) performSync(ctx context.Context) {
 		errs = append(errs, errMsg)
 	}
 
+	// [Added] Sync Models
+	if err := sm.syncModels(ctx); err != nil {
+		errMsg := fmt.Sprintf("Sync models failed: %v", err)
+		log.Printf("[ERROR] %s", errMsg)
+		errs = append(errs, errMsg)
+	}
+
 	if err := sm.syncUserTokens(ctx); err != nil {
 		errMsg := fmt.Sprintf("Sync user tokens failed: %v", err)
 		log.Printf("[ERROR] %s", errMsg)
@@ -142,6 +149,56 @@ func (sm *SyncManager) performSync(ctx context.Context) {
 func (sm *SyncManager) ForceRun() {
 	log.Println("[INFO] Force running DB Sync Job...")
 	go sm.performSync(context.Background())
+}
+
+// [Added] syncModels 同步模型价格 (DB -> Redis)
+func (sm *SyncManager) syncModels(ctx context.Context) error {
+	// 1. 查询所有启用模型
+	rows, err := sm.db.Query("SELECT name, price_input, price_output, price_request, price_time FROM sys_models WHERE status = 1")
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	priceMap := make(map[string]interface{})
+
+	for rows.Next() {
+		var name string
+		var pInput, pOutput, pRequest, pTime sql.NullFloat64
+		
+		if err := rows.Scan(&name, &pInput, &pOutput, &pRequest, &pTime); err != nil {
+			log.Printf("[WARN] Scan model failed: %v", err)
+			continue
+		}
+
+		// 逻辑与 Node.js 保持一致
+		mode := "token"
+		var price float64 = 0
+
+		if pRequest.Valid && pRequest.Float64 > 0 {
+			mode = "request"
+			price = pRequest.Float64
+		} else if pTime.Valid && pTime.Float64 > 0 {
+			mode = "time"
+			price = pTime.Float64
+		}
+
+		priceMap[name] = map[string]interface{}{
+			"mode":   mode,
+			"input":  pInput.Float64,  // Default 0 if null
+			"output": pOutput.Float64, // Default 0 if null
+			"price":  price,
+		}
+	}
+
+	// 2. 写入 Redis
+	valBytes, _ := json.Marshal(priceMap)
+	if err := sm.rdb.Set(ctx, "oauth2:model_prices", string(valBytes), 0).Err(); err != nil {
+		return err
+	}
+	
+	log.Printf("[INFO] Synced %d models prices to Redis", len(priceMap))
+	return nil
 }
 
 // syncChannels 同步渠道配置 (DB -> Redis)

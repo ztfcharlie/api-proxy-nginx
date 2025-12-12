@@ -2,6 +2,45 @@ const express = require('express');
 const router = express.Router();
 const db = require('../../config/db').dbPool;
 const logger = require('../../services/LoggerService');
+const syncManager = require('../../services/SyncManager'); // Import SyncManager
+
+// Key for global model prices
+const REDIS_KEY_MODEL_PRICES = "oauth2:model_prices";
+
+/**
+ * [Helper] 同步模型价格到 Redis
+ */
+async function syncModelPricesToRedis() {
+    try {
+        const [models] = await db.query("SELECT * FROM sys_models WHERE status = 1");
+        const priceMap = {};
+
+        models.forEach(m => {
+            // 默认模式检测
+            let mode = "token"; // default
+            if (m.price_request > 0) mode = "request";
+            else if (m.price_time > 0) mode = "time";
+
+            priceMap[m.name] = {
+                mode: mode,
+                input: parseFloat(m.price_input || 0),
+                output: parseFloat(m.price_output || 0),
+                price: parseFloat(m.price_request || m.price_time || 0) // Unified price field for non-token modes
+            };
+        });
+
+        // 获取 Redis 客户端
+        const redis = syncManager.redis.redis; 
+        if (redis) {
+            await redis.set(REDIS_KEY_MODEL_PRICES, JSON.stringify(priceMap));
+            logger.info(`[Sync] Synced ${models.length} model prices to Redis`);
+        } else {
+            logger.error('[Sync] Redis client not available for price sync');
+        }
+    } catch (err) {
+        logger.error('[Sync] Failed to sync model prices:', err);
+    }
+}
 
 /**
  * 获取模型列表
@@ -39,6 +78,10 @@ router.post('/', async (req, res) => {
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
             [provider, name, price_input||0, price_output||0, price_cache||0, price_time||0, price_request||0, default_rpm||1000]
         );
+        
+        // [Sync] Update Redis
+        await syncModelPricesToRedis();
+        
         res.status(201).json({ message: "Model created" });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -142,6 +185,10 @@ router.put('/:id', async (req, res) => {
         
         params.push(id);
         await db.query(`UPDATE sys_models SET ${updates.join(', ')} WHERE id = ?`, params);
+        
+        // [Sync] Update Redis
+        await syncModelPricesToRedis();
+
         res.json({ message: "Model updated" });
 
     } catch (err) {
@@ -174,6 +221,10 @@ router.delete('/:id', async (req, res) => {
 
         // 3. 删除
         await db.query("DELETE FROM sys_models WHERE id = ?", [req.params.id]);
+        
+        // [Sync] Update Redis
+        await syncModelPricesToRedis();
+
         res.json({ message: "Model deleted" });
     } catch (err) {
         res.status(500).json({ error: err.message });
