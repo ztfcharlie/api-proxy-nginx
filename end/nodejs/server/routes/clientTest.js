@@ -130,15 +130,21 @@ router.post('/send', async (req, res) => {
         else {
             const headers = { 'Content-Type': 'application/json' };
             
+            // 确保 realCredentials 是字符串
+            const keyString = typeof realCredentials === 'object' ? JSON.stringify(realCredentials) : realCredentials;
+
             if (vendor === 'anthropic') {
-                headers['x-api-key'] = clientCredential;
+                headers['x-api-key'] = keyString;
                 headers['anthropic-version'] = '2023-06-01';
             } else if (vendor === 'azure-openai') {
-                headers['api-key'] = clientCredential;
+                headers['api-key'] = keyString;
             } else {
-                // OpenAI, DeepSeek, Qwen
-                headers['Authorization'] = `Bearer ${clientCredential}`;
+                headers['Authorization'] = `Bearer ${keyString}`;
             }
+
+            console.log(`[ClientTest] Sending request to: ${finalUrl}`);
+            console.log(`[ClientTest] Method: POST`);
+            console.log(`[ClientTest] Headers:`, JSON.stringify(headers));
 
             const result = await axios.post(finalUrl, payload, {
                 headers,
