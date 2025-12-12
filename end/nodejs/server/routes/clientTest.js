@@ -37,15 +37,7 @@ router.post('/send', async (req, res) => {
         let responseData;
         let responseStatus;
         let responseHeaders;
-        let clientCredential = apiKey; // 默认为用户手填的
-
-        // 如果 apiKey 是纯数字，说明是 Virtual Token ID，需要从库里读出该 Token 的字符串内容
-        if (/^\d+$/.test(apiKey)) {
-            const tokenContent = await getVirtualTokenContent(apiKey);
-            if (tokenContent) {
-                clientCredential = tokenContent;
-            }
-        }
+        let clientCredential = apiKey; 
 
         // ---------------------------------------------------------
         // AWS Bedrock (使用 Virtual Token 作为 AK/SK 模拟原生请求)
@@ -189,7 +181,7 @@ router.get('/tokens', async (req, res) => {
         // 返回给前端：ID用于后续查找，Label用于展示
         const tokens = rows.map(row => ({
             label: `[${row.type}] ${row.token_name || row.token_key} (${row.username || 'No User'})`,
-            value: row.id, 
+            value: row.token_key, // Send actual token key, not ID
             service_type: row.type
         }));
 
