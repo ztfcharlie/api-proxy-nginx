@@ -134,22 +134,21 @@ func (lc *LogConsumer) processBatch(ctx context.Context, msgs []redis.XMessage) 
 		reqID, _ := values["req_id"].(string)
 		metaStr, _ := values["meta"].(string)
 		
-		// ...
+		// 解析 Metadata
+		var meta LogMetadata
+		if err := json.Unmarshal([]byte(metaStr), &meta); err != nil {
+			log.Printf("[WARN] Failed to parse metadata for req %s", reqID)
+			lc.publishDebug("warn", fmt.Sprintf("Failed to parse metadata for req %s: %v", reqID, err))
+			ackIDs = append(ackIDs, msg.ID)
+			continue
+		}
 
-		        // 解析 Metadata
-				var meta LogMetadata
-				if err := json.Unmarshal([]byte(metaStr), &meta); err != nil {
-					log.Printf("[WARN] Failed to parse metadata for req %s", reqID)
-					lc.publishDebug("warn", fmt.Sprintf("Failed to parse metadata for req %s: %v", reqID, err))
-					ackIDs = append(ackIDs, msg.ID)
-					continue
-				}
+		// [Fix] Restore body extraction
+		reqBodyRaw, _ := values["req_body"].(string)
+		resBodyRaw, _ := values["res_body"].(string)
 		
-				// [Fix] Restore body extraction
-				reqBodyRaw, _ := values["req_body"].(string)
-				resBodyRaw, _ := values["res_body"].(string)
-				
-				// 处理字段		tokenKey := ""
+		// 处理字段
+		tokenKey := ""
 		if strings.HasPrefix(meta.ClientToken, "sk-") {
 			tokenKey = meta.ClientToken
 		}
