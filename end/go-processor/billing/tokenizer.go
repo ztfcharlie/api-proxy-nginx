@@ -1,9 +1,7 @@
 package billing
 
 import (
-	"bytes"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"image"
 	_ "image/gif"
