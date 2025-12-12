@@ -125,6 +125,7 @@ window.LogViewer = ({ setNotify }) => {
                             <th className="px-6 py-3 text-left font-bold text-gray-500">User/Token</th>
                             <th className="px-6 py-3 text-left font-bold text-gray-500">Status</th>
                             <th className="px-6 py-3 text-left font-bold text-gray-500">Duration</th>
+                            <th className="px-6 py-3 text-left font-bold text-gray-500">Cost</th>
                             <th className="px-6 py-3 text-left font-bold text-gray-500">Tokens (In/Out/Total)</th>
                             <th className="px-6 py-3 text-right font-bold text-gray-500">Action</th>
                         </tr>
@@ -146,6 +147,7 @@ window.LogViewer = ({ setNotify }) => {
                                     </span>
                                 </td>
                                 <td className="px-6 py-4 text-gray-500">{log.duration_ms}ms</td>
+                                <td className="px-6 py-4 text-gray-900 font-bold">${parseFloat(log.cost).toFixed(6)}</td>
                                 <td className="px-6 py-4 text-gray-500 font-mono text-xs">
                                     <span className="text-blue-600" title="Input">{log.prompt_tokens}</span> / 
                                     <span className="text-green-600" title="Output">{log.completion_tokens}</span> / 
