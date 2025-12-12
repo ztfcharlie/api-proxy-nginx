@@ -21,15 +21,21 @@ let clients = [];
 const LOG_CHANNEL = 'sys:log_stream';
 redisSub.subscribe(LOG_CHANNEL, (err, count) => {
     if (err) logger.error('Failed to subscribe to log channel:', err);
-    else logger.info(`Subscribed to ${LOG_CHANNEL} for realtime logging`);
+    else logger.info(`[DEBUG] Subscribed to ${LOG_CHANNEL} for realtime logging. Count: ${count}`);
 });
 
 // 当收到 Redis 消息时，转发给所有前端客户端
 redisSub.on('message', (channel, message) => {
+    // console.log(`[DEBUG] Received Redis message on ${channel}:`, message.substring(0, 50) + "..."); 
     if (channel === LOG_CHANNEL) {
-        clients.forEach(client => {
-            client.res.write(`data: ${message}\n\n`);
-        });
+        if (clients.length > 0) {
+            // console.log(`[DEBUG] Broadcasting to ${clients.length} clients`);
+            clients.forEach(client => {
+                client.res.write(`data: ${message}\n\n`);
+            });
+        } else {
+            // console.log(`[DEBUG] No clients connected to stream`);
+        }
     }
 });
 
