@@ -477,6 +477,18 @@ window.ChannelsManager = ({ setNotify }) => {
         }
     };
 
+    const handleOpenModelConfig = async (ch) => {
+        setConfigTargetChannel(ch);
+        try {
+            // Refresh models list to ensure newly added models appear
+            const modelRes = await window.api.models.list();
+            setAvailableModels(modelRes.data.data || []);
+            setShowModelConfig(true);
+        } catch (e) {
+            setNotify({ msg: 'Failed to refresh models: ' + e.message, type: 'error' });
+        }
+    };
+
     return (
         <div className="fade-in h-full flex flex-col">
             <div className="flex justify-between items-center mb-6">
@@ -518,7 +530,7 @@ window.ChannelsManager = ({ setNotify }) => {
                                         <span className="px-2 py-1 bg-indigo-50 text-indigo-700 rounded text-xs uppercase font-bold border border-indigo-100">{ch.type}</span>
                                     </td>
                                     <td className="px-6 py-4 text-sm">
-                                        <button onClick={() => { setConfigTargetChannel(ch); setShowModelConfig(true); }}
+                                        <button onClick={() => handleOpenModelConfig(ch)}
                                             className="bg-blue-50 text-blue-600 hover:bg-blue-100 px-3 py-1.5 rounded-md text-xs font-medium transition-colors border border-blue-200 inline-flex items-center">
                                             <i className="fas fa-cubes mr-1"></i> {modelCount} Models
                                         </button>
