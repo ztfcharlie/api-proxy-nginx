@@ -197,27 +197,35 @@ const ClientTest = () => {
 
                     <div className="mb-5">
                         <label className="block text-sm font-bold text-gray-700 mb-2">API Path</label>
-                        <div className="flex space-x-2">
+                        <div className="flex relative">
                             {/* Editable Input */}
                             <input 
                                 type="text" 
-                                className="flex-1 p-2.5 border border-gray-300 rounded-md font-mono text-sm text-blue-600"
+                                className="flex-1 p-2.5 border border-gray-300 rounded-l-md font-mono text-sm text-blue-600 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
                                 value={apiPath}
                                 onChange={(e) => setApiPath(e.target.value)}
                             />
-                            {/* Quick Select */}
-                            <select 
-                                className="w-8 p-2.5 border border-gray-300 rounded-md bg-gray-50 focus:bg-white text-transparent cursor-pointer"
-                                onChange={handlePathSelect}
-                                value=""
-                                title="Quick Select Path"
-                            >
-                                <option value="" disabled>Select Endpoint...</option>
-                                {(PATH_SUGGESTIONS[vendor] || []).map(p => (
-                                    <option key={p} value={p}>{p}</option>
-                                ))}
-                            </select>
+                            {/* Dropdown Trigger */}
+                            <div className="relative w-10">
+                                <div className="absolute inset-0 flex items-center justify-center bg-gray-100 border-y border-r border-gray-300 rounded-r-md pointer-events-none text-gray-500">
+                                    <i className="fas fa-chevron-down"></i>
+                                </div>
+                                <select 
+                                    className="w-full h-full opacity-0 cursor-pointer absolute inset-0 z-10"
+                                    onChange={handlePathSelect}
+                                    value=""
+                                    title="Quick Select Path"
+                                >
+                                    <option value="" disabled>Select Endpoint...</option>
+                                    {(PATH_SUGGESTIONS[vendor] || []).map(p => (
+                                        <option key={p} value={p} className="text-gray-800 bg-white py-1">
+                                            {p}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
                         </div>
+                        
                         <div className="mt-2 flex flex-wrap gap-2">
                             {(PATH_SUGGESTIONS[vendor] || []).slice(0, 4).map(p => (
                                 <button key={p} onClick={() => handlePathSelect({target: {value: p}})} 
