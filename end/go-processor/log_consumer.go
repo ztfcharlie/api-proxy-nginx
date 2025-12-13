@@ -175,7 +175,7 @@ func (lc *LogConsumer) processBatch(ctx context.Context, msgs []redis.XMessage) 
 		}
 
 		// [Fix] Restore body extraction
-	reqBodyRaw, _ := values["req_body"].(string)
+		reqBodyRaw, _ := values["req_body"].(string)
 		resBodyRaw, _ := values["res_body"].(string)
 		
 		// 处理字段
@@ -376,6 +376,7 @@ type ModelBillingConfig struct {
 	OutputPrice  float64 `json:"output"`
 	RequestPrice float64 `json:"request"` // [Added]
 	TimePrice    float64 `json:"time"`    // [Added]
+	CachePrice   float64 `json:"cache"`   // [Added]
 	IsAsync      bool    `json:"is_async"`
 }
 
@@ -458,11 +459,11 @@ func (lc *LogConsumer) calculateCost(ctx context.Context, channelID int, model s
 		// Token Mode
 		inputCost := (float64(u.PromptTokens) / PriceUnitDivisor) * cfg.InputPrice
 		outputCost := (float64(u.CompletionTokens) / PriceUnitDivisor) * cfg.OutputPrice
-		cost = inputCost + outputCost
+		// [Added] Cache Hit Cost
+		cacheCost := (float64(u.CacheReadTokens) / PriceUnitDivisor) * cfg.CachePrice
 		
-		// If using Token mode but also generating images (e.g. mixed scenario or misconfig), 
-		// allow falling back to Request Price for the image part if configured.
-		// (Optional logic, sticking to strict mode for now)
+		cost = inputCost + outputCost + cacheCost
+		
 		if u.Images > 0 && cfg.RequestPrice > 0 {
 			cost += float64(u.Images) * cfg.RequestPrice
 		}

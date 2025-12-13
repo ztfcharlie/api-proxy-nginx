@@ -186,7 +186,7 @@ func (sm *SyncManager) ForceRun() {
 // [Added] syncModels 同步模型价格 (DB -> Redis)
 func (sm *SyncManager) syncModels(ctx context.Context) error {
 	// 1. 查询所有启用模型
-	rows, err := sm.db.Query("SELECT name, price_input, price_output, price_request, price_time FROM sys_models WHERE status = 1")
+	rows, err := sm.db.Query("SELECT name, price_input, price_output, price_request, price_time, price_cache FROM sys_models WHERE status = 1")
 	if err != nil {
 		return err
 	}
@@ -196,9 +196,9 @@ func (sm *SyncManager) syncModels(ctx context.Context) error {
 
 	for rows.Next() {
 		var name string
-		var pInput, pOutput, pRequest, pTime sql.NullFloat64
+		var pInput, pOutput, pRequest, pTime, pCache sql.NullFloat64
 		
-		if err := rows.Scan(&name, &pInput, &pOutput, &pRequest, &pTime); err != nil {
+		if err := rows.Scan(&name, &pInput, &pOutput, &pRequest, &pTime, &pCache); err != nil {
 			log.Printf("[WARN] Scan model failed: %v", err)
 			continue
 		}
@@ -210,6 +210,7 @@ func (sm *SyncManager) syncModels(ctx context.Context) error {
 			"output":  pOutput.Float64,
 			"request": pRequest.Float64,
 			"time":    pTime.Float64,
+			"cache":   pCache.Float64, // [Added] Cache Price
 		}
 	}
 
