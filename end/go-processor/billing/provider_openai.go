@@ -204,11 +204,19 @@ func (s *OpenAIProvider) estimateTokens(model string, reqBody, resBody []byte, i
 			if err := json.Unmarshal(resBody, &legResp); err == nil && len(legResp.Choices) > 0 {
 				u.CompletionTokens = CountTextToken(legResp.Choices[0].Text, model)
 			} else {
-				// TTS usually returns binary, completion is 0.
-				if strings.Contains(model, "tts") {
-					u.CompletionTokens = 0
+				// Try parsing as Responses API (output field)
+				var respOut struct {
+					Output string `json:"output"`
+				}
+				if err := json.Unmarshal(resBody, &respOut); err == nil && respOut.Output != "" {
+					u.CompletionTokens = CountTextToken(respOut.Output, model)
 				} else {
-					u.CompletionTokens = CountTextToken(string(resBody), model)
+					// TTS usually returns binary, completion is 0.
+					if strings.Contains(model, "tts") {
+						u.CompletionTokens = 0
+					} else {
+						u.CompletionTokens = CountTextToken(string(resBody), model)
+					}
 				}
 			}
 		}
