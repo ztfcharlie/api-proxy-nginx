@@ -122,6 +122,21 @@ func (lc *LogConsumer) updateChannelError(channelID int, errorMsg string) {
 	}()
 }
 
+// [Added] 清除渠道错误状态
+func (lc *LogConsumer) clearChannelError(channelID int) {
+	if channelID <= 0 {
+		return
+	}
+	go func() {
+		// 只有当 last_error 不为空时才更新，减少 DB 压力 (需要查一次？不用，直接 Update 影响行数即可，或者无脑 Update)
+		// 为了性能，直接无脑 Update NULL
+		_, err := lc.db.Exec("UPDATE sys_channels SET last_error = NULL WHERE id = ? AND last_error IS NOT NULL", channelID)
+		if err != nil {
+			log.Printf("[WARN] Failed to clear channel error: %v", err)
+		}
+	}()
+}
+
 // [Added] Helper to publish debug logs to Redis
 func (lc *LogConsumer) publishDebug(level, msg string) {
 	if os.Getenv("ENABLE_DEBUG_STREAM") != "true" {
@@ -219,6 +234,11 @@ func (lc *LogConsumer) processBatch(ctx context.Context, msgs []redis.XMessage) 
 		}
 
 		if meta.Status == 200 {
+			// [Fix] Clear error on success
+			if channelID > 0 {
+				lc.clearChannelError(channelID)
+			}
+
 			cost, err := lc.calculateCost(ctx, channelID, meta.ModelName, usage)
 			if err == nil {
 				usage.Cost = cost
