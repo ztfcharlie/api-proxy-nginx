@@ -253,13 +253,14 @@ func (lc *LogConsumer) processBatch(ctx context.Context, msgs []redis.XMessage) 
 		// [Added] Real-time Log Stream (Frontend Debugging)
 		if os.Getenv("ENABLE_DEBUG_STREAM") == "true" {
 			go func(m LogMetadata, u billing.Usage, rid string, cid int) {
-				payload := fmt.Sprintf(`{"ts":"%s", "source":"go-billing", "level":"info", "msg":"Processed Request: %s (Status: %d, Model: %s, Cost: %.6f, Tokens: %d)", "meta": {"req_id": "%s", "channel_id": %d}}`,
+				payload := fmt.Sprintf(`{"ts":"%s", "source":"go-billing", "level":"info", "msg":"Processed Request: %s (Status: %d, Model: %s, Cost: %.6f, Tokens: %d, Images: %d)", "meta": {"req_id": "%s", "channel_id": %d}}`,
 					time.Now().Format(time.RFC3339),
 					rid,
 					m.Status,
 					m.ModelName,
 					u.Cost,
 					u.TotalTokens,
+					u.Images, // [Added] Debug Images
 					rid,
 					cid,
 				)
@@ -275,8 +276,19 @@ func (lc *LogConsumer) processBatch(ctx context.Context, msgs []redis.XMessage) 
 			reqBody = "" 
 		}
 
+		// [Fix] Prevent binary data (TTS/Audio/Image) from breaking MySQL Insert
+		isBinaryModel := strings.Contains(meta.ModelName, "tts") || 
+			strings.Contains(meta.ModelName, "whisper") || 
+			strings.Contains(meta.ModelName, "dall-e") ||
+			strings.Contains(meta.ModelName, "sora") ||
+			strings.Contains(meta.ModelName, "video")
+
 		if saveBody || meta.Status != 200 {
-			resBody = limitString(resBodyRaw, 2000)
+			if isBinaryModel && meta.Status == 200 {
+				resBody = fmt.Sprintf("[Binary Data] %d bytes", len(resBodyRaw))
+			} else {
+				resBody = limitString(resBodyRaw, 2000)
+			}
 		} else {
 			resBody = ""
 		}
@@ -407,7 +419,9 @@ func (lc *LogConsumer) calculateCost(ctx context.Context, channelID int, model s
 	const PriceUnitDivisor = 1000000.0 
 
 	if cfg.Mode == "request" {
-		cost = cfg.Price
+		count := float64(u.Images)
+		if count <= 0 { count = 1.0 }
+		cost = count * cfg.Price
 	} else if cfg.Mode == "time" {
 		// [Fixed] Support both Audio and Video duration
 		cost = (u.AudioSeconds + u.VideoSeconds) * cfg.Price

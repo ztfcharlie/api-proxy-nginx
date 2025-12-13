@@ -183,13 +183,21 @@ func (s *OpenAIProvider) estimateTokens(model string, reqBody, resBody []byte, i
 		}
 		u.PromptTokens = CountMessageTokens(msgs, model)
 	} else if input, ok := req["input"].(string); ok {
-		// TTS / Embedding (String)
-		u.PromptTokens = CountTextToken(input, model)
+		// TTS (Characters) / Embedding (Tokens)
+		if strings.Contains(model, "tts") {
+			u.PromptTokens = len([]rune(input))
+		} else {
+			u.PromptTokens = CountTextToken(input, model)
+		}
 	} else if inputArr, ok := req["input"].([]interface{}); ok {
 		// Embedding (Array of strings)
 		for _, item := range inputArr {
 			if s, ok := item.(string); ok {
-				u.PromptTokens += CountTextToken(s, model)
+				if strings.Contains(model, "tts") {
+					u.PromptTokens += len([]rune(s))
+				} else {
+					u.PromptTokens += CountTextToken(s, model)
+				}
 			}
 		}
 	} else if prompt, ok := req["prompt"].(string); ok {
