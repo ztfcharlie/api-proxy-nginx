@@ -266,7 +266,16 @@ function _M.extract_model_name(uri)
 
     -- 辅助函数：正则匹配
     local function find_model(text)
-        return text:match('"model"%s*:%s*"([^"]+)"')
+        -- 1. JSON Format
+        local m = text:match('"model"%s*:%s*"([^"]+)"')
+        if m then return m end
+        
+        -- 2. Multipart Format
+        -- Content-Disposition: form-data; name="model"\r\n\r\nwhisper-1\r\n
+        m = text:match('name="model".-\r\n\r\n([^\r\n]+)')
+        if m then return m end
+        
+        return nil
     end
 
     if body_data then

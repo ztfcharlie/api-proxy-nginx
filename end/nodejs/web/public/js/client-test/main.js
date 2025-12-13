@@ -238,6 +238,13 @@ const ClientTest = () => {
 
                     <div className="flex-1 flex flex-col">
                         <label className="block text-sm font-bold text-gray-700 mb-2">JSON Payload</label>
+                        {(apiPath.includes('/audio/') || apiPath.includes('/images/edits') || apiPath.includes('/video/')) && (
+                            <div className="bg-blue-50 text-blue-700 text-xs p-2 rounded mb-2 border border-blue-100">
+                                <i className="fas fa-info-circle mr-1"></i>
+                                <strong>Multipart Mode:</strong> This JSON will be converted to <code>multipart/form-data</code>. 
+                                Use <code>"__MOCK_AUDIO__"</code> for file fields.
+                            </div>
+                        )}
                         <textarea 
                             className="w-full h-64 p-3 border border-gray-300 rounded-md font-mono text-xs bg-gray-50 focus:bg-white resize-none"
                             value={payload}
