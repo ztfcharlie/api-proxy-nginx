@@ -5,6 +5,7 @@ const { useState, useEffect } = React;
 // ==========================================
 const App = () => {
     const [user, setUser] = useState(null);
+    const [initializing, setInitializing] = useState(true); // [Added] Init state
     const [activeView, setActiveView] = useState('dashboard');
     const [notify, setNotify] = useState({ msg: '', type: '' });
 
@@ -19,19 +20,17 @@ const App = () => {
                 localStorage.removeItem('token');
             }
         }
+        setInitializing(false); // [Added] Init done
         
-        // [Added] Hash Routing Initialization
+        // Hash Routing Initialization
         const handleHashChange = () => {
-            const hash = window.location.hash.slice(1); // remove #
+            const hash = window.location.hash.slice(1);
             if (hash) {
                 setActiveView(hash);
             }
         };
         
-        // Check initial hash
         handleHashChange();
-        
-        // Listen for changes
         window.addEventListener('hashchange', handleHashChange);
         return () => window.removeEventListener('hashchange', handleHashChange);
     }, []);
@@ -70,6 +69,14 @@ const App = () => {
         localStorage.removeItem('user');
         setUser(null);
     };
+
+    if (initializing) {
+        return (
+            <div className="flex h-screen items-center justify-center bg-gray-100">
+                <i className="fas fa-circle-notch fa-spin text-4xl text-blue-500"></i>
+            </div>
+        );
+    }
 
     if (!user) {
         return <window.LoginView onLogin={setUser} />;
