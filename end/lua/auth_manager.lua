@@ -131,11 +131,35 @@ local function weighted_shuffle(routes)
     return result
 end
 
+-- 获取渠道支持的模型列表 (带缓存)
+local function get_channel_models(red, channel_id)
+    local cache = ngx.shared.token_cache
+    local key = "ch_models:" .. channel_id
+    local cached = cache:get(key)
+    if cached then
+        return cjson.decode(cached)
+    end
+
+    local redis_key = KEY_PREFIX .. "channel:" .. channel_id
+    local data_str, err = red:get(redis_key)
+    if not data_str or data_str == ngx.null then
+        return nil
+    end
+
+    local ok, data = pcall(cjson.decode, data_str)
+    if not ok or not data.models_config then
+        return nil
+    end
+    
+    local models = data.models_config
+    cache:set(key, cjson.encode(models), 60) -- Cache for 60s
+    return models
+end
+
 -- 核心认证逻辑
 function _M.authenticate_client()
     -- [Security] API 白名单检查
-    -- 仅针对 /v1/ 路径进行检查，拦截无法计费的接口 (如 Batch, Assistants, Files)
-    -- 如果 OPENAI_FULL_PROXY=true，则跳过此检查 (全权代理模式)
+    -- ... (existing whitelist check) ...
     local full_proxy = os.getenv("OPENAI_FULL_PROXY") == "true"
     local uri = ngx.var.uri
     
@@ -159,11 +183,30 @@ function _M.authenticate_client()
         return nil
     end
     
-    utils.publish_debug_log("info", "Processing request with token: " .. string.sub(client_token, 1, 10) .. "...")
+    -- [Security] Extract Requested Model
+    local requested_model = utils.extract_model_name(uri)
+    if not requested_model then requested_model = "default" end
+    
+    -- Expose model name for logging
+    ngx.var.model_name = requested_model
+
+    utils.publish_debug_log("info", "Processing request: " .. uri .. " Model: " .. requested_model)
 
     -- L1 Cache
+    -- ... (existing L1 cache logic) ...
+    -- Note: If we use L1 cache, we skip model validation here because it was validated when cached?
+    -- Yes, cached_data.metadata implies a selected route.
+    -- But if the user changes the model in the request body but uses the same token?
+    -- The L1 cache key is "auth:" + token. It doesn't include model!
+    -- BUG ALERT: L1 Cache must include model name if routing depends on model.
+    -- OR, we must validate model even on L1 cache hit.
+    -- But L1 cache returns a *single* selected route (real_token).
+    -- If I request gpt-4, get cached route A. Then request dall-e-3, get cached route A. Route A might not support dall-e-3!
+    -- FIX: We should DISABLE L1 Cache for now, or include model in cache key.
+    -- Let's append model to cache key.
+    
     local token_cache = ngx.shared.token_cache
-    local l1_cache_key = "auth:" .. client_token
+    local l1_cache_key = "auth:" .. client_token .. ":" .. requested_model -- [Fixed]
     local cached_val = token_cache:get(l1_cache_key)
     
     if cached_val then
@@ -181,6 +224,7 @@ function _M.authenticate_client()
     end
 
     -- 1. 查 Token (获取路由列表)
+    -- ... (existing token lookup) ...
     local metadata = {}
     local routes = {}
     
@@ -221,6 +265,7 @@ function _M.authenticate_client()
     local target_real_token = nil
 
     -- [Sticky Route Check]
+    -- ... (existing sticky logic) ...
     local task_id = nil
     for _, p in ipairs(QUERY_PATTERNS) do
         local m = ngx.var.uri:match(p.pattern)
@@ -253,6 +298,9 @@ function _M.authenticate_client()
             local ch_id = tonumber(channel_id_str)
             for _, r in ipairs(routes) do
                 if tonumber(r.channel_id) == ch_id then
+                    -- Sticky route doesn't strictly check model support because it's a fetch
+                    -- But strictly speaking, we should? No, fetch requests might not carry model.
+                    -- So we skip model check for Sticky Routes.
                     target_channel = r
                     -- 需要在这里获取 real_token
                     local rt = nil
@@ -264,9 +312,7 @@ function _M.authenticate_client()
                         target_real_token = rt
                         utils.publish_debug_log("info", "Sticky Route Hit: Channel " .. channel_id_str)
                     else
-                        -- 如果没拿到，可能需要让 Log Processor 去刷新，或者这里降级失败
-                        -- 简单起见，我们暂且认为 Token 是存在的
-                        target_channel = nil -- Failed to get token
+                        target_channel = nil 
                     end
                     break
                 end
@@ -276,7 +322,28 @@ function _M.authenticate_client()
 
     -- [Smart Route Check] (如果 Sticky 没命中)
     if not target_channel then
-        local candidates = weighted_shuffle(routes)
+        -- [Security] Filter routes by Model Support
+        local candidates = {}
+        for _, r in ipairs(routes) do
+            local models = get_channel_models(red, r.channel_id)
+            if models then
+                -- Check if model is supported OR if "default" is configured (wildcard)
+                if models[requested_model] or models["default"] then
+                    table.insert(candidates, r)
+                end
+            elseif r.type == "mock" then
+                 -- Always allow mock channels
+                 table.insert(candidates, r)
+            end
+        end
+        
+        if #candidates == 0 then
+             utils.error_response(400, "Model '" .. requested_model .. "' not supported by any available channel")
+             return nil
+        end
+
+        -- Weighted Shuffle on FILTERED candidates
+        candidates = weighted_shuffle(candidates)
         
         for _, route in ipairs(candidates) do
             -- 检查 RPM
@@ -295,10 +362,6 @@ function _M.authenticate_client()
                     rt, _ = red:get(rt_key)
                 else
                     -- API Key 类型 (OpenAI/Claude等)
-                    -- 这里的 route 结构体里应该包含 key 吗？
-                    -- 通常 routes 只包含 ID。我们需要去 sys_channels 拿 Key。
-                    -- 但为了性能，Key 应该缓存在 Redis。
-                    -- 假设 Redis 结构: oauth2:channel:{id} -> JSON (包含 key/credentials)
                     local ch_key = "oauth2:channel:" .. route.channel_id
                     local ch_data_str, _ = red:get(ch_key)
                     if ch_data_str and ch_data_str ~= ngx.null then
@@ -306,7 +369,6 @@ function _M.authenticate_client()
                         if ch_data.key then
                             rt = ch_data.key
                         elseif ch_data.credentials then
-                             -- Handle JSON credentials if needed
                              rt = ch_data.credentials -- string or obj
                         end
                     end
