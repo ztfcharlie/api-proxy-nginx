@@ -44,14 +44,23 @@ class SyncManager {
         logger.info('Syncing Model Prices...');
         try {
             // Updated to match new schema v3.2
-            const [models] = await db.query("SELECT id, provider, name, price_input, price_output, price_request FROM sys_models WHERE status = 1");
+            const [models] = await db.query("SELECT id, provider, name, price_input, price_output, price_request, price_time FROM sys_models WHERE status = 1");
             
             const priceMap = {};
             for (const m of models) {
                 // Determine billing mode based on prices
                 let mode = 'token';
-                if (parseFloat(m.price_request || 0) > 0) {
+                let price = 0;
+                
+                const pRequest = parseFloat(m.price_request || 0);
+                const pTime = parseFloat(m.price_time || 0);
+
+                if (pRequest > 0) {
                     mode = 'request';
+                    price = pRequest;
+                } else if (pTime > 0) {
+                    mode = 'time';
+                    price = pTime;
                 }
 
                 // Key is model name (e.g. "gpt-4") to match log consumer lookup
@@ -59,7 +68,7 @@ class SyncManager {
                     mode: mode,
                     input: parseFloat(m.price_input || 0),
                     output: parseFloat(m.price_output || 0),
-                    price: parseFloat(m.price_request || 0)
+                    price: price
                 };
             }
             
