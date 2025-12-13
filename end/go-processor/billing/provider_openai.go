@@ -64,27 +64,11 @@ func (s *OpenAIProvider) Calculate(model string, reqBody, resBody []byte, conten
 		return u, nil
 	}
 
-	// 2. Images (DALL-E) or Video (Sora) or Remix
-	// Trigger if model name matches OR path indicates image/video operation
-	isGen := strings.Contains(model, "dall-e") || strings.Contains(model, "sora") ||
-		strings.Contains(s.basePath(contentType), "/images/") || 
-		strings.Contains(s.basePath(contentType), "/video") // catch /videos and /video/
-
-	// Helper to handle path check if model is missing (e.g. multipart)
-	// We don't have 'path' argument here? Wait, Calculate signature IS (model, req, res, type, status).
-	// Oh, checking the code, I don't have 'path' in Calculate arguments in this file context?
-	// Let's check the function signature in the file content.
-	// No, the signature is: func (s *OpenAIProvider) Calculate(model string, reqBody, resBody []byte, contentType string, statusCode int)
-	// It DOES NOT have 'path'. 'path' is in 'CanHandle'.
-	// This is a problem for "Edits" if model is not passed.
-	
-	// FIX: We must rely on 'model' being passed correctly by Nginx/LogConsumer.
-	// If Nginx fails to extract model from multipart, it passes "default" or similar?
-	// Let's assume 'model' might be missing. 
-	// But we can check 'resBody'. If response contains "created", "data", it's likely a generation.
-	// Or we can rely on 'model' containing 'dall-e' (which user MUST send in form data).
-	
-	if strings.Contains(model, "dall-e") || strings.Contains(model, "sora") {
+	// 2. Images (DALL-E) or Video (Sora) or Remix (Edits/Variations)
+	// If model is missing in multipart (e.g. edits), we assume it's an image/video operation if it's not whisper.
+	if strings.Contains(model, "dall-e") || strings.Contains(model, "sora") || 
+       (strings.Contains(contentType, "multipart/form-data") && !strings.Contains(model, "whisper")) {
+		
 		type genReq struct {
 			N        int `json:"n"`
 			Duration int `json:"duration"`
