@@ -47,6 +47,7 @@
                 '/v1/audio/speech',
                 '/v1/audio/transcriptions',
                 '/v1/audio/translations',
+                '/v1/audio/remix', // Added Remix
                 '/v1/video/generations',
                 '/v1/moderations'
             ],
@@ -90,7 +91,7 @@
                     "input": "The quick brown fox jumped over the lazy dog.",
                     "voice": "alloy"
                 },
-                '/v1/audio/translations': {
+                '/v1/audio/transcriptions': {
                     "file": "__MOCK_AUDIO__",
                     "model": "whisper-1"
                 },
@@ -102,7 +103,7 @@
                 },
                 '/v1/video/generations': {
                     "model": "sora-2",
-                    "prompt": "A cyberpunk city with neon lights...",
+                    "prompt": "A stylish woman walks down a Tokyo street...",
                     "size": "1280x720",
                     "quality": "standard"
                 },
@@ -166,7 +167,7 @@
 
             const handleVendorChange = (newVendor) => {
                 setVendor(newVendor);
-                const defaultPath = (PATH_SUGGESTIONS[newVendor] && PATH_SUGGESTIONS[newVendor][0]) || '';
+                const defaultPath = PATH_SUGGESTIONS[newVendor]?.[0] || '';
                 setApiPath(defaultPath);
                 setPayload(getPayload(newVendor, defaultPath));
             };
@@ -201,19 +202,6 @@
                 if (parsedPayload.audio_file === "__MOCK_AUDIO__") {
                     parsedPayload.audio_file = "data:audio/mp3;base64," + BASE64_MP3;
                 }
-
-                // Handle Form Data Flag
-                // We don't convert to FormData object here because axios serializes it to multipart
-                // BUT we are sending to Node.js proxy first.
-                // If we send FormData to Node, Node receives multipart.
-                // Node then needs to parse multipart and re-send. That's complex.
-                // BETTER: We keep sending JSON to Node, but with a flag. 
-                // Node detects flag -> converts to FormData -> sends to Nginx.
-                // So here we just keep it as JSON (with base64 file).
-                
-                // Let's rely on the existence of data:audio string for Node to detect.
-                // Or pass the __FORM_DATA__ flag to Node?
-                // Yes, pass it.
 
                 axios.post('/api/client-test/send', {
                     vendor,
