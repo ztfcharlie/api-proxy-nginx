@@ -214,6 +214,10 @@ func (sm *SyncManager) syncModels(ctx context.Context) error {
 			mode = "time"
 			price = pTime.Float64
 		}
+		
+		if price > 0 {
+			log.Printf("[SyncModel DEBUG] Model: %s, Mode: %s, ReqPrice: %f, TimePrice: %f, Final: %f", name, mode, pRequest.Float64, pTime.Float64, price)
+		}
 
 		priceMap[name] = map[string]interface{}{
 			"mode":   mode,
