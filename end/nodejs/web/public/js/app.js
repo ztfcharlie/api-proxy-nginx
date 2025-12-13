@@ -19,6 +19,21 @@ const App = () => {
                 localStorage.removeItem('token');
             }
         }
+        
+        // [Added] Hash Routing Initialization
+        const handleHashChange = () => {
+            const hash = window.location.hash.slice(1); // remove #
+            if (hash) {
+                setActiveView(hash);
+            }
+        };
+        
+        // Check initial hash
+        handleHashChange();
+        
+        // Listen for changes
+        window.addEventListener('hashchange', handleHashChange);
+        return () => window.removeEventListener('hashchange', handleHashChange);
     }, []);
 
     // Menu Definition
@@ -88,18 +103,18 @@ const App = () => {
     return (
         <div className="flex h-screen w-full bg-gray-100">
             <aside className="w-64 bg-gray-900 text-gray-300 flex flex-col shadow-xl z-20 transition-all duration-300 flex-shrink-0">
-                <div className="h-16 flex items-center px-6 bg-gray-800 border-b border-gray-700 shadow-md">
+                <a href="/" target="_blank" className="h-16 flex items-center px-6 bg-gray-800 border-b border-gray-700 shadow-md hover:bg-gray-750 transition-colors no-underline">
                     <i className="fas fa-project-diagram text-blue-500 text-xl mr-3"></i>
                     <span className="text-white font-bold text-lg tracking-wide">AI Gateway</span>
-                </div>
+                </a>
                 <nav className="flex-1 py-6 space-y-1 px-3 overflow-y-auto custom-scrollbar">
                     {menuItems.map(item => (
-                        <button key={item.id}
-                            onClick={() => setActiveView(item.id)}
-                            className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-all duration-200 nav-item ${activeView === item.id ? 'active text-white bg-gray-800 shadow-lg translate-x-1' : 'hover:bg-gray-800 hover:text-white hover:translate-x-1'}`}>
+                        <a key={item.id}
+                            href={`#${item.id}`}
+                            className={`w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg transition-all duration-200 nav-item no-underline ${activeView === item.id ? 'active text-white bg-gray-800 shadow-lg translate-x-1' : 'hover:bg-gray-800 hover:text-white hover:translate-x-1'}`}>
                             <i className={`${item.icon} w-6 text-center mr-3 ${activeView === item.id ? 'text-blue-400' : 'text-gray-500'} transition-colors`}></i>
                             {item.label}
-                        </button>
+                        </a>
                     ))}
                 </nav>
                 <div className="p-4 border-t border-gray-800">
