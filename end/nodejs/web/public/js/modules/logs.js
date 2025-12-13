@@ -41,8 +41,13 @@ window.LogViewer = ({ setNotify }) => {
         setDetailLoading(true);
         try {
             const res = await axios.get(`/api/admin/logs/${log.id}`);
-            setSelectedLog(res.data.data);
+            // [Fix] Backend returns the object directly, not wrapped in {data: ...}
+            // So use res.data, not res.data.data
+            if (res.data) {
+                setSelectedLog(res.data);
+            }
         } catch (e) {
+            console.error("View detail failed:", e);
             setNotify({ msg: 'Failed to load detail', type: 'error' });
         } finally {
             setDetailLoading(false);
