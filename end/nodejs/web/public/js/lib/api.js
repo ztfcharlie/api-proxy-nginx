@@ -57,7 +57,10 @@ axios.interceptors.response.use(response => response, error => {
            (error.response.status === 403 && error.response.data?.error?.includes('Invalid token'))) {
             localStorage.removeItem('token');
             localStorage.removeItem('user');
-            window.location.href = '/ops-console/console.html'; // Force redirect to login
+            // Preserve current location hash for redirect after login
+            const currentHash = window.location.hash;
+            const redirectParam = currentHash ? `?redirect=${encodeURIComponent(currentHash)}` : '';
+            window.location.href = `/ops-console/console.html${redirectParam}`;
         }
     }
     return Promise.reject(error);

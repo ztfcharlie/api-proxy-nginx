@@ -33,6 +33,16 @@ window.LoginView = ({ onLogin }) => {
             localStorage.setItem('token', res.data.token);
             localStorage.setItem('user', JSON.stringify(res.data.user));
             onLogin(res.data.user);
+            
+            // Check for redirect param
+            const params = new URLSearchParams(window.location.search);
+            const redirectHash = params.get('redirect');
+            if (redirectHash) {
+                // Clear query params to clean up URL
+                window.history.replaceState({}, document.title, window.location.pathname);
+                // Navigate
+                window.location.hash = redirectHash;
+            }
         } catch (err) {
             setError(err.response?.data?.error || 'Login failed');
             // Refresh captcha on failure to prevent replay attacks and ensure fresh challenge
