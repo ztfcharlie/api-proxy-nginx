@@ -48,27 +48,13 @@ class SyncManager {
             
             const priceMap = {};
             for (const m of models) {
-                // Determine billing mode based on prices
-                let mode = 'token';
-                let price = 0;
-                
-                const pRequest = parseFloat(m.price_request || 0);
-                const pTime = parseFloat(m.price_time || 0);
-
-                if (pRequest > 0) {
-                    mode = 'request';
-                    price = pRequest;
-                } else if (pTime > 0) {
-                    mode = 'time';
-                    price = pTime;
-                }
-
-                // Key is model name (e.g. "gpt-4") to match log consumer lookup
+                // [Refactor] Store ALL price dimensions to support multi-mode channels
+                // Key is model name (e.g. "gpt-4")
                 priceMap[m.name] = {
-                    mode: mode,
                     input: parseFloat(m.price_input || 0),
                     output: parseFloat(m.price_output || 0),
-                    price: price
+                    request: parseFloat(m.price_request || 0),
+                    time: parseFloat(m.price_time || 0)
                 };
             }
             

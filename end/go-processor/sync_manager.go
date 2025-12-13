@@ -203,27 +203,12 @@ func (sm *SyncManager) syncModels(ctx context.Context) error {
 			continue
 		}
 
-		// 逻辑与 Node.js 保持一致
-		mode := "token"
-		var price float64 = 0
-
-		if pRequest.Valid && pRequest.Float64 > 0 {
-			mode = "request"
-			price = pRequest.Float64
-		} else if pTime.Valid && pTime.Float64 > 0 {
-			mode = "time"
-			price = pTime.Float64
-		}
-		
-		if price > 0 {
-			log.Printf("[SyncModel DEBUG] Model: %s, Mode: %s, ReqPrice: %f, TimePrice: %f, Final: %f", name, mode, pRequest.Float64, pTime.Float64, price)
-		}
-
+		// [Refactor] Store ALL price dimensions to support multi-mode channels
 		priceMap[name] = map[string]interface{}{
-			"mode":   mode,
-			"input":  pInput.Float64,  // Default 0 if null
-			"output": pOutput.Float64, // Default 0 if null
-			"price":  price,
+			"input":   pInput.Float64,
+			"output":  pOutput.Float64,
+			"request": pRequest.Float64,
+			"time":    pTime.Float64,
 		}
 	}
 
