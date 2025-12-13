@@ -150,6 +150,21 @@ const handleOpenAIRequest = async (req, res) => {
         });
     }
 
+    // 1.7 Responses (New API)
+    if (path.includes('/responses')) {
+        return res.json({
+            id: "resp_" + uuidv4(),
+            object: "response",
+            created: Math.floor(Date.now() / 1000),
+            model: model,
+            output: "[MOCK Responses API] This is a simulated response for the new endpoint.",
+            usage: {
+                input_tokens: 5,
+                output_tokens: 10
+            }
+        });
+    }
+
     // Default: Chat Completions
     const messages = req.body.messages || [];
     const lastUserMsg = messages.reverse().find(m => m.role === 'user')?.content || "";
@@ -169,6 +184,7 @@ router.post('/video/*', handleOpenAIRequest);
 router.post('/videos*', handleOpenAIRequest);
 router.post('/embeddings', handleOpenAIRequest);
 router.post('/moderations', handleOpenAIRequest);
+router.post('/responses', handleOpenAIRequest); // [Added]
 
 // --- 2. Anthropic Mock ---
 // Path: /mock/anthropic/v1/messages

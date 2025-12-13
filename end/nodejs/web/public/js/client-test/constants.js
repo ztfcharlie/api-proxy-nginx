@@ -16,6 +16,7 @@
         'openai': [
             '/v1/chat/completions',
             '/v1/completions',
+            '/v1/responses', // [Added]
             '/v1/embeddings',
             '/v1/images/generations',
             '/v1/audio/speech',
@@ -53,10 +54,15 @@
             '/v1/completions': {
                 "model": "gpt-3.5-turbo-instruct",
                 "prompt": "Once upon a time",
-                "max_tokens": 50
-            },
-            '/v1/embeddings': {
-                "model": "text-embedding-3-small",
+                            "max_tokens": 50
+                        },
+                        '/v1/responses': {
+                            "model": "gpt-4o",
+                            "input": [
+                                { "role": "user", "content": "Hello, this is a test for the new responses endpoint." }
+                            ]
+                        },
+                        '/v1/embeddings': {                "model": "text-embedding-3-small",
                 "input": "The food was delicious and the waiter..."
             },
             '/v1/images/generations': {
