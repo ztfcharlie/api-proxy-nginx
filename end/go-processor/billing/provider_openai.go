@@ -70,22 +70,40 @@ func (s *OpenAIProvider) Calculate(model string, reqBody, resBody []byte, conten
        (strings.Contains(contentType, "multipart/form-data") && !strings.Contains(model, "whisper")) {
 		
 		type genReq struct {
-			N        int `json:"n"`
-			Duration int `json:"duration"`
+			N        int    `json:"n"`
+			Duration int    `json:"duration"`
+			Quality  string `json:"quality"`
+			Size     string `json:"size"`
 		}
 		var req genReq
 		// If JSON
 		if json.Unmarshal(reqBody, &req) == nil {
-			u.Images = req.N
-			if u.Images == 0 { u.Images = 1 }
+			count := req.N
+			if count == 0 { count = 1 }
+			
+			// DALL-E 3 Dynamic Pricing Multiplier
+			// Base ($0.04) = 1 image unit
+			// Standard Large ($0.08) = 2 units
+			// HD 1024 ($0.08) = 2 units
+			// HD Large ($0.12) = 3 units
+			multiplier := 1
+			if strings.Contains(model, "dall-e-3") {
+				isHD := req.Quality == "hd"
+				isLarge := req.Size == "1024x1792" || req.Size == "1792x1024"
+				
+				if isHD { multiplier += 1 }
+				if isLarge { multiplier += 1 }
+			}
+			
+			u.Images = count * multiplier
+
 			if req.Duration > 0 {
 				u.VideoSeconds = float64(req.Duration)
 			} else if strings.Contains(model, "sora") {
 				u.VideoSeconds = 8.0 
 			}
 		} else {
-			// Multipart (Edits/Variations) or Parse Fail
-			// Default to 1 generation
+			// Multipart or Parse Fail
 			u.Images = 1
 			if strings.Contains(model, "sora") {
 				u.VideoSeconds = 8.0
