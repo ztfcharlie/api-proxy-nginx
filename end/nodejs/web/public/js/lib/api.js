@@ -51,9 +51,14 @@ axios.interceptors.request.use(config => {
 });
 
 axios.interceptors.response.use(response => response, error => {
-    if (error.response && error.response.status === 401) {
-        localStorage.removeItem('token');
-        window.location.reload();
+    if (error.response) {
+        // Handle Unauthorized (401) or Forbidden (403) with Invalid Token
+        if (error.response.status === 401 || 
+           (error.response.status === 403 && error.response.data?.error?.includes('Invalid token'))) {
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            window.location.href = '/ops-console/console.html'; // Force redirect to login
+        }
     }
     return Promise.reject(error);
 });
