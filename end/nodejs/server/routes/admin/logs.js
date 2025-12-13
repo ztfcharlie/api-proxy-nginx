@@ -357,4 +357,40 @@ router.delete('/files', async (req, res) => {
     }
 });
 
+/**
+ * 获取单个日志详情
+ */
+router.get('/:id', async (req, res) => {
+    try {
+        if (!req.user) return res.status(401).json({ error: "Unauthorized" });
+        const { id } = req.params;
+
+        let query = `
+            SELECT l.*, u.username, t.name as token_name
+            FROM sys_request_logs l
+            LEFT JOIN sys_users u ON l.user_id = u.id
+            LEFT JOIN sys_virtual_tokens t ON l.token_key = t.token_key
+            WHERE l.id = ?
+        `;
+        let params = [id];
+
+        // 权限控制
+        if (req.user.role !== 'admin') {
+            query += " AND l.user_id = ?";
+            params.push(req.user.id);
+        }
+
+        const [rows] = await db.query(query, params);
+
+        if (rows.length === 0) {
+            return res.status(404).json({ error: "Log not found" });
+        }
+
+        res.json(rows[0]);
+    } catch (err) {
+        logger.error(`Get log detail failed for id ${req.params.id}:`, err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 module.exports = router;
