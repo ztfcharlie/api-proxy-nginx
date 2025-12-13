@@ -46,16 +46,28 @@ func (s *OpenAIProvider) Calculate(model string, reqBody, resBody []byte, conten
 		return u, nil
 	}
 	
-	// [Safe] Skip billing for empty requests (e.g. GET content, or ping)
+	// [Debug] Detailed logging
+	log.Printf("[Billing DEBUG] Calculate model=%s, CT=%s, BodyLen=%d", model, contentType, len(reqBody))
+	if len(reqBody) > 0 {
+		preview := string(reqBody)
+		if len(preview) > 100 { preview = preview[:100] }
+		log.Printf("[Billing DEBUG] Body Preview: %s", preview)
+	}
+	
 	if len(reqBody) == 0 {
 		return u, nil
 	}
 
 	// 1. Audio Input (Whisper) - Explicit check for audio path to avoid conflict with Image edits
 	if strings.Contains(contentType, "multipart/form-data") && strings.Contains(model, "whisper") {
+		log.Printf("[Billing DEBUG] Entering Audio Logic for %s", model)
 		fileData, filename, err := ParseFirstFile(reqBody, contentType)
+		log.Printf("[Billing DEBUG] ParseFirstFile: len=%d, name=%s, err=%v", len(fileData), filename, err)
+		
 		if err == nil {
 			duration, err := GetAudioDuration(fileData, filename)
+			log.Printf("[Billing DEBUG] GetAudioDuration: %.2f, err=%v", duration, err)
+			
 			if err == nil {
 				log.Printf("[Billing] Audio duration: %.2fs (file: %s)", duration, filename)
 				u.AudioSeconds = duration
