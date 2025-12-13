@@ -12,6 +12,11 @@ window.UserManager = ({ setNotify }) => {
             const res = await window.api.users.list();
             setUsers(res.data.data || []);
         } catch (e) {
+            console.error("Load users failed:", e);
+            if (e.response) {
+                console.error("Status:", e.response.status);
+                console.error("Headers:", e.response.headers);
+            }
             setNotify({ msg: 'Failed to load users', type: 'error' });
         } finally {
             setLoading(false);
