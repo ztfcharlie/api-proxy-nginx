@@ -24,3 +24,20 @@ type Strategy interface {
 	// statusCode: HTTP 状态码 (失败不扣费)
 	Calculate(model string, reqBody, resBody []byte, contentType string, statusCode int) (Usage, error)
 }
+
+// Shared Response Struct for OpenAI-compatible APIs
+type openAIResponse struct {
+	Choices []struct {
+		Message struct {
+			Content string `json:"content"`
+		} `json:"message"`
+	} `json:"choices"`
+	Usage struct {
+		PromptTokens        int `json:"prompt_tokens"`
+		CompletionTokens    int `json:"completion_tokens"`
+		TotalTokens         int `json:"total_tokens"`
+		// DeepSeek specific fields
+		CacheHitTokens      int `json:"prompt_cache_hit_tokens"`
+		CacheMissTokens     int `json:"prompt_cache_miss_tokens"`
+	} `json:"usage"`
+}
