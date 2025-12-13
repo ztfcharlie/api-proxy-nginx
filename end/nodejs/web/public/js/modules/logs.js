@@ -37,12 +37,9 @@ window.LogViewer = ({ setNotify }) => {
     const handleKeyDown = (e) => { if(e.key === 'Enter') load(1); };
 
     const viewDetail = async (log) => {
-        setSelectedLog(log); // Show modal immediately with summary
-        setDetailLoading(true);
         try {
+            document.body.style.cursor = 'wait';
             const res = await axios.get(`/api/admin/logs/${log.id}`);
-            // [Fix] Backend returns the object directly, not wrapped in {data: ...}
-            // So use res.data, not res.data.data
             if (res.data) {
                 setSelectedLog(res.data);
             }
@@ -50,7 +47,7 @@ window.LogViewer = ({ setNotify }) => {
             console.error("View detail failed:", e);
             setNotify({ msg: 'Failed to load detail', type: 'error' });
         } finally {
-            setDetailLoading(false);
+            document.body.style.cursor = 'default';
         }
     };
 
