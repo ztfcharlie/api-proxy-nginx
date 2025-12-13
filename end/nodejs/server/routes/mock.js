@@ -32,15 +32,15 @@ const generateResponse = (model, content) => {
     };
 };
 
-// --- 1. OpenAI / DeepSeek / Qwen / Azure Mock ---
-// Path: /mock/openai/v1/chat/completions
-router.post('/openai/*', async (req, res) => {
+// --- Shared OpenAI Handler ---
+const handleOpenAIRequest = async (req, res) => {
     await sleep(MOCK_DELAY);
     const path = req.path;
     const model = req.body.model || "mock-gpt-4";
 
     // 1.1 Images
-    if (path.includes('/images/generations')) {
+    if (path.includes('/images/') || path.includes('/images')) {
+        // Handle edits/variations too (multipart might be parsed as empty body if no multer, but let's return mock)
         return res.json({
             created: Math.floor(Date.now() / 1000),
             data: [
@@ -93,7 +93,8 @@ router.post('/openai/*', async (req, res) => {
     }
 
     // 1.4 Legacy Completions
-    if (path.includes('/completions') && !path.includes('/chat/')) {
+    // Note: /chat/completions also contains 'completions', so check for 'chat' exclusion
+    if (path.includes('/completions') && !path.includes('/chat')) {
         return res.json({
             id: "cmpl-" + uuidv4(),
             object: "text_completion",
@@ -116,7 +117,7 @@ router.post('/openai/*', async (req, res) => {
     }
 
     // 1.5 Video Generations (Sora)
-    if (path.includes('/video/generations') || path.includes('/videos')) {
+    if (path.includes('/video/') || path.includes('/videos')) {
         return res.json({
             id: "vid_" + uuidv4(),
             object: "video.generation",
@@ -129,6 +130,25 @@ router.post('/openai/*', async (req, res) => {
             }
         });
     }
+    
+    // 1.6 Moderations
+    if (path.includes('/moderations')) {
+        return res.json({
+            id: "modr-" + uuidv4(),
+            model: "text-moderation-007",
+            results: [
+                {
+                    flagged: true,
+                    categories: {
+                        "violence": true,
+                    },
+                    category_scores: {
+                        "violence": 0.99
+                    }
+                }
+            ]
+        });
+    }
 
     // Default: Chat Completions
     const messages = req.body.messages || [];
@@ -137,19 +157,18 @@ router.post('/openai/*', async (req, res) => {
     const response = generateResponse(model, `[MOCK OpenAI] You said: "${lastUserMsg}". This is a simulated response.`);
     
     res.json(response);
-});
+};
 
-// --- 1.1 Support direct /chat/completions (for Nginx /v1 forwarding) ---
-router.post('/chat/completions', async (req, res) => {
-    await sleep(MOCK_DELAY);
-    const model = req.body.model || "mock-gpt-4";
-    const messages = req.body.messages || [];
-    const lastUserMsg = messages.reverse().find(m => m.role === 'user')?.content || "";
-    
-    const response = generateResponse(model, `[MOCK Direct] You said: "${lastUserMsg}". This is a simulated response from /v1/chat/completions.`);
-    
-    res.json(response);
-});
+// --- Route Registration ---
+router.post('/openai/*', handleOpenAIRequest);
+router.post('/chat/*', handleOpenAIRequest);
+router.post('/completions', handleOpenAIRequest);
+router.post('/images/*', handleOpenAIRequest);
+router.post('/audio/*', handleOpenAIRequest);
+router.post('/video/*', handleOpenAIRequest);
+router.post('/videos*', handleOpenAIRequest);
+router.post('/embeddings', handleOpenAIRequest);
+router.post('/moderations', handleOpenAIRequest);
 
 // --- 2. Anthropic Mock ---
 // Path: /mock/anthropic/v1/messages
