@@ -18,6 +18,7 @@ local QUERY_PATTERNS = {
 local OPENAI_WHITELIST = {
     "^/v1/chat/completions",
     "^/v1/completions",
+    "^/v1/responses",
     "^/v1/embeddings",
     "^/v1/images/",
     "^/v1/audio/speech",
