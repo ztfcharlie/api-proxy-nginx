@@ -14,6 +14,19 @@ local QUERY_PATTERNS = {
     { pattern = "/v1/video/status/([^/]+)$",    type = "luma" }
 }
 
+-- [Added] OpenAI 兼容接口白名单 (用于过滤无法计费的接口如 Batch/Assistants)
+local OPENAI_WHITELIST = {
+    "^/v1/chat/completions",
+    "^/v1/completions",
+    "^/v1/embeddings",
+    "^/v1/images/generations",
+    "^/v1/audio/speech",
+    "^/v1/audio/transcriptions",
+    "^/v1/audio/translations",
+    "^/v1/video/generations",
+    "^/v1/models"
+}
+
 -- 初始化 Redis 连接
 local function get_redis_connection()
     local red = redis:new()
@@ -118,6 +131,26 @@ end
 
 -- 核心认证逻辑
 function _M.authenticate_client()
+    -- [Security] API 白名单检查
+    -- 仅针对 /v1/ 路径进行检查，拦截无法计费的接口 (如 Batch, Assistants, Files)
+    -- 如果 OPENAI_FULL_PROXY=true，则跳过此检查 (全权代理模式)
+    local full_proxy = os.getenv("OPENAI_FULL_PROXY") == "true"
+    local uri = ngx.var.uri
+    
+    if not full_proxy and string.sub(uri, 1, 4) == "/v1/" then
+        local allowed = false
+        for _, pattern in ipairs(OPENAI_WHITELIST) do
+            if ngx.re.find(uri, pattern, "jo") then
+                allowed = true
+                break
+            end
+        end
+        if not allowed then
+            utils.error_response(403, "Endpoint not supported: " .. uri)
+            return nil
+        end
+    end
+
     local client_token, err = utils.extract_client_token()
     if not client_token then
         utils.error_response(401, "Missing Authorization header")

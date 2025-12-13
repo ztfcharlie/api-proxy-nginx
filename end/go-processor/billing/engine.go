@@ -7,8 +7,7 @@ type Engine struct {
 func NewEngine() *Engine {
 	return &Engine{
 		strategies: []Strategy{
-			&AudioProvider{},     // [Added] Audio support
-			&OpenAIProvider{},
+			&OpenAIProvider{},    // Now handles audio too
 			&AzureProvider{},
 			&AnthropicProvider{}, // Claude
 			&VertexProvider{},    // Google

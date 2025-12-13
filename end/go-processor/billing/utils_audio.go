@@ -13,28 +13,16 @@ import (
 	"github.com/youpy/go-wav"
 )
 
-type AudioProvider struct{}
-
-func (s *AudioProvider) CanHandle(model string, path string) bool {
-	// OpenAI Audio Endpoints
-	return strings.Contains(path, "/audio/transcriptions") || strings.Contains(path, "/audio/translations")
-}
-
-func (s *AudioProvider) Calculate(model string, reqBody, resBody []byte, contentType string, statusCode int) (Usage, error) {
-	var u Usage
-	if statusCode != 200 {
-		return u, nil
-	}
-
-	// Parse multipart form
+// Helper to parse multipart form and extract the first file
+func ParseFirstFile(reqBody []byte, contentType string) ([]byte, string, error) {
 	mediaType, params, err := mime.ParseMediaType(contentType)
 	if err != nil || !strings.HasPrefix(mediaType, "multipart/") {
-		return u, nil // Not multipart, maybe JSON (not standard for audio upload)
+		return nil, "", errors.New("invalid content type")
 	}
 
 	boundary, ok := params["boundary"]
 	if !ok {
-		return u, errors.New("no boundary in content type")
+		return nil, "", errors.New("no boundary in content type")
 	}
 
 	reader := multipart.NewReader(bytes.NewReader(reqBody), boundary)
@@ -45,29 +33,21 @@ func (s *AudioProvider) Calculate(model string, reqBody, resBody []byte, content
 			break
 		}
 		if err != nil {
-			return u, err
+			return nil, "", err
 		}
 
-		if part.FormName() == "file" {
-			// Read file content
+		// [Fix] Accept any file field, not just "file"
+		if part.FileName() != "" {
 			fileData, err := io.ReadAll(part)
-			if err != nil {
-				return u, err
-			}
-			
-			duration, err := getAudioDuration(fileData, part.FileName())
-			if err == nil {
-				u.AudioSeconds = duration
-			}
-			// Only process the first file
-			break
+			return fileData, part.FileName(), err
 		}
 	}
 
-	return u, nil
+	return nil, "", errors.New("no file found in request")
 }
 
-func getAudioDuration(data []byte, filename string) (float64, error) {
+// Calculate audio duration in seconds
+func GetAudioDuration(data []byte, filename string) (float64, error) {
 	filename = strings.ToLower(filename)
 	
 	if strings.HasSuffix(filename, ".mp3") {
@@ -76,11 +56,8 @@ func getAudioDuration(data []byte, filename string) (float64, error) {
 		return getWavDuration(data)
 	}
 	
-	// TODO: Support other formats (ogg, flac, webm)
-	// For unknown formats, maybe fallback to file size estimation?
-	// 1MB mp3 ~ 1 minute? Very inaccurate.
-	// For now, return 0 error
-	return 0, fmt.Errorf("unsupported audio format")
+	// TODO: Add more formats
+	return 0, fmt.Errorf("unsupported audio format: %s", filename)
 }
 
 func getMp3Duration(data []byte) (float64, error) {

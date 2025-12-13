@@ -409,7 +409,8 @@ func (lc *LogConsumer) calculateCost(ctx context.Context, channelID int, model s
 	if cfg.Mode == "request" {
 		cost = cfg.Price
 	} else if cfg.Mode == "time" {
-		cost = u.AudioSeconds * cfg.Price
+		// [Fixed] Support both Audio and Video duration
+		cost = (u.AudioSeconds + u.VideoSeconds) * cfg.Price
 	} else {
 		inputCost := (float64(u.PromptTokens) / PriceUnitDivisor) * cfg.InputPrice
 		outputCost := (float64(u.CompletionTokens) / PriceUnitDivisor) * cfg.OutputPrice

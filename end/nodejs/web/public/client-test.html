@@ -25,6 +25,9 @@
     <script type="text/babel">
         const { useState, useEffect } = React;
 
+        // 1KB Silence MP3
+        const BASE64_MP3 = "SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//uQZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWgAAAA0AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==";
+
         const VENDOR_OPTIONS = [
             { value: 'openai', label: 'OpenAI (Native)' },
             { value: 'anthropic', label: 'Anthropic (Claude)' },
@@ -36,7 +39,17 @@
         ];
 
         const PATH_SUGGESTIONS = {
-            'openai': ['/v1/chat/completions', '/v1/embeddings'],
+            'openai': [
+                '/v1/chat/completions', 
+                '/v1/completions',
+                '/v1/embeddings',
+                '/v1/images/generations',
+                '/v1/audio/speech',
+                '/v1/audio/transcriptions',
+                '/v1/audio/translations',
+                '/v1/video/generations',
+                '/v1/moderations'
+            ],
             'anthropic': ['/v1/messages', '/v1/complete'],
             'google-vertex': [
                 '/v1/projects/{project}/locations/{location}/publishers/google/models/gemini-pro:streamGenerateContent'
@@ -56,6 +69,45 @@
                         { "role": "user", "content": "Hello!" }
                     ],
                     "stream": false
+                },
+                '/v1/completions': {
+                    "model": "gpt-3.5-turbo-instruct",
+                    "prompt": "Once upon a time",
+                    "max_tokens": 50
+                },
+                '/v1/embeddings': {
+                    "model": "text-embedding-3-small",
+                    "input": "The food was delicious and the waiter..."
+                },
+                '/v1/images/generations': {
+                    "model": "dall-e-3",
+                    "prompt": "A cute baby sea otter",
+                    "n": 1,
+                    "size": "1024x1024"
+                },
+                '/v1/audio/speech': {
+                    "model": "tts-1",
+                    "input": "The quick brown fox jumped over the lazy dog.",
+                    "voice": "alloy"
+                },
+                '/v1/audio/translations': {
+                    "file": "__MOCK_AUDIO__",
+                    "model": "whisper-1"
+                },
+                '/v1/audio/remix': {
+                    "__FORM_DATA__": true,
+                    "model": "suno-v3",
+                    "prompt": "Make it jazz",
+                    "audio_file": "__MOCK_AUDIO__"
+                },
+                '/v1/video/generations': {
+                    "model": "sora-2",
+                    "prompt": "A cyberpunk city with neon lights...",
+                    "size": "1280x720",
+                    "quality": "standard"
+                },
+                '/v1/moderations': {
+                    "input": "I want to kill them."
                 }
             },
             'anthropic': {
@@ -141,6 +193,27 @@
                     setLoading(false);
                     return;
                 }
+
+                // Handle Mock Audio Replacement
+                if (parsedPayload.file === "__MOCK_AUDIO__") {
+                    parsedPayload.file = "data:audio/mp3;base64," + BASE64_MP3;
+                }
+                if (parsedPayload.audio_file === "__MOCK_AUDIO__") {
+                    parsedPayload.audio_file = "data:audio/mp3;base64," + BASE64_MP3;
+                }
+
+                // Handle Form Data Flag
+                // We don't convert to FormData object here because axios serializes it to multipart
+                // BUT we are sending to Node.js proxy first.
+                // If we send FormData to Node, Node receives multipart.
+                // Node then needs to parse multipart and re-send. That's complex.
+                // BETTER: We keep sending JSON to Node, but with a flag. 
+                // Node detects flag -> converts to FormData -> sends to Nginx.
+                // So here we just keep it as JSON (with base64 file).
+                
+                // Let's rely on the existence of data:audio string for Node to detect.
+                // Or pass the __FORM_DATA__ flag to Node?
+                // Yes, pass it.
 
                 axios.post('/api/client-test/send', {
                     vendor,

@@ -127,11 +127,57 @@ router.post('/send', async (req, res) => {
                 headers['Authorization'] = `Bearer ${keyString}`;
             }
 
+            // [Added] Handle Fake Multipart for Audio/Video/Remix Test
+            let requestData = payload;
+            let isMultipart = payload.__FORM_DATA__ === true;
+            
+            // Auto-detect multipart if any field is base64
+            if (!isMultipart) {
+                for (const key in payload) {
+                    if (typeof payload[key] === 'string' && payload[key].startsWith('data:')) {
+                        isMultipart = true;
+                        break;
+                    }
+                }
+            }
+
+            if (isMultipart) {
+                const boundary = '----WebKitFormBoundary7MA4YWxkTrZu0gW';
+                let bodyParts = [];
+                
+                for (const key in payload) {
+                    if (key === '__FORM_DATA__') continue;
+
+                    const value = payload[key];
+                    if (typeof value === 'string' && value.startsWith('data:')) {
+                        // File Part
+                        const matches = value.match(/^data:(.+);base64,(.+)$/);
+                        if (matches) {
+                            const mimeType = matches[1];
+                            const fileData = Buffer.from(matches[2], 'base64');
+                            const ext = mimeType.split('/')[1] || 'bin';
+                            const filename = `test_file.${ext}`;
+                            
+                            bodyParts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${key}"; filename="${filename}"\r\nContent-Type: ${mimeType}\r\n\r\n`));
+                            bodyParts.push(fileData);
+                            bodyParts.push(Buffer.from(`\r\n`));
+                        }
+                    } else {
+                        // Text Part
+                        bodyParts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="${key}"\r\n\r\n${value}\r\n`));
+                    }
+                }
+                bodyParts.push(Buffer.from(`--${boundary}--\r\n`));
+                
+                requestData = Buffer.concat(bodyParts);
+                headers['Content-Type'] = `multipart/form-data; boundary=${boundary}`;
+            }
+
             console.log(`[ClientTest] Sending request to: ${finalUrl}`);
             console.log(`[ClientTest] Method: POST`);
-            console.log(`[ClientTest] Headers:`, JSON.stringify(headers));
+            // console.log(`[ClientTest] Headers:`, JSON.stringify(headers));
 
-            const result = await axios.post(finalUrl, payload, {
+            const result = await axios.post(finalUrl, requestData, {
                 headers,
                 validateStatus: () => true
             });

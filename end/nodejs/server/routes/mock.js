@@ -36,7 +36,84 @@ const generateResponse = (model, content) => {
 // Path: /mock/openai/v1/chat/completions
 router.post('/openai/*', async (req, res) => {
     await sleep(MOCK_DELAY);
+    const path = req.path;
     const model = req.body.model || "mock-gpt-4";
+
+    // 1.1 Images
+    if (path.includes('/images/generations')) {
+        return res.json({
+            created: Math.floor(Date.now() / 1000),
+            data: [
+                { url: "https://via.placeholder.com/1024.png?text=Mock+DALL-E+Image" }
+            ]
+        });
+    }
+
+    // 1.2 Embeddings
+    if (path.includes('/embeddings')) {
+        return res.json({
+            object: "list",
+            data: [
+                {
+                    object: "embedding",
+                    embedding: Array(1536).fill(0.1), // Mock vector
+                    index: 0
+                }
+            ],
+            model: model,
+            usage: {
+                prompt_tokens: 8,
+                total_tokens: 8
+            }
+        });
+    }
+
+    // 1.3 Audio Speech (TTS)
+    if (path.includes('/audio/speech')) {
+        res.setHeader('Content-Type', 'audio/mpeg');
+        // Return a dummy binary or text
+        return res.send("[MOCK AUDIO DATA]"); 
+    }
+
+    // 1.4 Legacy Completions
+    if (path.includes('/completions') && !path.includes('/chat/')) {
+        return res.json({
+            id: "cmpl-" + uuidv4(),
+            object: "text_completion",
+            created: Math.floor(Date.now() / 1000),
+            model: model,
+            choices: [
+                {
+                    text: "[MOCK Legacy] This is a completion response.",
+                    index: 0,
+                    logprobs: null,
+                    finish_reason: "stop"
+                }
+            ],
+            usage: {
+                prompt_tokens: 5,
+                completion_tokens: 7,
+                total_tokens: 12
+            }
+        });
+    }
+
+    // 1.5 Video Generations (Sora)
+    if (path.includes('/video/generations') || path.includes('/videos')) {
+        return res.json({
+            id: "vid_" + uuidv4(),
+            object: "video.generation",
+            created: Math.floor(Date.now() / 1000),
+            model: model,
+            status: "processing", // Simulate Async
+            request: {
+                prompt: req.body.prompt,
+                size: req.body.size
+            }
+        });
+    }
+
+    // Default: Chat Completions
     const messages = req.body.messages || [];
     const lastUserMsg = messages.reverse().find(m => m.role === 'user')?.content || "";
     

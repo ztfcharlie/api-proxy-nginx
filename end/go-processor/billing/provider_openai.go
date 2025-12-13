@@ -23,17 +23,70 @@ type openAIResponse struct {
 }
 
 func (s *OpenAIProvider) CanHandle(model string, path string) bool {
-	// 粗略判断：OpenAI 官方模型通常以 gpt, text, dall-e 开头
-	// 且路径通常包含 /v1/chat/completions
-	isOpenAIModel := strings.HasPrefix(model, "gpt") || strings.HasPrefix(model, "text-") || strings.HasPrefix(model, "dall-e") || strings.HasPrefix(model, "o1-")
-	isOpenAIPath := strings.Contains(path, "/v1/chat/completions") || strings.Contains(path, "/v1/embeddings")
+	// 粗略判断：OpenAI 官方模型通常以 gpt, text, dall-e, whisper, tts 开头
+	// 且路径通常包含 /v1/chat, /v1/embeddings, /v1/audio
+	isModelMatch := strings.HasPrefix(model, "gpt") || strings.HasPrefix(model, "text-") || 
+		strings.HasPrefix(model, "dall-e") || strings.HasPrefix(model, "o1-") || 
+		strings.HasPrefix(model, "whisper") || strings.HasPrefix(model, "tts")
+		
+	isPathMatch := strings.Contains(path, "/v1/chat/completions") || 
+		strings.Contains(path, "/v1/embeddings") || 
+		strings.Contains(path, "/v1/audio/") ||
+		strings.Contains(path, "/v1/images/") ||
+		strings.Contains(path, "/v1/video/") ||
+		strings.Contains(path, "/v1/completions") ||
+		strings.Contains(path, "/v1/audio/speech")
 	
-	return isOpenAIModel && isOpenAIPath
+	return isModelMatch && isPathMatch
 }
 
 func (s *OpenAIProvider) Calculate(model string, reqBody, resBody []byte, contentType string, statusCode int) (Usage, error) {
 	var u Usage
-	if statusCode != 200 || len(resBody) == 0 {
+	if statusCode != 200 {
+		return u, nil
+	}
+
+	// 1. Audio Input (Whisper)
+	if strings.Contains(contentType, "multipart/form-data") {
+		fileData, filename, err := ParseFirstFile(reqBody, contentType)
+		if err == nil {
+			duration, err := GetAudioDuration(fileData, filename)
+			if err == nil {
+				u.AudioSeconds = duration
+				return u, nil 
+			}
+		}
+		return u, nil
+	}
+
+	// 2. Images (DALL-E) or Video (Sora)
+	if strings.Contains(model, "dall-e") || strings.Contains(model, "sora") {
+		type genReq struct {
+			N        int `json:"n"`
+			Duration int `json:"duration"` // Optional duration in seconds
+		}
+		var req genReq
+		if json.Unmarshal(reqBody, &req) == nil {
+			u.Images = req.N
+			if u.Images == 0 { u.Images = 1 }
+			
+			// Video Duration Logic
+			if req.Duration > 0 {
+				u.VideoSeconds = float64(req.Duration)
+			} else if strings.Contains(model, "sora") {
+				u.VideoSeconds = 8.0 // Default to 8s for Sora if not specified
+			}
+		} else {
+			u.Images = 1
+			if strings.Contains(model, "sora") {
+				u.VideoSeconds = 8.0
+			}
+		}
+		return u, nil
+	}
+
+	// 3. Text/Chat Handling (Standard + TTS + Embeddings)
+	if len(resBody) == 0 {
 		return u, nil
 	}
 
@@ -87,32 +140,75 @@ func (s *OpenAIProvider) Calculate(model string, reqBody, resBody []byte, conten
 func (s *OpenAIProvider) estimateTokens(model string, reqBody, resBody []byte, isStream bool) (Usage, error) {
 	var u Usage
 	
+	// Generic Request Parser
+	var req map[string]interface{}
+	json.Unmarshal(reqBody, &req)
+
 	// 1. Calculate Prompt Tokens
-	type chatRequest struct {
-		Messages []map[string]interface{} `json:"messages"` // Use map for flexibility
-	}
-	var req chatRequest
-	if err := json.Unmarshal(reqBody, &req); err == nil {
-		u.PromptTokens = CountMessageTokens(req.Messages, model)
+	if messages, ok := req["messages"].([]interface{}); ok {
+		// Chat
+		// Need to convert []interface{} to []map[string]interface{}
+		msgs := make([]map[string]interface{}, len(messages))
+		for i, m := range messages {
+			if mv, ok := m.(map[string]interface{}); ok {
+				msgs[i] = mv
+			}
+		}
+		u.PromptTokens = CountMessageTokens(msgs, model)
+	} else if input, ok := req["input"].(string); ok {
+		// TTS / Embedding (String)
+		u.PromptTokens = CountTextToken(input, model)
+	} else if inputArr, ok := req["input"].([]interface{}); ok {
+		// Embedding (Array of strings)
+		for _, item := range inputArr {
+			if s, ok := item.(string); ok {
+				u.PromptTokens += CountTextToken(s, model)
+			}
+		}
+	} else if prompt, ok := req["prompt"].(string); ok {
+		// Legacy Completion (String)
+		u.PromptTokens = CountTextToken(prompt, model)
+	} else if promptArr, ok := req["prompt"].([]interface{}); ok {
+		// Legacy Completion (Array)
+		for _, item := range promptArr {
+			if s, ok := item.(string); ok {
+				u.PromptTokens += CountTextToken(s, model)
+			}
+		}
 	} else {
-		// Fallback: raw text count
+		// Fallback
 		u.PromptTokens = CountTextToken(string(reqBody), model)
 	}
 
 	// 2. Calculate Completion Tokens
 	if isStream {
-		// Use our ported stream parser
 		tokens, _ := ParseSSEAndCount(resBody, model)
 		u.CompletionTokens = tokens
 	} else {
 		// Regular JSON
+		// Try parsing as Chat
 		var resp openAIResponse
 		if err := json.Unmarshal(resBody, &resp); err == nil && len(resp.Choices) > 0 {
 			content := resp.Choices[0].Message.Content
 			u.CompletionTokens = CountTextToken(content, model)
 		} else {
-			// Fallback: raw text count
-			u.CompletionTokens = CountTextToken(string(resBody), model)
+			// Try parsing as Legacy Completion
+			var legResp struct {
+				Choices []struct {
+					Text string `json:"text"`
+				} `json:"choices"`
+			}
+			if err := json.Unmarshal(resBody, &legResp); err == nil && len(legResp.Choices) > 0 {
+				u.CompletionTokens = CountTextToken(legResp.Choices[0].Text, model)
+			} else {
+				// TTS usually returns binary, so resBody is not JSON. 
+				// For TTS, output tokens are 0 (or calculated by duration if needed, but OpenAI charges by input char).
+				if strings.Contains(model, "tts") {
+					u.CompletionTokens = 0
+				} else {
+					u.CompletionTokens = CountTextToken(string(resBody), model)
+				}
+			}
 		}
 	}
 

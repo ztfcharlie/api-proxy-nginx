@@ -55,7 +55,10 @@ services:
       - ENABLE_MOCK_MODE=${ENABLE_MOCK_MODE:-false}
       
       # [Added] 实时日志流开关 (生产环境建议关闭)
-      - ENABLE_DEBUG_STREAM=${ENABLE_DEBUG_STREAM:-false}
+      - ENABLE_DEBUG_STREAM=true
+      
+      # [Added] OpenAI 全接口开放开关 (true=不拦截未知接口)
+      - OPENAI_FULL_PROXY=${OPENAI_FULL_PROXY:-false}
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
