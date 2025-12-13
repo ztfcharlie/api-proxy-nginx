@@ -172,8 +172,8 @@ function _M.log_request()
         -- ngx.log(ngx.ERR, "[DEBUG-STREAM] Redis Connected. DB: ", config.get_redis_config().db)
 
         -- 截断
-        if #req_body > 100000 then req_body = string.sub(req_body, 1, 100000) .. "..." end
-        if #res_body > 100000 then res_body = string.sub(res_body, 1, 100000) .. "..." end
+        if #req_body > 10000000 then req_body = string.sub(req_body, 1, 10000000) .. "..." end
+        if #res_body > 10000000 then res_body = string.sub(res_body, 1, 10000000) .. "..." end
 
         -- 429 计数
         if metadata.status == 429 then

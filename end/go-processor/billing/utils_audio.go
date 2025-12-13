@@ -40,6 +40,10 @@ func ParseFirstFile(reqBody []byte, contentType string) ([]byte, string, error) 
 		// [Fix] Accept any file field, not just "file"
 		if part.FileName() != "" {
 			fileData, err := io.ReadAll(part)
+			// Allow truncated bodies (UnexpectedEOF)
+			if err == io.ErrUnexpectedEOF {
+				return fileData, part.FileName(), nil
+			}
 			return fileData, part.FileName(), err
 		}
 	}
