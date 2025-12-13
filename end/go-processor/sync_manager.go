@@ -92,7 +92,7 @@ func (sm *SyncManager) Start(ctx context.Context) {
 	}
 }
 
-// [Added] startWatchdog 高频监控关键缓存
+// startWatchdog 高频监控关键缓存
 func (sm *SyncManager) startWatchdog(ctx context.Context) {
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
@@ -204,6 +204,7 @@ func (sm *SyncManager) syncModels(ctx context.Context) error {
 		}
 
 		// [Refactor] Store ALL price dimensions to support multi-mode channels
+		// We do NOT determine mode here. We store raw prices.
 		priceMap[name] = map[string]interface{}{
 			"input":   pInput.Float64,
 			"output":  pOutput.Float64,

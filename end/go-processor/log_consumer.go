@@ -175,7 +175,7 @@ func (lc *LogConsumer) processBatch(ctx context.Context, msgs []redis.XMessage) 
 		}
 
 		// [Fix] Restore body extraction
-		reqBodyRaw, _ := values["req_body"].(string)
+	reqBodyRaw, _ := values["req_body"].(string)
 		resBodyRaw, _ := values["res_body"].(string)
 		
 		// 处理字段
@@ -411,8 +411,10 @@ func (lc *LogConsumer) getModelConfig(ctx context.Context, channelID int, model 
 		if err == nil {
 			json.Unmarshal([]byte(val), &chConfig)
 		} else if err == redis.Nil {
-			// Fallback to DB if Redis missing channel cache (optional)
-			// ...
+			var modelsConfigStr string
+			if lc.db.QueryRowContext(ctx, "SELECT models_config FROM sys_channels WHERE id = ?", channelID).Scan(&modelsConfigStr) == nil && modelsConfigStr != "" {
+				json.Unmarshal([]byte(modelsConfigStr), &chConfig.ModelsConfig)
+			}
 		}
 
 		if chConfig.ModelsConfig != nil {
@@ -458,16 +460,9 @@ func (lc *LogConsumer) calculateCost(ctx context.Context, channelID int, model s
 		outputCost := (float64(u.CompletionTokens) / PriceUnitDivisor) * cfg.OutputPrice
 		cost = inputCost + outputCost
 		
-		// [Logic Check] If Image Generation is used in Token Mode?
-		// Usually DALL-E is Request Mode. But if configured as Token, cost is 0.
-		// We should probably check RequestPrice as fallback for images even in Token mode?
-		// No, stick to the Mode configuration to avoid double billing.
-		// But DALL-E generates 0 tokens.
-		// If Mode=token and it's an image request, cost = 0. Correct.
-		
-		// Wait, what about "Price" field? 
-		// If u.Images > 0, we used to use 'cfg.Price'.
-		// Now we should use 'cfg.RequestPrice'.
+		// If using Token mode but also generating images (e.g. mixed scenario or misconfig), 
+		// allow falling back to Request Price for the image part if configured.
+		// (Optional logic, sticking to strict mode for now)
 		if u.Images > 0 && cfg.RequestPrice > 0 {
 			cost += float64(u.Images) * cfg.RequestPrice
 		}
