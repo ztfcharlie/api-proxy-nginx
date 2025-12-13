@@ -167,7 +167,7 @@
 
             const handleVendorChange = (newVendor) => {
                 setVendor(newVendor);
-                const defaultPath = PATH_SUGGESTIONS[newVendor]?.[0] || '';
+                const defaultPath = (PATH_SUGGESTIONS[newVendor] && PATH_SUGGESTIONS[newVendor][0]) || '';
                 setApiPath(defaultPath);
                 setPayload(getPayload(newVendor, defaultPath));
             };
