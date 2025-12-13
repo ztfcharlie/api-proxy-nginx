@@ -1,119 +1,121 @@
-// 1KB Silence MP3
-const BASE64_MP3 = "SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//uQZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWgAAAA0AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==";
+(function() {
+    // 1KB Silence MP3
+    const BASE64_MP3 = "SUQzBAAAAAAAI1RTU0UAAAAPAAADTGF2ZjU4Ljc2LjEwMAAAAAAAAAAAAAAA//uQZAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAWgAAAA0AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==";
 
-const VENDOR_OPTIONS = [
-    { value: 'openai', label: 'OpenAI (Native)' },
-    { value: 'anthropic', label: 'Anthropic (Claude)' },
-    { value: 'google-vertex', label: 'Google Vertex AI' },
-    { value: 'aws-bedrock', label: 'AWS Bedrock' },
-    { value: 'azure-openai', label: 'Azure OpenAI' },
-    { value: 'deepseek', label: 'DeepSeek' },
-    { value: 'qwen', label: 'Aliyun Qwen' }
-];
+    const VENDOR_OPTIONS = [
+        { value: 'openai', label: 'OpenAI (Native)' },
+        { value: 'anthropic', label: 'Anthropic (Claude)' },
+        { value: 'google-vertex', label: 'Google Vertex AI' },
+        { value: 'aws-bedrock', label: 'AWS Bedrock' },
+        { value: 'azure-openai', label: 'Azure OpenAI' },
+        { value: 'deepseek', label: 'DeepSeek' },
+        { value: 'qwen', label: 'Aliyun Qwen' }
+    ];
 
-const PATH_SUGGESTIONS = {
-    'openai': [
-        '/v1/chat/completions',
-        '/v1/completions',
-        '/v1/embeddings',
-        '/v1/images/generations',
-        '/v1/audio/speech',
-        '/v1/audio/transcriptions',
-        '/v1/audio/translations',
-        '/v1/audio/remix',
-        '/v1/video/generations',
-        '/v1/moderations'
-    ],
-    'anthropic': ['/v1/messages', '/v1/complete'],
-    'google-vertex': [
-        '/v1/projects/{project}/locations/{location}/publishers/google/models/gemini-pro:streamGenerateContent',
-        '/v1beta1/projects/{project}/locations/{location}/publishers/google/models/gemini-1.5-flash:generateContent'
-    ],
-    'aws-bedrock': ['/model/anthropic.claude-v2/invoke'],
-    'azure-openai': ['/openai/deployments/{deployment-id}/chat/completions?api-version=2023-05-15'],
-    'deepseek': ['/v1/chat/completions'],
-    'qwen': ['/v1/chat/completions']
-};
+    const PATH_SUGGESTIONS = {
+        'openai': [
+            '/v1/chat/completions',
+            '/v1/completions',
+            '/v1/embeddings',
+            '/v1/images/generations',
+            '/v1/audio/speech',
+            '/v1/audio/transcriptions',
+            '/v1/audio/translations',
+            '/v1/audio/remix',
+            '/v1/video/generations',
+            '/v1/moderations'
+        ],
+        'anthropic': ['/v1/messages', '/v1/complete'],
+        'google-vertex': [
+            '/v1/projects/{project}/locations/{location}/publishers/google/models/gemini-pro:streamGenerateContent',
+            '/v1beta1/projects/{project}/locations/{location}/publishers/google/models/gemini-1.5-flash:generateContent'
+        ],
+        'aws-bedrock': ['/model/anthropic.claude-v2/invoke'],
+        'azure-openai': ['/openai/deployments/{deployment-id}/chat/completions?api-version=2023-05-15'],
+        'deepseek': ['/v1/chat/completions'],
+        'qwen': ['/v1/chat/completions']
+    };
 
-const PAYLOAD_TEMPLATES = {
-    'openai': {
-        '/v1/chat/completions': {
-            "model": "gpt-3.5-turbo",
-            "messages": [
-                { "role": "system", "content": "You are a helpful assistant." },
-                { "role": "user", "content": "Hello!" }
-            ],
-            "stream": false
+    const PAYLOAD_TEMPLATES = {
+        'openai': {
+            '/v1/chat/completions': {
+                "model": "gpt-3.5-turbo",
+                "messages": [
+                    { "role": "system", "content": "You are a helpful assistant." },
+                    { "role": "user", "content": "Hello!" }
+                ],
+                "stream": false
+            },
+            '/v1/completions': {
+                "model": "gpt-3.5-turbo-instruct",
+                "prompt": "Once upon a time",
+                "max_tokens": 50
+            },
+            '/v1/embeddings': {
+                "model": "text-embedding-3-small",
+                "input": "The food was delicious and the waiter..."
+            },
+            '/v1/images/generations': {
+                "model": "dall-e-3",
+                "prompt": "A cute baby sea otter",
+                "n": 1,
+                "size": "1024x1024"
+            },
+            '/v1/audio/speech': {
+                "model": "tts-1",
+                "input": "The quick brown fox jumped over the lazy dog.",
+                "voice": "alloy"
+            },
+            '/v1/audio/transcriptions': {
+                "file": "__MOCK_AUDIO__",
+                "model": "whisper-1"
+            },
+            '/v1/audio/translations': {
+                "file": "__MOCK_AUDIO__",
+                "model": "whisper-1"
+            },
+            '/v1/audio/remix': {
+                "__FORM_DATA__": true,
+                "model": "suno-v3",
+                "prompt": "Make it jazz",
+                "audio_file": "__MOCK_AUDIO__"
+            },
+            '/v1/video/generations': {
+                "model": "sora-2",
+                "prompt": "A stylish woman walks down a Tokyo street...",
+                "size": "1280x720",
+                "quality": "standard"
+            },
+            '/v1/moderations': {
+                "input": "I want to kill them."
+            }
         },
-        '/v1/completions': {
-            "model": "gpt-3.5-turbo-instruct",
-            "prompt": "Once upon a time",
-            "max_tokens": 50
+        'anthropic': {
+            '/v1/messages': {
+                "model": "claude-3-opus-20240229",
+                "max_tokens": 1024,
+                "messages": [
+                    {"role": "user", "content": "Hello, world"}
+                ]
+            }
         },
-        '/v1/embeddings': {
-            "model": "text-embedding-3-small",
-            "input": "The food was delicious and the waiter..."
+        'aws-bedrock': {
+            'default': {
+                "prompt": "\n\nHuman: Hello!\n\nAssistant:",
+                "max_tokens_to_sample": 300
+            }
         },
-        '/v1/images/generations': {
-            "model": "dall-e-3",
-            "prompt": "A cute baby sea otter",
-            "n": 1,
-            "size": "1024x1024"
-        },
-        '/v1/audio/speech': {
-            "model": "tts-1",
-            "input": "The quick brown fox jumped over the lazy dog.",
-            "voice": "alloy"
-        },
-        '/v1/audio/transcriptions': {
-            "file": "__MOCK_AUDIO__",
-            "model": "whisper-1"
-        },
-        '/v1/audio/translations': {
-            "file": "__MOCK_AUDIO__",
-            "model": "whisper-1"
-        },
-        '/v1/audio/remix': {
-            "__FORM_DATA__": true,
-            "model": "suno-v3",
-            "prompt": "Make it jazz",
-            "audio_file": "__MOCK_AUDIO__"
-        },
-        '/v1/video/generations': {
-            "model": "sora-2",
-            "prompt": "A stylish woman walks down a Tokyo street...",
-            "size": "1280x720",
-            "quality": "standard"
-        },
-        '/v1/moderations': {
-            "input": "I want to kill them."
+        'google-vertex': {
+            'default': {
+                "contents": [{ "role": "user", "parts": [{ "text": "Hi" }] }]
+            }
         }
-    },
-    'anthropic': {
-        '/v1/messages': {
-            "model": "claude-3-opus-20240229",
-            "max_tokens": 1024,
-            "messages": [
-                {"role": "user", "content": "Hello, world"}
-            ]
-        }
-    },
-    'aws-bedrock': {
-        'default': {
-            "prompt": "\n\nHuman: Hello!\n\nAssistant:",
-            "max_tokens_to_sample": 300
-        }
-    },
-    'google-vertex': {
-        'default': {
-            "contents": [{ "role": "user", "parts": [{ "text": "Hi" }] }]
-        }
-    }
-};
+    };
 
-window.ClientTestConstants = {
-    BASE64_MP3,
-    VENDOR_OPTIONS,
-    PATH_SUGGESTIONS,
-    PAYLOAD_TEMPLATES
-};
+    window.ClientTestConstants = {
+        BASE64_MP3,
+        VENDOR_OPTIONS,
+        PATH_SUGGESTIONS,
+        PAYLOAD_TEMPLATES
+    };
+})();
