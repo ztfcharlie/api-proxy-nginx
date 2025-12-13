@@ -8,36 +8,24 @@ import (
 
 type OpenAIProvider struct{}
 
-// openAIResponse is shared within the billing package
-type openAIResponse struct {
-	Usage struct {
-		PromptTokens     int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
-		TotalTokens      int `json:"total_tokens"`
-	} `json:"usage"`
-	Choices []struct {
-		Message struct {
-			Content string `json:"content"`
-		} `json:"message"`
-	} `json:"choices"`
-}
-
 func (s *OpenAIProvider) CanHandle(model string, path string) bool {
 	// 粗略判断：OpenAI 官方模型通常以 gpt, text, dall-e, whisper, tts 开头
 	// 且路径通常包含 /v1/chat, /v1/embeddings, /v1/audio
 	isModelMatch := strings.HasPrefix(model, "gpt") || strings.HasPrefix(model, "text-") || 
 		strings.HasPrefix(model, "dall-e") || strings.HasPrefix(model, "o1-") || 
-		strings.HasPrefix(model, "whisper") || strings.HasPrefix(model, "tts")
+		strings.HasPrefix(model, "whisper") || strings.HasPrefix(model, "tts") ||
+		strings.HasPrefix(model, "sora")
 		
-	isPathMatch := strings.Contains(path, "/v1/chat/completions") || 
+	isOpenAIPath := strings.Contains(path, "/v1/chat/completions") || 
 		strings.Contains(path, "/v1/embeddings") || 
 		strings.Contains(path, "/v1/audio/") ||
 		strings.Contains(path, "/v1/images/") ||
 		strings.Contains(path, "/v1/video/") ||
+		strings.Contains(path, "/v1/videos") ||
 		strings.Contains(path, "/v1/completions") ||
-		strings.Contains(path, "/v1/audio/speech")
+		strings.Contains(path, "/v1/responses")
 	
-	return isModelMatch && isPathMatch
+	return isModelMatch && isOpenAIPath
 }
 
 func (s *OpenAIProvider) Calculate(model string, reqBody, resBody []byte, contentType string, statusCode int) (Usage, error) {
@@ -46,28 +34,19 @@ func (s *OpenAIProvider) Calculate(model string, reqBody, resBody []byte, conten
 		return u, nil
 	}
 	
-	// [Debug] Detailed logging
-	log.Printf("[Billing DEBUG] Calculate model=%s, CT=%s, BodyLen=%d", model, contentType, len(reqBody))
-	if len(reqBody) > 0 {
-		preview := string(reqBody)
-		if len(preview) > 100 { preview = preview[:100] }
-		log.Printf("[Billing DEBUG] Body Preview: %s", preview)
-	}
-	
+	// [Safe] Skip billing for empty requests (e.g. GET content, or ping)
 	if len(reqBody) == 0 {
 		return u, nil
 	}
 
+	// [Debug] Detailed logging
+	log.Printf("[Billing DEBUG] Calculate model=%s, CT=%s, BodyLen=%d", model, contentType, len(reqBody))
+
 	// 1. Audio Input (Whisper) - Explicit check for audio path to avoid conflict with Image edits
 	if strings.Contains(contentType, "multipart/form-data") && strings.Contains(model, "whisper") {
-		log.Printf("[Billing DEBUG] Entering Audio Logic for %s", model)
 		fileData, filename, err := ParseFirstFile(reqBody, contentType)
-		log.Printf("[Billing DEBUG] ParseFirstFile: len=%d, name=%s, err=%v", len(fileData), filename, err)
-		
 		if err == nil {
 			duration, err := GetAudioDuration(fileData, filename)
-			log.Printf("[Billing DEBUG] GetAudioDuration: %.2f, err=%v", duration, err)
-			
 			if err == nil {
 				log.Printf("[Billing] Audio duration: %.2fs (file: %s)", duration, filename)
 				u.AudioSeconds = duration
@@ -99,10 +78,6 @@ func (s *OpenAIProvider) Calculate(model string, reqBody, resBody []byte, conten
 			if count == 0 { count = 1 }
 			
 			// DALL-E 3 Dynamic Pricing Multiplier
-			// Base ($0.04) = 1 image unit
-			// Standard Large ($0.08) = 2 units
-			// HD 1024 ($0.08) = 2 units
-			// HD Large ($0.12) = 3 units
 			multiplier := 1
 			if strings.Contains(model, "dall-e-3") {
 				isHD := req.Quality == "hd"
@@ -120,7 +95,7 @@ func (s *OpenAIProvider) Calculate(model string, reqBody, resBody []byte, conten
 				u.VideoSeconds = 8.0 
 			}
 		} else {
-			// Multipart or Parse Fail
+			// Multipart or Parse Fail -> Default to 1 generation
 			u.Images = 1
 			if strings.Contains(model, "sora") {
 				u.VideoSeconds = 8.0
@@ -129,56 +104,33 @@ func (s *OpenAIProvider) Calculate(model string, reqBody, resBody []byte, conten
 		return u, nil
 	}
 
-	// 3. Text/Chat Handling (Standard + TTS + Embeddings)
+	// 3. Text/Chat Handling (Standard + TTS + Embeddings + Responses)
 	if len(resBody) == 0 {
 		return u, nil
 	}
 
+	// [Optimization] Try to read 'usage' from response first
+	type respUsage struct {
+		Usage struct {
+			PromptTokens     int `json:"prompt_tokens"`
+			CompletionTokens int `json:"completion_tokens"`
+			TotalTokens      int `json:"total_tokens"`
+		} `json:"usage"`
+	}
+	var ru respUsage
+	// Only try if it looks like JSON
+	if json.Unmarshal(resBody, &ru) == nil && ru.Usage.TotalTokens > 0 {
+		u.PromptTokens = ru.Usage.PromptTokens
+		u.CompletionTokens = ru.Usage.CompletionTokens
+		u.TotalTokens = ru.Usage.TotalTokens
+		return u, nil
+	}
+
+	// Fallback: Estimate tokens locally
 	bodyStr := string(resBody)
 	isStream := strings.HasPrefix(strings.TrimSpace(bodyStr), "data:")
 	
-	foundUsage := false
-
-	if isStream {
-		// Stream 模式下，Usage 通常在最后一个 data: chunk (OpenAI 官方支持 stream_options: {include_usage: true})
-		// 格式: data: {"id":..., "usage": {...}}
-		lines := strings.Split(bodyStr, "\n")
-		for i := len(lines) - 1; i >= 0; i-- {
-			line := strings.TrimSpace(lines[i])
-			if strings.HasPrefix(line, "data:") && !strings.Contains(line, "[DONE]") {
-				jsonPart := strings.TrimPrefix(line, "data:")
-				var resp openAIResponse
-				if err := json.Unmarshal([]byte(jsonPart), &resp); err == nil {
-					if resp.Usage.TotalTokens > 0 {
-						u.PromptTokens = resp.Usage.PromptTokens
-						u.CompletionTokens = resp.Usage.CompletionTokens
-						u.TotalTokens = resp.Usage.TotalTokens
-						foundUsage = true
-						break
-					}
-				}
-			}
-		}
-	} else {
-		// 非 Stream 模式
-		var resp openAIResponse
-		if err := json.Unmarshal(resBody, &resp); err == nil {
-			if resp.Usage.TotalTokens > 0 {
-				u.PromptTokens = resp.Usage.PromptTokens
-				u.CompletionTokens = resp.Usage.CompletionTokens
-				u.TotalTokens = resp.Usage.TotalTokens
-				foundUsage = true
-			}
-		}
-	}
-
-	// 如果 API 没返回 Usage (或者是旧版流式)，则进行本地计算
-	if !foundUsage {
-		log.Printf("[Billing] Usage missing for %s, calculating locally...", model)
-		return s.estimateTokens(model, reqBody, resBody, isStream)
-	}
-
-	return u, nil
+	return s.estimateTokens(model, reqBody, resBody, isStream)
 }
 
 func (s *OpenAIProvider) estimateTokens(model string, reqBody, resBody []byte, isStream bool) (Usage, error) {
@@ -191,7 +143,6 @@ func (s *OpenAIProvider) estimateTokens(model string, reqBody, resBody []byte, i
 	// 1. Calculate Prompt Tokens
 	if messages, ok := req["messages"].([]interface{}); ok {
 		// Chat
-		// Need to convert []interface{} to []map[string]interface{}
 		msgs := make([]map[string]interface{}, len(messages))
 		for i, m := range messages {
 			if mv, ok := m.(map[string]interface{}); ok {
@@ -237,7 +188,7 @@ func (s *OpenAIProvider) estimateTokens(model string, reqBody, resBody []byte, i
 		tokens, _ := ParseSSEAndCount(resBody, model)
 		u.CompletionTokens = tokens
 	} else {
-		// Regular JSON
+		// Regular JSON - Manually parsing content if usage missing
 		// Try parsing as Chat
 		var resp openAIResponse
 		if err := json.Unmarshal(resBody, &resp); err == nil && len(resp.Choices) > 0 {
@@ -253,8 +204,7 @@ func (s *OpenAIProvider) estimateTokens(model string, reqBody, resBody []byte, i
 			if err := json.Unmarshal(resBody, &legResp); err == nil && len(legResp.Choices) > 0 {
 				u.CompletionTokens = CountTextToken(legResp.Choices[0].Text, model)
 			} else {
-				// TTS usually returns binary, so resBody is not JSON. 
-				// For TTS, output tokens are 0 (or calculated by duration if needed, but OpenAI charges by input char).
+				// TTS usually returns binary, completion is 0.
 				if strings.Contains(model, "tts") {
 					u.CompletionTokens = 0
 				} else {

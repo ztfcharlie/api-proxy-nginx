@@ -36,13 +36,19 @@ type TokenData struct {
 
 // TokenManager 管理器结构
 type TokenManager struct {
-	rdb *redis.Client
-	db  *sql.DB
+	rdb     *redis.Client
+	db      *sql.DB
+	failMap map[string]time.Time // [Added] Backoff map
+	failMu  sync.Mutex
 }
 
 // NewTokenManager 创建管理器
 func NewTokenManager(rdb *redis.Client, db *sql.DB) *TokenManager {
-	return &TokenManager{rdb: rdb, db: db}
+	return &TokenManager{
+		rdb:     rdb,
+		db:      db,
+		failMap: make(map[string]time.Time),
+	}
 }
 
 // Start 启动后台刷新任务
@@ -143,6 +149,14 @@ func (tm *TokenManager) processChannel(ctx context.Context, key string) bool {
 	}
 	channelID := parts[2]
 
+	// [Added] Backoff check
+	tm.failMu.Lock()
+	nextRetry, exists := tm.failMap[channelID]
+	tm.failMu.Unlock()
+
+	if exists && time.Now().Before(nextRetry) {
+		return false
+	}
 
 	// 1. 读取 Channel 配置
 	val, err := tm.rdb.Get(ctx, key).Result()
@@ -191,6 +205,12 @@ func (tm *TokenManager) refreshToken(ctx context.Context, channelID, saJSON stri
 	tokenResp, err := RefreshTokenFromServiceAccount(saJSON)
 	if err != nil {
 		log.Printf("[ERROR] Failed to refresh token for channel %s: %v", channelID, err)
+		
+		// [Added] Set Backoff
+		tm.failMu.Lock()
+		tm.failMap[channelID] = time.Now().Add(5 * time.Minute)
+		tm.failMu.Unlock()
+
 		// 上报错误到数据库
 		if tm.db != nil {
 			errMsg := fmt.Sprintf("Token Refresh Failed: %v", err)
@@ -198,6 +218,11 @@ func (tm *TokenManager) refreshToken(ctx context.Context, channelID, saJSON stri
 		}
 		return
 	}
+
+	// [Added] Clear Backoff on success
+	tm.failMu.Lock()
+	delete(tm.failMap, channelID)
+	tm.failMu.Unlock()
 
 	// 2. 写入 Redis
 	// 兼容 Lua 逻辑：Lua 直接读取这个 Key 作为 Token 字符串
