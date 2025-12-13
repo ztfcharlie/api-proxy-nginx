@@ -19,17 +19,16 @@ class SyncManager {
         if (!this.redis) return;
         try {
             // 使用 RedisService 的 publish 方法 (如果封装了) 或者直接用 ioredis
-            // RedisService.publish 可能会加前缀，我们需要确认频道名。
-            // Go 监听的是 "oauth2:cmd:job:trigger" (在 main.go 中定义)
-            // 假设 RedisService 的 keyPrefix 是 "oauth2:"，那么我们只需要 publish "cmd:job:trigger"?
-            // 不，ioredis 的 publish 不受 keyPrefix 影响。
-            // 让我们直接用 this.redis.redis (原始客户端)
-            
             const channel = 'oauth2:cmd:job:trigger';
             const message = 'db_sync_job';
             
-            await this.redis.redis.publish(channel, message);
-            logger.info('[SyncManager] Triggered Go Service sync.');
+            // 使用底层 ioredis 实例发送
+            if (this.redis.redis) {
+                await this.redis.redis.publish(channel, message);
+                logger.info('[SyncManager] Triggered Go Service sync via Pub/Sub.');
+            } else {
+                logger.error('[SyncManager] Redis client not ready.');
+            }
         } catch (error) {
             logger.error('[SyncManager] Failed to trigger sync:', error);
         }
@@ -58,8 +57,6 @@ class SyncManager {
     }
 
     async updateChannelCache(channel) {
-        // 哪怕只是更新一个 Channel，也触发全量 Sync (Go 的 Sync 很快)
-        // 或者未来可以让 Go 支持增量 Sync 消息
         return this.triggerGoSync();
     }
 
