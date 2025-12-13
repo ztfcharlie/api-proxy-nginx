@@ -136,8 +136,22 @@ function _M.log_request()
     local req_body = ngx.req.get_body_data()
     if not req_body then
         local req_file = ngx.req.get_body_file()
-        if req_file then req_body = "[FILE]: " .. req_file else req_body = "" end
+        if req_file then 
+            -- [Fix] Read file content immediately from temp file
+            local file = io.open(req_file, "rb")
+            if file then
+                -- Read up to 50MB (matching client_max_body_size)
+                req_body = file:read(50 * 1024 * 1024)
+                file:close()
+            else
+                req_body = "[FILE READ ERROR]: " .. req_file
+            end
+        else 
+            req_body = "" 
+        end
     end
+    
+    if not req_body then req_body = "" end
 
     -- Response Body (from ctx)
     local res_body = ngx.ctx.buffered_response or ""
