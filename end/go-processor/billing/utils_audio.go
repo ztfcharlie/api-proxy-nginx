@@ -11,6 +11,7 @@ import (
 
 	"github.com/tcolgate/mp3"
 	"github.com/youpy/go-wav"
+	"log"
 )
 
 // Helper to parse multipart form and extract the first file
@@ -71,7 +72,9 @@ func getMp3Duration(data []byte) (float64, error) {
 			if err == io.EOF {
 				break
 			}
-			return duration, err
+			// [Fix] Log error but return what we have calculated so far
+			log.Printf("[Billing] MP3 Decode Error after %.2fs: %v", duration, err)
+			return duration, nil
 		}
 		duration += f.Duration().Seconds()
 	}

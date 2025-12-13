@@ -57,9 +57,14 @@ func (s *OpenAIProvider) Calculate(model string, reqBody, resBody []byte, conten
 		if err == nil {
 			duration, err := GetAudioDuration(fileData, filename)
 			if err == nil {
+				log.Printf("[Billing] Audio duration: %.2fs (file: %s)", duration, filename)
 				u.AudioSeconds = duration
 				return u, nil 
+			} else {
+				log.Printf("[Billing] Failed to get audio duration: %v", err)
 			}
+		} else {
+			log.Printf("[Billing] Failed to parse multipart file: %v", err)
 		}
 		return u, nil
 	}
