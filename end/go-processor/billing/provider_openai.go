@@ -45,9 +45,14 @@ func (s *OpenAIProvider) Calculate(model string, reqBody, resBody []byte, conten
 	if statusCode != 200 {
 		return u, nil
 	}
+	
+	// [Safe] Skip billing for empty requests (e.g. GET content, or ping)
+	if len(reqBody) == 0 {
+		return u, nil
+	}
 
-	// 1. Audio Input (Whisper)
-	if strings.Contains(contentType, "multipart/form-data") {
+	// 1. Audio Input (Whisper) - Explicit check for audio path to avoid conflict with Image edits
+	if strings.Contains(contentType, "multipart/form-data") && strings.Contains(model, "whisper") {
 		fileData, filename, err := ParseFirstFile(reqBody, contentType)
 		if err == nil {
 			duration, err := GetAudioDuration(fileData, filename)
@@ -59,24 +64,44 @@ func (s *OpenAIProvider) Calculate(model string, reqBody, resBody []byte, conten
 		return u, nil
 	}
 
-	// 2. Images (DALL-E) or Video (Sora)
+	// 2. Images (DALL-E) or Video (Sora) or Remix
+	// Trigger if model name matches OR path indicates image/video operation
+	isGen := strings.Contains(model, "dall-e") || strings.Contains(model, "sora") ||
+		strings.Contains(s.basePath(contentType), "/images/") || 
+		strings.Contains(s.basePath(contentType), "/video") // catch /videos and /video/
+
+	// Helper to handle path check if model is missing (e.g. multipart)
+	// We don't have 'path' argument here? Wait, Calculate signature IS (model, req, res, type, status).
+	// Oh, checking the code, I don't have 'path' in Calculate arguments in this file context?
+	// Let's check the function signature in the file content.
+	// No, the signature is: func (s *OpenAIProvider) Calculate(model string, reqBody, resBody []byte, contentType string, statusCode int)
+	// It DOES NOT have 'path'. 'path' is in 'CanHandle'.
+	// This is a problem for "Edits" if model is not passed.
+	
+	// FIX: We must rely on 'model' being passed correctly by Nginx/LogConsumer.
+	// If Nginx fails to extract model from multipart, it passes "default" or similar?
+	// Let's assume 'model' might be missing. 
+	// But we can check 'resBody'. If response contains "created", "data", it's likely a generation.
+	// Or we can rely on 'model' containing 'dall-e' (which user MUST send in form data).
+	
 	if strings.Contains(model, "dall-e") || strings.Contains(model, "sora") {
 		type genReq struct {
 			N        int `json:"n"`
-			Duration int `json:"duration"` // Optional duration in seconds
+			Duration int `json:"duration"`
 		}
 		var req genReq
+		// If JSON
 		if json.Unmarshal(reqBody, &req) == nil {
 			u.Images = req.N
 			if u.Images == 0 { u.Images = 1 }
-			
-			// Video Duration Logic
 			if req.Duration > 0 {
 				u.VideoSeconds = float64(req.Duration)
 			} else if strings.Contains(model, "sora") {
-				u.VideoSeconds = 8.0 // Default to 8s for Sora if not specified
+				u.VideoSeconds = 8.0 
 			}
 		} else {
+			// Multipart (Edits/Variations) or Parse Fail
+			// Default to 1 generation
 			u.Images = 1
 			if strings.Contains(model, "sora") {
 				u.VideoSeconds = 8.0

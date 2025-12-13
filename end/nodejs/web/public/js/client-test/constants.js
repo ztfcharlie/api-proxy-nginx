@@ -20,13 +20,17 @@
             '/v1/images/generations',
             '/v1/audio/speech',
             '/v1/audio/transcriptions',
-            '/v1/audio/translations',
-            '/v1/audio/remix',
-            '/v1/video/generations',
-            '/v1/moderations'
-        ],
-        'anthropic': ['/v1/messages', '/v1/complete'],
-        'google-vertex': [
+                    '/v1/audio/translations',
+                    '/v1/audio/remix',
+                    '/v1/video/generations',
+                    '/v1/videos', // New standard path
+                    '/v1/images/edits',
+                    '/v1/images/variations',
+                    '/v1/videos/{video_id}/remix',
+                    '/v1/videos/{video_id}/content',
+                    '/v1/moderations'
+                ],
+                'anthropic': ['/v1/messages', '/v1/complete'],        'google-vertex': [
             '/v1/projects/{project}/locations/{location}/publishers/google/models/gemini-pro:streamGenerateContent',
             '/v1beta1/projects/{project}/locations/{location}/publishers/google/models/gemini-1.5-flash:generateContent'
         ],
@@ -83,15 +87,37 @@
             '/v1/video/generations': {
                 "model": "sora-2",
                 "prompt": "A stylish woman walks down a Tokyo street...",
-                "size": "1280x720",
-                "quality": "standard"
-            },
-            '/v1/moderations': {
-                "input": "I want to kill them."
-            }
-        },
-        'anthropic': {
-            '/v1/messages': {
+                            "size": "1280x720",
+                            "quality": "standard"
+                        },
+                        '/v1/videos': {
+                            "model": "sora-2",
+                            "prompt": "A drone shot of a futuristic city",
+                            "size": "1920x1080"
+                        },
+                        '/v1/images/edits': {
+                            "__FORM_DATA__": true,
+                            "image": "__MOCK_AUDIO__", // Reusing base64 file injection for simplicity
+                            "prompt": "Add a red hat",
+                            "n": 1,
+                            "size": "1024x1024"
+                        },
+                        '/v1/images/variations': {
+                            "__FORM_DATA__": true,
+                            "image": "__MOCK_AUDIO__", // Using fake file
+                            "n": 1,
+                            "size": "1024x1024"
+                        },
+                        '/v1/videos/{video_id}/remix': {
+                            "prompt": "Make it in style of 1920s",
+                            "duration": 5
+                        },
+                        '/v1/videos/{video_id}/content': {}, // GET request (No Body)
+                        '/v1/moderations': {
+                            "input": "I want to kill them."
+                        }
+                    },
+                    'anthropic': {            '/v1/messages': {
                 "model": "claude-3-opus-20240229",
                 "max_tokens": 1024,
                 "messages": [
