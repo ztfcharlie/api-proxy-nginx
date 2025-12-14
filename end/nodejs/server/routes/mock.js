@@ -113,6 +113,20 @@ const handleOpenAIRequest = async (req, res) => {
         });
     }
 
+    // 1.5.1 Video Remix (Sora)
+    if (path.includes('/remix')) {
+        return res.json({
+            id: "vid_" + uuidv4(),
+            object: "video",
+            model: "sora-2",
+            status: "queued",
+            created: Math.floor(Date.now() / 1000),
+            size: "1280x720",
+            seconds: "8", // OpenAI returns string
+            remixed_from_video_id: "vid_original_mock"
+        });
+    }
+
     // 1.5 Video Generations (Sora)
     if (path.includes('/video/') || path.includes('/videos')) {
         return res.json({
