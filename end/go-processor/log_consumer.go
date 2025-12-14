@@ -28,13 +28,16 @@ type LogMetadata struct {
 	ClientToken          string      `json:"client_token"`
 	KeyFilename          string      `json:"key_filename"` // Channel ID
 	ModelName            string      `json:"model_name"`
+	Method               string      `json:"method"`       // [Added]
 	Status               int         `json:"status"`
 	UpstreamResponseTime interface{} `json:"upstream_response_time"`
 	RequestTime          interface{} `json:"request_time"`
 	IP                   string      `json:"ip"`
 	UserAgent            string      `json:"user_agent"`
 	URI                  string      `json:"uri"`
-	ContentType          string      `json:"content_type"` // [Added]
+	ContentType          string      `json:"content_type"`
+	InternalPoll         string      `json:"internal_poll"`
+	IsPoll               bool        `json:"is_poll"` 
 }
 
 // Helper to safe convert interface to float64
@@ -270,35 +273,34 @@ func (lc *LogConsumer) processBatch(ctx context.Context, msgs []redis.XMessage) 
 			}
 		}
 
-		// [Added] Check for Async Task Completion (Polling Response)
-		taskStatus, taskUpstreamID, _ := lc.engine.CheckTaskStatus(meta.ModelName, []byte(resBodyRaw))
-		if taskStatus != "" && taskUpstreamID != "" {
-			// Update Async Task Table ATOMICALLY
-			// Only update if status is not already final
-			res, err := lc.db.ExecContext(ctx, 
-				"UPDATE sys_async_tasks SET status = ?, response_json = ?, updated_at = NOW() WHERE upstream_task_id = ? AND status IN ('PENDING', 'PROCESSING')", 
-				taskStatus, limitString(resBodyRaw, 2000), taskUpstreamID)
-				
-			if err != nil {
-				log.Printf("[WARN] Failed to update task status for %s: %v", taskUpstreamID, err)
-			} else {
-				rowsAffected, _ := res.RowsAffected()
-				// Only refund if WE were the ones who transitioned the state
-				if rowsAffected > 0 && taskStatus == "FAILED" {
-					lc.processRefund(ctx, taskUpstreamID)
-				}
-			}
-		}
-
-		// [Optimization] Do not log polling requests to DB to avoid clutter
-		if taskStatus != "" && usage.Cost == 0 {
-			ackIDs = append(ackIDs, msg.ID)
-			continue // Skip further processing for this message
-		}
-
-		// [Added] Real-time Log Stream (Frontend Debugging)
-		if os.Getenv("ENABLE_DEBUG_STREAM") == "true" {
-			go func(m LogMetadata, u billing.Usage, rid string, cid int) {
+				                                // [Logic] Handle Async Task Polling Results
+				                                // If this is a polling request (identified by Nginx), we process the result but DO NOT log it to DB.
+				                                if meta.IsPoll && meta.Status == 200 {
+				                                    taskStatus, taskUpstreamID, _ := lc.engine.CheckTaskStatus(meta.ModelName, []byte(resBodyRaw))
+				                                    if taskStatus != "" && taskUpstreamID != "" {				                        // Update Async Task Table ATOMICALLY
+				                        res, err := lc.db.ExecContext(ctx, 
+				                            "UPDATE sys_async_tasks SET status = ?, response_json = ?, updated_at = NOW() WHERE upstream_task_id = ? AND status IN ('PENDING', 'PROCESSING')", 
+				                            taskStatus, limitString(resBodyRaw, 2000), taskUpstreamID)
+				                            
+				                        if err != nil {
+				                            log.Printf("[WARN] Failed to update task status for %s: %v", taskUpstreamID, err)
+				                        } else {
+				                            rowsAffected, _ := res.RowsAffected()
+				                            if rowsAffected > 0 && taskStatus == "FAILED" {
+				                                lc.processRefund(ctx, taskUpstreamID)
+				                            }
+				                        }
+				                    }
+				                }
+				                
+				                // [Optimization] Do not log polling requests to DB (Internal or recognized poll)
+				                // If this is a polling request, or an internal poll, skip logging.
+				                if meta.InternalPoll == "true" || (isPoll && usage.Cost == 0) {
+				                    ackIDs = append(ackIDs, msg.ID)
+				                    continue
+				                }
+				        
+				                // [Added] Real-time Log Stream (Frontend Debugging)		if os.Getenv("ENABLE_DEBUG_STREAM") == "true" {			go func(m LogMetadata, u billing.Usage, rid string, cid int) {
 				payload := fmt.Sprintf(`{"ts":"%s", "source":"go-billing", "level":"info", "msg":"Processed Request: %s (Status: %d, Model: %s, Cost: %.6f, Tokens: %d, Images: %d)", "meta": {"req_id": "%s", "channel_id": %d}}`,
 					time.Now().Format(time.RFC3339),
 					rid,

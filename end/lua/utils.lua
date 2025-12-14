@@ -129,7 +129,9 @@ function _M.log_request()
         ip = ngx.var.remote_addr,
         user_agent = ngx.var.http_user_agent,
         content_type = ngx.var.content_type, -- [Added] for multipart parsing
-        request_id = ngx.var.my_request_id or ngx.var.request_id
+        request_id = ngx.var.my_request_id or ngx.var.request_id,
+        internal_poll = ngx.req.get_headers()["X-Internal-Poll"],
+        is_poll = ngx.ctx.is_poll -- [Added] Flag from auth_manager
     }
 
     -- Request Body

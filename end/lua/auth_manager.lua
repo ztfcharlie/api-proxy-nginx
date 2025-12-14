@@ -261,6 +261,7 @@ function _M.authenticate_client()
     end
 
     if task_id then
+        ngx.ctx.is_poll = true -- [Added] Mark as poll request for LogConsumer
         utils.publish_debug_log("info", "Detected Async Query for Task ID: " .. task_id)
         
         local route_key = "oauth2:task_route:" .. task_id
