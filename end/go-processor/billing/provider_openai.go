@@ -66,10 +66,10 @@ func (s *OpenAIProvider) Calculate(model string, reqBody, resBody []byte, conten
        (strings.Contains(contentType, "multipart/form-data") && !strings.Contains(model, "whisper")) {
 		
 		type genReq struct {
-			N        int    `json:"n"`
-			Duration int    `json:"duration"`
-			Quality  string `json:"quality"`
-			Size     string `json:"size"`
+			N       int    `json:"n"`
+			Seconds int    `json:"seconds"`
+			Quality string `json:"quality"`
+			Size    string `json:"size"`
 		}
 		var req genReq
 		// If JSON
@@ -89,16 +89,16 @@ func (s *OpenAIProvider) Calculate(model string, reqBody, resBody []byte, conten
 			
 			u.Images = count * multiplier
 
-			if req.Duration > 0 {
-				u.VideoSeconds = float64(req.Duration)
+			if req.Seconds > 0 {
+				u.VideoSeconds = float64(req.Seconds)
 			} else if strings.Contains(model, "sora") {
-				u.VideoSeconds = 8.0 
+				u.VideoSeconds = 4.0 // Default to 4s for Sora
 			}
 		} else {
 			// Multipart or Parse Fail -> Default to 1 generation
 			u.Images = 1
 			if strings.Contains(model, "sora") {
-				u.VideoSeconds = 8.0
+				u.VideoSeconds = 4.0
 			}
 		}
 		return u, nil
@@ -158,14 +158,28 @@ func (s *OpenAIProvider) estimateTokens(model string, reqBody, resBody []byte, i
 			u.PromptTokens = CountTextToken(input, model)
 		}
 	} else if inputArr, ok := req["input"].([]interface{}); ok {
-		// Embedding (Array of strings)
-		for _, item := range inputArr {
-			if s, ok := item.(string); ok {
-				if strings.Contains(model, "tts") {
-					u.PromptTokens += len([]rune(s))
-				} else {
-					u.PromptTokens += CountTextToken(s, model)
+		// Embedding (Array of strings) OR Responses (Array of Messages)
+		if len(inputArr) > 0 {
+			if _, isString := inputArr[0].(string); isString {
+				// Embedding: ["text1", "text2"]
+				for _, item := range inputArr {
+					if s, ok := item.(string); ok {
+						if strings.Contains(model, "tts") {
+							u.PromptTokens += len([]rune(s))
+						} else {
+							u.PromptTokens += CountTextToken(s, model)
+						}
+					}
 				}
+			} else if _, isMap := inputArr[0].(map[string]interface{}); isMap {
+				// Responses: [{"role":...}, ...]
+				msgs := make([]map[string]interface{}, len(inputArr))
+				for i, item := range inputArr {
+					if m, ok := item.(map[string]interface{}); ok {
+						msgs[i] = m
+					}
+				}
+				u.PromptTokens = CountMessageTokens(msgs, model)
 			}
 		}
 	} else if prompt, ok := req["prompt"].(string); ok {

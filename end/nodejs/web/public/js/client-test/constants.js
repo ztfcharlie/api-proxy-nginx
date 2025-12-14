@@ -20,14 +20,12 @@
             '/v1/embeddings',
             '/v1/images/generations',
             '/v1/audio/speech',
-            '/v1/audio/transcriptions',
+                    '/v1/audio/transcriptions',
                     '/v1/audio/translations',
-                    '/v1/audio/remix',
                     '/v1/video/generations',
                     '/v1/videos', // New standard path
                     '/v1/images/edits',
-                    '/v1/images/variations',
-                    '/v1/videos/{video_id}/remix',
+                    '/v1/images/variations',                    '/v1/videos/{video_id}/remix',
                     '/v1/videos/{video_id}/content',
                     '/v1/moderations'
                 ],
@@ -80,27 +78,22 @@
                 "file": "__MOCK_AUDIO__",
                 "model": "whisper-1"
             },
-            '/v1/audio/translations': {
-                "file": "__MOCK_AUDIO__",
-                "model": "whisper-1"
-            },
-            '/v1/audio/remix': {
-                "__FORM_DATA__": true,
-                "model": "suno-v3",
-                "prompt": "Make it jazz",
-                "audio_file": "__MOCK_AUDIO__"
-            },
-            '/v1/video/generations': {
-                "model": "sora-2",
-                "prompt": "A stylish woman walks down a Tokyo street...",
-                            "size": "1280x720",
-                            "quality": "standard"
-                        },
-                        '/v1/videos': {
-                            "model": "sora-2",
-                            "prompt": "A drone shot of a futuristic city",
-                            "size": "1920x1080"
-                        },
+                    '/v1/audio/translations': {
+                        "file": "__MOCK_AUDIO__",
+                        "model": "whisper-1"
+                    },
+                            '/v1/video/generations': {
+                                "model": "sora-2",
+                                "prompt": "A stylish woman walks down a Tokyo street...",
+                                "size": "1280x720",
+                                "seconds": 4
+                            },
+                            '/v1/videos': {
+                                "model": "sora-2",
+                                "prompt": "A drone shot of a futuristic city",
+                                "size": "1920x1080",
+                                "seconds": 4
+                            },
                         '/v1/images/edits': {
                             "__FORM_DATA__": true,
                             "image": "__MOCK_AUDIO__", // Reusing base64 file injection for simplicity

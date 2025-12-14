@@ -81,17 +81,6 @@ const handleOpenAIRequest = async (req, res) => {
         });
     }
 
-    // 1.3.2 Audio Remix (Suno/Custom)
-    if (path.includes('/audio/remix')) {
-        return res.json({
-            id: "remix_" + uuidv4(),
-            object: "audio.remix",
-            created: Math.floor(Date.now() / 1000),
-            status: "submitted",
-            url: "https://via.placeholder.com/500x100.png?text=Mock+Audio+Waveform"
-        });
-    }
-
     // 1.4 Legacy Completions
     // Note: /chat/completions also contains 'completions', so check for 'chat' exclusion
     if (path.includes('/completions') && !path.includes('/chat')) {
