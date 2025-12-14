@@ -158,6 +158,9 @@ end
 
 -- 核心认证逻辑
 function _M.authenticate_client()
+    -- [Debug] Log entry
+    utils.publish_debug_log("info", "Auth Check URI: " .. ngx.var.uri)
+
     -- [Security] API 白名单检查
     local full_proxy = os.getenv("OPENAI_FULL_PROXY") == "true"
     local uri = ngx.var.uri
@@ -261,8 +264,10 @@ function _M.authenticate_client()
     end
 
     if task_id then
-        ngx.ctx.is_poll = true -- [Added] Mark as poll request for LogConsumer
         utils.publish_debug_log("info", "Detected Async Query for Task ID: " .. task_id)
+        
+        -- [Debug] Log routing
+        ngx.ctx.is_poll = true -- Mark for Go
         
         local route_key = "oauth2:task_route:" .. task_id
         local channel_id_str, _ = red:get(route_key)
@@ -281,6 +286,7 @@ function _M.authenticate_client()
         end
 
         if channel_id_str then
+            utils.publish_debug_log("info", "Route found: " .. channel_id_str)
             local ch_id = tonumber(channel_id_str)
             for _, r in ipairs(routes) do
                 if tonumber(r.channel_id) == ch_id then
@@ -293,11 +299,17 @@ function _M.authenticate_client()
                         target_real_token = rt
                         utils.publish_debug_log("info", "Sticky Route Hit: Channel " .. channel_id_str)
                     else
+                        utils.publish_debug_log("warn", "Sticky Route Token missing for channel " .. channel_id_str)
                         target_channel = nil 
                     end
                     break
                 end
             end
+            if not target_channel then
+                utils.publish_debug_log("warn", "Sticky Route Channel " .. channel_id_str .. " not in user allowed routes")
+            end
+        else
+            utils.publish_debug_log("warn", "No route found for task " .. task_id)
         end
     end
 
