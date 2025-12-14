@@ -145,7 +145,7 @@ func (lc *LogConsumer) publishDebug(level, msg string) {
 	if os.Getenv("ENABLE_DEBUG_STREAM") != "true" {
 		return
 	}
-	payload := fmt.Sprintf(`{"ts":"%s", "source":"go-consumer", "level":"%s", "msg":"%s"}`,
+	payload := fmt.Sprintf(`{"ts":"%s", "source":"go-consumer", "level":"%s", "msg":"%s"}`, 
 		time.Now().Format(time.RFC3339), level, strings.ReplaceAll(msg, "\"", "\\\""))
 	
 	go func() {
@@ -178,7 +178,7 @@ func (lc *LogConsumer) processBatch(ctx context.Context, msgs []redis.XMessage) 
 		}
 
 		// [Fix] Restore body extraction
-	reqBodyRaw, _ := values["req_body"].(string)
+		reqBodyRaw, _ := values["req_body"].(string)
 		resBodyRaw, _ := values["res_body"].(string)
 		
 		// 处理字段
@@ -287,7 +287,8 @@ func (lc *LogConsumer) processBatch(ctx context.Context, msgs []redis.XMessage) 
 					if err != nil {
 						log.Printf("[WARN] Failed to update task status for %s: %v", taskUpstreamID, err)
 					} else {
-						rowsAffected, _ := res.RowsAffected()
+					
+rowsAffected, _ := res.RowsAffected()
 						if rowsAffected > 0 && taskStatus == "FAILED" {
 							lc.processRefund(ctx, taskUpstreamID)
 						}
@@ -349,7 +350,7 @@ func (lc *LogConsumer) processBatch(ctx context.Context, msgs []redis.XMessage) 
 		}
 		
 		// [Fix] Safe type conversion
-	reqTime := toFloat64(meta.RequestTime)
+		reqTime := toFloat64(meta.RequestTime)
 		upTime := toFloat64(meta.UpstreamResponseTime)
 		
 		durationMs := int(reqTime * 1000)
@@ -541,7 +542,7 @@ func (lc *LogConsumer) processRefund(ctx context.Context, upstreamTaskID string)
 	
 	err := lc.db.QueryRowContext(ctx, 
 		"SELECT pre_cost, user_id, channel_id, request_id, token_key FROM sys_async_tasks WHERE upstream_task_id = ?", 
-		upsTreamTaskID).Scan(&preCost, &userID, &channelID, &reqID, &tokenKey)
+		upstreamTaskID).Scan(&preCost, &userID, &channelID, &reqID, &tokenKey)
 		
 	if err != nil {
 		log.Printf("[Refund] Failed to find task %s: %v", upstreamTaskID, err)
