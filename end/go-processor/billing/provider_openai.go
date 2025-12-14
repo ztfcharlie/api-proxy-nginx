@@ -88,141 +88,96 @@ func (s *OpenAIProvider) Calculate(model string, reqBody, resBody []byte, conten
 				if isLarge { multiplier += 1 }
 			}
 			
-			            			u.Images = count * multiplier
-			
-			            
-			
-			            			// Sora Dynamic Pricing
-			
-			            			if strings.Contains(model, "sora") {
-			
-			            				u.VideoSeconds = calculateSoraSeconds(req.Size, req.Seconds)
-			
-			            			}
-			
-			            		} else {
-			
-			            			// Multipart or Parse Fail -> Default to 1 generation
-			
-			            			u.Images = 1
-			
-			            			
-			
-			            			// Multipart: Check parsed fields for Sora params
-			
-			            			if strings.Contains(model, "sora") {
-			
-			            				// Check size from fields
-			
-			            				sizeVal := ""
-			
-			            				if val, ok := fields["size"]; ok { sizeVal = val }
-			
-			            				
-			
-			            				u.VideoSeconds = calculateSoraSeconds(sizeVal, seconds)
-			
-			            			}
-			
-			            		}
-			
-			            		return u, nil
-			
-			            	}
-			
-			            
-			
-			            	// 3. Text/Chat Handling (Standard + TTS + Embeddings + Responses)
-			
-			            	if len(resBody) == 0 {
-			
-			            		return u, nil
-			
-			            	}
-			
-			            
-			
-			            	// [Optimization] Try to read 'usage' from response first
-			
-			            	type respUsage struct {
-			
-			            		Usage struct {
-			
-			            			PromptTokens     int `json:"prompt_tokens"`
-			
-			            			CompletionTokens int `json:"completion_tokens"`
-			
-			            			TotalTokens      int `json:"total_tokens"`
-			
-			            		} `json:"usage"`
-			
-			            	}
-			
-			            	var ru respUsage
-			
-			            	// Only try if it looks like JSON
-			
-			            	if json.Unmarshal(resBody, &ru) == nil && ru.Usage.TotalTokens > 0 {
-			
-			            		u.PromptTokens = ru.Usage.PromptTokens
-			
-			            		u.CompletionTokens = ru.Usage.CompletionTokens
-			
-			            		u.TotalTokens = ru.Usage.TotalTokens
-			
-			            		return u, nil
-			
-			            	}
-			
-			            
-			
-			            	// Fallback: Estimate tokens locally
-			
-			            	bodyStr := string(resBody)
-			
-			            	isStream := strings.HasPrefix(strings.TrimSpace(bodyStr), "data:")
-			
-			            	
-			
-			            	return s.estimateTokens(model, reqBody, resBody, isStream)
-			
-			            }
-			
-			            
-			
-			            // calculateSoraSeconds determines the billable seconds based on duration and resolution multiplier
-			
-			            func calculateSoraSeconds(size string, seconds int) float64 {
-			
-			            	duration := 4.0
-			
-			            	if seconds > 0 {
-			
-			            		duration = float64(seconds)
-			
-			            	}
-			
-			            	
-			
-			            	multiplier := 1.0
-			
-			            	// 1080p (Pro) costs 5x base price ($0.50 vs $0.10)
-			
-			            	if size == "1024x1792" || size == "1792x1024" {
-			
-			            		multiplier = 5.0
-			
-			            	}
-			
-			            	
-			
-			            	return duration * multiplier
-			
-			            }
-			
-			            
-			
-			            func (s *OpenAIProvider) estimateTokens(model string, reqBody, resBody []byte, isStream bool) (Usage, error) {
+			u.Images = count * multiplier
+
+			// Sora Dynamic Pricing
+			if strings.Contains(model, "sora") {
+				u.VideoSeconds = calculateSoraSeconds(req.Size, req.Seconds)
+			}
+		} else {
+			// Multipart or Parse Fail -> Default to 1 generation
+			u.Images = 1
+			
+			// Try to parse multipart fields for Sora params
+			fields, err := ParseMultipartFields(reqBody, contentType)
+			if err == nil {
+				// Parse 'n'
+				if val, ok := fields["n"]; ok {
+					var n int
+					if _, err := fmt.Sscanf(val, "%d", &n); err == nil && n > 0 {
+						u.Images = n
+					}
+				}
+				
+				// Parse Sora specific fields
+				if strings.Contains(model, "sora") {
+					seconds := 0
+					if val, ok := fields["seconds"]; ok {
+						fmt.Sscanf(val, "%d", &seconds)
+					}
+					
+					sizeVal := ""
+					if val, ok := fields["size"]; ok { sizeVal = val }
+					
+					u.VideoSeconds = calculateSoraSeconds(sizeVal, seconds)
+				}
+			} else {
+				// If multipart parse fails, fallback to defaults
+				if strings.Contains(model, "sora") {
+					u.VideoSeconds = calculateSoraSeconds("", 0) // Default 4s
+				}
+			}
+		}
+		return u, nil
+	}
+
+	// 3. Text/Chat Handling (Standard + TTS + Embeddings + Responses)
+	if len(resBody) == 0 {
+		return u, nil
+	}
+
+	// [Optimization] Try to read 'usage' from response first
+	type respUsage struct {
+		Usage struct {
+			PromptTokens     int `json:"prompt_tokens"`
+			CompletionTokens int `json:"completion_tokens"`
+			TotalTokens      int `json:"total_tokens"`
+		} `json:"usage"`
+	}
+	var ru respUsage
+	// Only try if it looks like JSON
+	if json.Unmarshal(resBody, &ru) == nil && ru.Usage.TotalTokens > 0 {
+		u.PromptTokens = ru.Usage.PromptTokens
+		u.CompletionTokens = ru.Usage.CompletionTokens
+		u.TotalTokens = ru.Usage.TotalTokens
+		return u, nil
+	}
+
+	// Fallback: Estimate tokens locally
+	bodyStr := string(resBody)
+	isStream := strings.HasPrefix(strings.TrimSpace(bodyStr), "data:")
+	
+	return s.estimateTokens(model, reqBody, resBody, isStream)
+}
+
+// calculateSoraSeconds determines the billable seconds based on duration and resolution multiplier
+func calculateSoraSeconds(size string, seconds int) float64 {
+	duration := 4.0
+	if seconds > 0 {
+		duration = float64(seconds)
+	}
+	
+	multiplier := 1.0
+	// 1080p (Pro) costs 5x base price ($0.50 vs $0.10)
+	// Base is 720p (default)
+	if size == "1024x1792" || size == "1792x1024" || size == "1920x1080" || size == "1080x1920" {
+		multiplier = 5.0
+	}
+	
+	return duration * multiplier
+}
+
+func (s *OpenAIProvider) estimateTokens(model string, reqBody, resBody []byte, isStream bool) (Usage, error) {
 	var u Usage
 	
 	// Generic Request Parser
