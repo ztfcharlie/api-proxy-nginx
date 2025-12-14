@@ -197,7 +197,7 @@ CREATE TABLE IF NOT EXISTS sys_async_tasks (
     upstream_task_id VARCHAR(128) NOT NULL,
     pre_cost DECIMAL(20, 8) DEFAULT 0,
     status VARCHAR(20) DEFAULT 'PENDING',
-    token_key VARCHAR(100) DEFAULT '',
+    token_key VARCHAR(255) DEFAULT '',
     response_json TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
