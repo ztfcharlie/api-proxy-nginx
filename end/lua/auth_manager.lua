@@ -1,5 +1,4 @@
 -- auth_manager.lua - 智能路由与限流引擎
--- 负责 Token 验证、渠道筛选、负载均衡和上游主机解析
 local redis = require "resty.redis"
 local cjson = require "cjson"
 local utils = require "utils"
@@ -8,16 +7,15 @@ local config = require "config"
 local _M = {}
 local KEY_PREFIX = "oauth2:"
 
--- [Added] 异步任务查询指纹库 (用于 Sticky Routing)
+-- [Added] 异步任务查询指纹库
 local QUERY_PATTERNS = {
     { pattern = "/suno/v1/generation/([^/]+)$", type = "suno" },
     { pattern = "/mj/task/([^/]+)/fetch$",      type = "mj" },
     { pattern = "/v1/video/status/([^/]+)$",    type = "luma" },
-    { pattern = "/v1/videos/([^/]+)$",          type = "sora" } // [Added]
+    { pattern = "/v1/videos/([^/]+)$",          type = "sora" } -- [Added]
 }
 
 -- [Added] OpenAI 兼容接口白名单 (用于过滤无法计费的接口如 Batch/Assistants)
--- 仅当 OPENAI_FULL_PROXY=false 时生效
 local OPENAI_WHITELIST = {
     "^/v1/chat/completions",
     "^/v1/completions",
@@ -59,12 +57,10 @@ local function get_redis_connection()
     return red
 end
 
--- 检查 RPM 限流 (使用 Redis Lua 脚本保证原子性)
--- 返回: 1 (允许), 0 (拒绝)
+-- 检查 RPM 限流
 local function check_rate_limit(red, channel_id, model_name, limit)
-    if not limit or limit <= 0 then return 1 end -- 无限制
+    if not limit or limit <= 0 then return 1 end 
 
-    -- Key 格式: ratelimit:channel:{id}:model:{model}:{minute}
     local time_key = os.date("%Y%m%d%H%M")
     local key = KEY_PREFIX .. "ratelimit:channel:" .. channel_id .. ":model:" .. model_name .. ":" .. time_key
     
@@ -83,14 +79,13 @@ local function check_rate_limit(red, channel_id, model_name, limit)
     local res, err = red:eval(script, 1, key, limit, 65)
     if not res then
         ngx.log(ngx.ERR, "Rate limit check failed: ", err)
-        return 1 -- Fail Open (Redis 挂了放行)
+        return 1 
     end
     
     return res
 end
 
--- 加权随机选择 (Weighted Shuffle)
--- 根据渠道权重随机打乱列表，用于负载均衡
+-- 加权随机选择
 local function weighted_shuffle(routes)
     local weighted_list = {}
     local total_weight = 0
@@ -136,8 +131,7 @@ local function weighted_shuffle(routes)
     return result
 end
 
--- 获取渠道支持的模型列表 (带 L1 缓存)
--- 用于鉴权阶段检查该渠道是否支持用户请求的模型
+-- 获取渠道支持的模型列表 (带缓存)
 local function get_channel_models(red, channel_id)
     local cache = ngx.shared.token_cache
     local key = "ch_models:" .. channel_id
@@ -158,15 +152,13 @@ local function get_channel_models(red, channel_id)
     end
     
     local models = data.models_config
-    cache:set(key, cjson.encode(models), 60) -- 缓存 60 秒
+    cache:set(key, cjson.encode(models), 60) -- Cache for 60s
     return models
 end
 
--- 核心认证逻辑 (Access Phase)
+-- 核心认证逻辑
 function _M.authenticate_client()
     -- [Security] API 白名单检查
-    -- 仅针对 /v1/ 路径进行检查，拦截无法计费的接口 (如 Batch, Assistants, Files)
-    -- 如果 OPENAI_FULL_PROXY=true，则跳过此检查 (全权代理模式)
     local full_proxy = os.getenv("OPENAI_FULL_PROXY") == "true"
     local uri = ngx.var.uri
     
@@ -184,25 +176,22 @@ function _M.authenticate_client()
         end
     end
 
-    -- 提取用户 Token (Bearer Token)
     local client_token, err = utils.extract_client_token()
     if not client_token then
         utils.error_response(401, "Missing Authorization header")
         return nil
     end
     
-    -- [Security] 提取请求的模型名称 (Model Name)
-    -- 用于后续的渠道筛选和计费日志
+    -- [Security] Extract Requested Model
     local requested_model = utils.extract_model_name(uri)
     if not requested_model then requested_model = "default" end
     
-    -- 将模型名暴露给 Nginx 变量，供 Log Phase 使用
+    -- Expose model name for logging
     ngx.var.model_name = requested_model
 
     utils.publish_debug_log("info", "Processing request: " .. uri .. " Model: " .. requested_model)
 
-    -- L1 Cache (本地内存缓存)
-    -- 缓存 Key 必须包含 Token 和 Model，因为同一个 Token 请求不同 Model 可能走不同渠道
+    -- L1 Cache
     local token_cache = ngx.shared.token_cache
     local l1_cache_key = "auth:" .. client_token .. ":" .. requested_model 
     local cached_val = token_cache:get(l1_cache_key)
@@ -221,12 +210,12 @@ function _M.authenticate_client()
         return nil
     end
 
-    -- 1. 查 Token 信息 (从 Redis 获取路由列表)
+    -- 1. 查 Token (获取路由列表)
     local metadata = {}
     local routes = {}
     
     if string.sub(client_token, 1, 12) == "ya29.virtual" then
-        -- Vertex 虚拟 Token
+        -- Vertex
         local cache_key = KEY_PREFIX .. "vtoken:" .. client_token
         local data_str, _ = red:get(cache_key)
         if not data_str or data_str == ngx.null then
@@ -240,7 +229,7 @@ function _M.authenticate_client()
             type = 'vertex'
         }}
     else
-        -- API Key (OpenAI 风格)
+        -- API Key
         local cache_key = KEY_PREFIX .. "apikey:" .. client_token
         local data_str, _ = red:get(cache_key)
         if not data_str or data_str == ngx.null then
@@ -257,13 +246,11 @@ function _M.authenticate_client()
         return nil
     end
 
-    -- 2. 路由选择 (Routing Phase)
+    -- 2. 路由选择 (Routing)
     local target_channel = nil
     local target_real_token = nil
 
-    -- [Sticky Route Check] 异步任务粘滞路由
-    -- 检查是否是查询异步任务结果的请求 (如 /suno/fetch/ID)
-    -- 如果是，必须路由到当初提交任务的那个渠道
+    -- [Sticky Route Check]
     local task_id = nil
     for _, p in ipairs(QUERY_PATTERNS) do
         local m = ngx.var.uri:match(p.pattern)
@@ -279,7 +266,7 @@ function _M.authenticate_client()
         local route_key = "oauth2:task_route:" .. task_id
         local channel_id_str, _ = red:get(route_key)
         
-        -- 如果 Redis 没查到，尝试回源查 MySQL (Node.js 内部接口)
+        -- Fallback to Internal DB
         if not channel_id_str or channel_id_str == ngx.null then
             utils.publish_debug_log("warn", "Route cache miss, checking internal DB...")
             local res = ngx.location.capture("/api/internal/task-route", {
@@ -294,7 +281,6 @@ function _M.authenticate_client()
 
         if channel_id_str then
             local ch_id = tonumber(channel_id_str)
-            -- 在用户允许的 Routes 里查找这个 Channel ID
             for _, r in ipairs(routes) do
                 if tonumber(r.channel_id) == ch_id then
                     target_channel = r
@@ -306,7 +292,7 @@ function _M.authenticate_client()
                         target_real_token = rt
                         utils.publish_debug_log("info", "Sticky Route Hit: Channel " .. channel_id_str)
                     else
-                        target_channel = nil -- Token 丢失，无法路由
+                        target_channel = nil 
                     end
                     break
                 end
@@ -314,50 +300,39 @@ function _M.authenticate_client()
         end
     end
 
-    -- [Smart Route Check] 智能路由 (如果 Sticky 没命中)
+    -- [Smart Route Check] (如果 Sticky 没命中)
     if not target_channel then
-        -- [Security] 模型支持检查 (Model Support Check)
-        -- 遍历所有可用渠道，只保留支持当前模型的渠道
+        -- [Security] Filter routes by Model Support
         local candidates = {}
         for _, r in ipairs(routes) do
             local models = get_channel_models(red, r.channel_id)
             if models then
-                -- 检查模型是否在允许列表中，或者是否有 default 通配符
                 if models[requested_model] or models["default"] then
                     table.insert(candidates, r)
                 end
             elseif r.type == "mock" then
-                 -- Mock 渠道无条件放行
                  table.insert(candidates, r)
             end
         end
         
-        -- 如果没有一个渠道支持该模型
         if #candidates == 0 then
              utils.error_response(400, "Model '" .. requested_model .. "' not supported by any available channel")
              return nil
         end
 
-        -- 在筛选后的候选列表中进行加权随机
         candidates = weighted_shuffle(candidates)
         
-        -- 依次尝试候选渠道 (检查 RPM，获取 Real Token)
         for _, route in ipairs(candidates) do
-            -- 检查 RPM 限流
             local passed = check_rate_limit(red, route.channel_id, "global", route.rpm_limit)
             if passed == 1 then
-                -- 获取上游真实 Token
                 local rt = nil
                 
                 if route.type == "mock" then
                     rt = "mock-token"
                 elseif route.type == "vertex" then
-                    -- Vertex Token 存储在 Redis 的 real_token:{id} 中
                     local rt_key = "real_token:" .. route.channel_id
                     rt, _ = red:get(rt_key)
                 else
-                    -- API Key 类型 (OpenAI/Claude等)
-                    -- 从 Redis 的 Channel 配置中直接读取 Key
                     local ch_key = "oauth2:channel:" .. route.channel_id
                     local ch_data_str, _ = red:get(ch_key)
                     if ch_data_str and ch_data_str ~= ngx.null then
@@ -374,14 +349,13 @@ function _M.authenticate_client()
                     target_channel = route
                     target_real_token = rt
                     utils.publish_debug_log("info", "Selected Channel ID: " .. route.channel_id .. " (" .. route.type .. ")")
-                    break -- 找到可用渠道，跳出循环
+                    break 
                 end
             end
         end
     end
 
     if not target_channel then
-        -- [Global Mock Override] 兜底 Mock 模式
         if os.getenv("ENABLE_MOCK_MODE") == "true" then
             if config.should_log("info") then
                 ngx.log(ngx.WARN, "[MOCK] No valid upstream found, but Mock Mode is ON. Using fake channel.")
@@ -398,26 +372,23 @@ function _M.authenticate_client()
         end
     end
 
-    -- 3. 构造最终 Metadata
     metadata.channel_id = target_channel.channel_id
     metadata.channel_type = target_channel.type
     metadata.models_config = target_channel.models_config
     
-    -- 4. 释放 Redis 并写入 L1 本地缓存
     red:set_keepalive(10000, 100)
     
     local l1_val = cjson.encode({
         real_token = target_real_token,
         metadata = metadata
     })
-    token_cache:set(l1_cache_key, l1_val, 5) -- 缓存 5 秒
+    token_cache:set(l1_cache_key, l1_val, 5)
 
     return client_token, target_real_token, metadata
 end
 
--- 获取 API 主机地址
+-- 获取 API 主机
 function _M.get_api_host(metadata, model_name)
-    -- [Global Mock Override]
     if os.getenv("ENABLE_MOCK_MODE") == "true" then
         return "api-proxy-nodejs:8889"
     end
@@ -431,7 +402,6 @@ function _M.get_api_host(metadata, model_name)
     if type == "azure" then
         if metadata.extra_config and metadata.extra_config.endpoint then
             local host = metadata.extra_config.endpoint
-            -- 移除协议前缀
             host = string.gsub(host, "https://", "")
             host = string.gsub(host, "http://", "")
             if string.sub(host, -1) == "/" then host = string.sub(host, 1, -2) end
