@@ -290,6 +290,12 @@ func (lc *LogConsumer) processBatch(ctx context.Context, msgs []redis.XMessage) 
 			}
 		}
 
+		// [Optimization] Do not log polling requests to DB to avoid clutter
+		if taskStatus != "" && usage.Cost == 0 {
+			ackIDs = append(ackIDs, msg.ID)
+			continue // Skip further processing for this message
+		}
+
 		// [Added] Real-time Log Stream (Frontend Debugging)
 		if os.Getenv("ENABLE_DEBUG_STREAM") == "true" {
 			go func(m LogMetadata, u billing.Usage, rid string, cid int) {
