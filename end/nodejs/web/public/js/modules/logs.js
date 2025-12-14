@@ -21,10 +21,17 @@ window.LogViewer = ({ setNotify }) => {
             if (filterStatus) params.status = filterStatus;
 
             const res = await window.api.logs.list(params);
-            setLogs(res.data.data || []);
-            setTotal(res.data.pagination.total);
+            console.log("Logs API Response:", res.data); // [Debug]
+            
+            const list = res.data && Array.isArray(res.data.data) ? res.data.data : [];
+            setLogs(list);
+            
+            if (res.data && res.data.pagination) {
+                setTotal(res.data.pagination.total);
+            }
             setPage(p);
         } catch (e) {
+            console.error("Load logs error:", e);
             setNotify({ msg: 'Failed to load logs', type: 'error' });
         } finally {
             setLoading(false);
