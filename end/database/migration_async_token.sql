@@ -1,1 +1,1 @@
-ALTER TABLE sys_async_tasks ADD COLUMN IF NOT EXISTS token_key VARCHAR(100) DEFAULT '';
+ALTER TABLE sys_async_tasks ADD COLUMN token_key VARCHAR(100) DEFAULT '';
