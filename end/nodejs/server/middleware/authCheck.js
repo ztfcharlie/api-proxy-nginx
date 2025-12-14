@@ -21,6 +21,25 @@ const authenticate = (req, res, next) => {
     try {
         const user = jwt.verify(token, JWT_SECRET);
         req.user = user; // { id, username, role }
+
+        // [Sliding Expiration] Automatically renew token if close to expiry
+        const now = Math.floor(Date.now() / 1000);
+        if (user.exp) {
+            const timeLeft = user.exp - now;
+            // If less than 3 days left (assuming 7d life), issue a new one
+            const RENEW_THRESHOLD = 3 * 24 * 3600; 
+            
+            if (timeLeft < RENEW_THRESHOLD) {
+                const newToken = jwt.sign(
+                    { id: user.id, username: user.username, role: user.role },
+                    JWT_SECRET,
+                    { expiresIn: '7d' }
+                );
+                res.setHeader('X-New-Token', newToken);
+                res.setHeader('Access-Control-Expose-Headers', 'X-New-Token');
+            }
+        }
+
         next();
     } catch (err) {
         logger.warn(`[Auth] Invalid token: ${err.message}`);

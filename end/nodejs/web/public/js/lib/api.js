@@ -50,7 +50,15 @@ axios.interceptors.request.use(config => {
     return config;
 });
 
-axios.interceptors.response.use(response => response, error => {
+axios.interceptors.response.use(response => {
+    // [Sliding Expiration] Auto-update token if backend issued a new one
+    const newToken = response.headers['x-new-token'];
+    if (newToken) {
+        localStorage.setItem('token', newToken);
+        // console.log('Token silently renewed');
+    }
+    return response;
+}, error => {
     if (error.response) {
         // Handle Unauthorized (401) or Forbidden (403) with Invalid Token
         if (error.response.status === 401 || 
