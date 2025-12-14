@@ -49,8 +49,8 @@ function _M.error_response(status, message)
     -- [关键] 记录错误响应体到上下文，供 log_request 使用
     ngx.ctx.buffered_response = error_body
     
-    -- 尝试记录日志 (异步)
-    _M.log_request()
+    -- 尝试记录日志 (异步) - [Removed] Automatic logging in log_by_lua handles this
+    -- _M.log_request()
     
     ngx.say(error_body)
     ngx.exit(status)
