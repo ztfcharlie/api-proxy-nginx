@@ -26,7 +26,11 @@ func (m *AsyncTaskManager) Start(ctx context.Context) {
 	
 	// Poll every 10 seconds
 	ticker := time.NewTicker(10 * time.Second)
+	// Reaper every 5 minutes
+	reaper := time.NewTicker(5 * time.Minute)
+	
 	defer ticker.Stop()
+	defer reaper.Stop()
 
 	for {
 		select {
@@ -34,7 +38,46 @@ func (m *AsyncTaskManager) Start(ctx context.Context) {
 			return
 		case <-ticker.C:
 			m.processTasks(ctx)
+		case <-reaper.C:
+			m.reapTimeouts(ctx)
 		}
+	}
+}
+
+// [Added] Reaper for stuck tasks
+func (m *AsyncTaskManager) reapTimeouts(ctx context.Context) {
+	rows, err := m.db.QueryContext(ctx, `
+		SELECT id, request_id, user_id, channel_id, token_key, provider, upstream_task_id, pre_cost, created_at 
+		FROM sys_async_tasks 
+		WHERE status IN ('PENDING', 'PROCESSING') 
+		AND created_at < DATE_SUB(NOW(), INTERVAL 30 MINUTE)
+		LIMIT 100
+	`)
+	if err != nil {
+		log.Printf("[Async] Failed to fetch timeouts: %v", err)
+		return
+	}
+	defer rows.Close()
+
+	count := 0
+	for rows.Next() {
+		var t Task
+		if err := rows.Scan(&t.ID, &t.ReqID, &t.UserID, &t.ChannelID, &t.TokenKey, &t.Provider, &t.UpstreamID, &t.PreCost, &t.CreatedAt); err != nil {
+			continue
+		}
+		
+		log.Printf("[Async] Reaping timeout task %s (ID: %d)", t.UpstreamID, t.ID)
+		
+		// Update status to TIMEOUT
+		m.updateTaskStatus(ctx, t.ID, "TIMEOUT", "Task processing timed out")
+		
+		// Trigger Refund
+		m.processRefund(ctx, t)
+		count++
+	}
+	
+	if count > 0 {
+		log.Printf("[Async] Reaped %d timed-out tasks", count)
 	}
 }
 

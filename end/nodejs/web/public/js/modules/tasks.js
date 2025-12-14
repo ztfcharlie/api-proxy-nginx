@@ -47,8 +47,11 @@ window.TaskManager = ({ setNotify }) => {
                         <option value="SUCCEEDED">Succeeded</option>
                         <option value="FAILED">Failed</option>
                     </select>
-                    <button onClick={() => load(1)} className="px-3 py-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200">
+                    <button onClick={() => load(1)} className="px-3 py-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200" title="Search">
                         <i className={`fas fa-search ${loading ? 'fa-spin' : ''}`}></i>
+                    </button>
+                    <button onClick={() => load(1)} className="px-4 py-2 border border-gray-300 rounded-lg text-gray-600 hover:bg-gray-50 ml-2" title="Refresh">
+                        <i className="fas fa-sync-alt mr-2"></i>Refresh
                     </button>
                 </div>
             </div>
