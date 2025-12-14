@@ -158,7 +158,8 @@ end
 -- 核心认证逻辑
 function _M.authenticate_client()
     -- [Security] API 白名单检查
-    -- ... (existing whitelist check) ...
+    -- 仅针对 /v1/ 路径进行检查，拦截无法计费的接口 (如 Batch, Assistants, Files)
+    -- 如果 OPENAI_FULL_PROXY=true，则跳过此检查 (全权代理模式)
     local full_proxy = os.getenv("OPENAI_FULL_PROXY") == "true"
     local uri = ngx.var.uri
     
@@ -192,20 +193,8 @@ function _M.authenticate_client()
     utils.publish_debug_log("info", "Processing request: " .. uri .. " Model: " .. requested_model)
 
     -- L1 Cache
-    -- ... (existing L1 cache logic) ...
-    -- Note: If we use L1 cache, we skip model validation here because it was validated when cached?
-    -- Yes, cached_data.metadata implies a selected route.
-    -- But if the user changes the model in the request body but uses the same token?
-    -- The L1 cache key is "auth:" + token. It doesn't include model!
-    -- BUG ALERT: L1 Cache must include model name if routing depends on model.
-    -- OR, we must validate model even on L1 cache hit.
-    -- But L1 cache returns a *single* selected route (real_token).
-    -- If I request gpt-4, get cached route A. Then request dall-e-3, get cached route A. Route A might not support dall-e-3!
-    -- FIX: We should DISABLE L1 Cache for now, or include model in cache key.
-    -- Let's append model to cache key.
-    
     local token_cache = ngx.shared.token_cache
-    local l1_cache_key = "auth:" .. client_token .. ":" .. requested_model -- [Fixed]
+    local l1_cache_key = "auth:" .. client_token .. ":" .. requested_model 
     local cached_val = token_cache:get(l1_cache_key)
     
     if cached_val then
@@ -264,7 +253,6 @@ function _M.authenticate_client()
     local target_real_token = nil
 
     -- [Sticky Route Check]
-    -- ... (existing sticky logic) ...
     local task_id = nil
     for _, p in ipairs(QUERY_PATTERNS) do
         local m = ngx.var.uri:match(p.pattern)
@@ -297,13 +285,8 @@ function _M.authenticate_client()
             local ch_id = tonumber(channel_id_str)
             for _, r in ipairs(routes) do
                 if tonumber(r.channel_id) == ch_id then
-                    -- Sticky route doesn't strictly check model support because it's a fetch
-                    -- But strictly speaking, we should? No, fetch requests might not carry model.
-                    -- So we skip model check for Sticky Routes.
                     target_channel = r
-                    -- 需要在这里获取 real_token
                     local rt = nil
-                    -- 简单的从 Redis 获取 Real Token (Standard Logic)
                     local rt_key = "real_token:" .. r.channel_id
                     rt, _ = red:get(rt_key)
                     
@@ -355,8 +338,7 @@ function _M.authenticate_client()
                 if route.type == "mock" then
                     rt = "mock-token"
                 elseif route.type == "vertex" then
-                    -- Vertex Token 是动态的，已经存在 metadata 里了？不，那是 user token
-                    -- Real Token 存在 Redis: real_token:{channel_id}
+                    -- Vertex Token 是动态的
                     local rt_key = "real_token:" .. route.channel_id
                     rt, _ = red:get(rt_key)
                 else
@@ -368,7 +350,7 @@ function _M.authenticate_client()
                         if ch_data.key then
                             rt = ch_data.key
                         elseif ch_data.credentials then
-                             rt = ch_data.credentials -- string or obj
+                             rt = ch_data.credentials 
                         end
                     end
                 end
