@@ -24,8 +24,7 @@ local OPENAI_WHITELIST = {
     "^/v1/audio/speech",
     "^/v1/audio/transcriptions",
     "^/v1/audio/translations",
-    "^/v1/video/",
-    "^/v1/videos/",
+    "^/v1/videos",
     "^/v1/models"
 }
 
