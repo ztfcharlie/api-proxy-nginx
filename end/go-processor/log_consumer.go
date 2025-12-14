@@ -271,7 +271,7 @@ func (lc *LogConsumer) processBatch(ctx context.Context, msgs []redis.XMessage) 
 		}
 
 		// [Added] Check for Async Task Completion (Polling Response)
-		taskStatus, taskUpstreamID, taskErr := lc.engine.CheckTaskStatus(meta.ModelName, []byte(resBodyRaw))
+		taskStatus, taskUpstreamID, _ := lc.engine.CheckTaskStatus(meta.ModelName, []byte(resBodyRaw))
 		if taskStatus != "" && taskUpstreamID != "" {
 			// Update Async Task Table ATOMICALLY
 			// Only update if status is not already final
