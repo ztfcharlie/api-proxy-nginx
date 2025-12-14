@@ -36,7 +36,15 @@ const generateResponse = (model, content) => {
 const handleOpenAIRequest = async (req, res) => {
     await sleep(MOCK_DELAY);
     const path = req.path;
-    const model = req.body.model || "mock-gpt-4";
+    
+    // Infer model if missing (e.g. multipart request in mock server without multer)
+    let model = req.body.model;
+    if (!model) {
+        if (path.includes('/video')) model = "sora-2";
+        else if (path.includes('/audio')) model = "whisper-1";
+        else if (path.includes('/images')) model = "dall-e-3";
+        else model = "mock-gpt-4";
+    }
 
     // 1.1 Images
     if (path.includes('/images/') || path.includes('/images')) {
