@@ -62,10 +62,29 @@ func (s *OpenAIProvider) Calculate(model string, reqBody, resBody []byte, conten
 	}
 
 	// 2. Images (DALL-E) or Video (Sora) or Remix (Edits/Variations)
-	// If model is missing in multipart (e.g. edits), we assume it's an image/video operation if it's not whisper.
 	if strings.Contains(model, "dall-e") || strings.Contains(model, "sora") || 
        (strings.Contains(contentType, "multipart/form-data") && !strings.Contains(model, "whisper")) {
 		
+		// [Optimization] Try to read actual usage from Response first (Especially for Sora Remix)
+		var respSora struct {
+			Model   string      `json:"model"`
+			Size    string      `json:"size"`
+			Seconds interface{} `json:"seconds"` // OpenAI returns string "8", Mock might return int
+		}
+		if json.Unmarshal(resBody, &respSora) == nil && strings.Contains(respSora.Model, "sora") {
+			// Extract Seconds
+			sec := 0
+			if v, ok := respSora.Seconds.(float64); ok {
+				sec = int(v)
+			} else if v, ok := respSora.Seconds.(string); ok {
+				fmt.Sscanf(v, "%d", &sec)
+			}
+			
+			u.Images = 1
+			u.VideoSeconds = calculateSoraSeconds(respSora.Size, sec)
+			return u, nil
+		}
+
 		type genReq struct {
 			N       int    `json:"n"`
 			Seconds int    `json:"seconds"`

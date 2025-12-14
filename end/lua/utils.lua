@@ -326,6 +326,12 @@ function _M.extract_model_name(uri)
             end
         end
     end
+    
+    -- [Added] Sora Remix Fallback
+    -- /v1/videos/{id}/remix -> default to sora-2 if no model found in body
+    if uri:match("/v1/videos/.+/remix") then
+        return "sora-2"
+    end
 
     return "default"
 end
