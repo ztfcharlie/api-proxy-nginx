@@ -39,3 +39,7 @@ func (s *AzureProvider) Calculate(model string, reqBody, resBody []byte, content
 	
 	return usage, nil
 }
+
+func (s *AzureProvider) CheckTaskStatus(resBody []byte) (string, string, error) {
+	return s.base.CheckTaskStatus(resBody)
+}

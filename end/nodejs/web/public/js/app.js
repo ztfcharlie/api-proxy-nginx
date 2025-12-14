@@ -43,6 +43,7 @@ const App = () => {
         { id: 'tokens', label: 'Virtual Tokens', icon: 'fas fa-key' },
         { id: 'users', label: 'Users', icon: 'fas fa-users' },
         { id: 'logs', label: 'Request Logs', icon: 'fas fa-list-alt' },
+        { id: 'tasks', label: 'Async Tasks', icon: 'fas fa-tasks' }, // [Added]
         { id: 'live_logs', label: 'Live System Logs', icon: 'fas fa-terminal' },
         { id: 'log_files', label: 'Log Files', icon: 'fas fa-file-alt' },
         { id: 'jobs', label: 'Job Scheduler', icon: 'fas fa-clock' },

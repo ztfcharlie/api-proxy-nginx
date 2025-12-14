@@ -8,6 +8,7 @@ const modelRoutes = require('./models');
 const redisRoutes = require('./redis');
 const jobRoutes = require('./jobs');
 const logRoutes = require('./logs');
+const taskRoutes = require('./tasks'); // [Added]
 const systemRoutes = require('./system');
 const { authenticate, requireAdmin } = require('../../middleware/authCheck');
 
@@ -27,5 +28,6 @@ router.use('/system', requireAdmin, systemRoutes);
 
 // 普通用户可访问 (但内容受限)
 router.use('/logs', logRoutes);
+router.use('/tasks', taskRoutes); // [Added] Async Tasks
 
 module.exports = router;

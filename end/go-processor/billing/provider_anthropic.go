@@ -122,3 +122,7 @@ func (s *AnthropicProvider) Calculate(model string, reqBody, resBody []byte, con
 	u.TotalTokens = u.PromptTokens + u.CompletionTokens
 	return u, nil
 }
+
+func (s *AnthropicProvider) CheckTaskStatus(resBody []byte) (string, string, error) {
+	return "", "", nil
+}

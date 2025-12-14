@@ -300,4 +300,23 @@ router.post('/oauth2/token', async (req, res) => {
     });
 });
 
+// --- 6. Sora Status Mock ---
+router.get('/videos/:id', async (req, res) => {
+    await sleep(200);
+    const { id } = req.params;
+    
+    // Simulate Processing vs Succeeded based on ID or random
+    // Let's make it succeeded to close the loop
+    res.json({
+        id: id,
+        object: "video",
+        model: "sora-2",
+        status: "succeeded",
+        created_at: Math.floor(Date.now() / 1000),
+        output: {
+            url: "https://via.placeholder.com/1920x1080.mp4?text=Mock+Sora+Result"
+        }
+    });
+});
+
 module.exports = router;

@@ -83,6 +83,10 @@ func main() {
 		if err == nil {
 			lc := NewLogConsumer(rdb, lcDB)
 			go lc.Start(ctx)
+			
+			// [Added] Component F: Async Task Manager
+			asyncMgr := NewAsyncTaskManager(rdb, lcDB)
+			go asyncMgr.Start(ctx)
 		} else {
 			log.Printf("[ERROR] Failed to open DB for LogConsumer: %v", err)
 		}

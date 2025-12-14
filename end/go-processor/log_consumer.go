@@ -257,8 +257,8 @@ func (lc *LogConsumer) processBatch(ctx context.Context, msgs []redis.XMessage) 
 				taskID := extractUpstreamTaskID(provider, resBodyRaw)
 				if taskID != "" {
 					_, err := lc.db.ExecContext(ctx, 
-						"INSERT INTO sys_async_tasks (request_id, user_id, channel_id, provider, upstream_task_id, pre_cost, response_json) VALUES (?, ?, ?, ?, ?, ?, ?)",
-						reqID, userID, channelID, provider, taskID, usage.Cost, resBodyRaw)
+						"INSERT INTO sys_async_tasks (request_id, user_id, channel_id, token_key, provider, upstream_task_id, pre_cost, response_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+						reqID, userID, channelID, tokenKey, provider, taskID, usage.Cost, resBodyRaw)
 						
 					if err != nil {
 						log.Printf("[WARN] Failed to save async task: %v", err)
@@ -266,6 +266,26 @@ func (lc *LogConsumer) processBatch(ctx context.Context, msgs []redis.XMessage) 
 						lc.rdb.Set(ctx, fmt.Sprintf("oauth2:task_route:%s", taskID), channelID, 24*time.Hour)
 						lc.publishDebug("info", fmt.Sprintf("Async Task Created: %s (%s)", taskID, provider))
 					}
+				}
+			}
+		}
+
+		// [Added] Check for Async Task Completion (Polling Response)
+		taskStatus, taskUpstreamID, taskErr := lc.engine.CheckTaskStatus(meta.ModelName, []byte(resBodyRaw))
+		if taskStatus != "" && taskUpstreamID != "" {
+			// Update Async Task Table ATOMICALLY
+			// Only update if status is not already final
+			res, err := lc.db.ExecContext(ctx, 
+				"UPDATE sys_async_tasks SET status = ?, response_json = ?, updated_at = NOW() WHERE upstream_task_id = ? AND status IN ('PENDING', 'PROCESSING')", 
+				taskStatus, limitString(resBodyRaw, 2000), taskUpstreamID)
+				
+			if err != nil {
+				log.Printf("[WARN] Failed to update task status for %s: %v", taskUpstreamID, err)
+			} else {
+				rowsAffected, _ := res.RowsAffected()
+				// Only refund if WE were the ones who transitioned the state
+				if rowsAffected > 0 && taskStatus == "FAILED" {
+					lc.processRefund(ctx, taskUpstreamID)
 				}
 			}
 		}
@@ -362,6 +382,45 @@ func (lc *LogConsumer) processBatch(ctx context.Context, msgs []redis.XMessage) 
 	} else if len(ackIDs) > 0 {
 		lc.rdb.XAck(ctx, StreamKey, ConsumerGroup, ackIDs...)
 		lc.publishDebug("warn", "Batch contained only invalid data, skipped.")
+	}
+}
+
+func (lc *LogConsumer) processRefund(ctx context.Context, upstreamTaskID string) {
+	var preCost float64
+	var userID, channelID int
+	var reqID, tokenKey string
+	
+	err := lc.db.QueryRowContext(ctx, 
+		"SELECT pre_cost, user_id, channel_id, request_id, token_key FROM sys_async_tasks WHERE upstream_task_id = ?", 
+		upstreamTaskID).Scan(&preCost, &userID, &channelID, &reqID, &tokenKey)
+		
+	if err != nil {
+		log.Printf("[Refund] Failed to find task %s: %v", upstreamTaskID, err)
+		return
+	}
+	
+	if preCost > 0 {
+		log.Printf("[Refund] Processing refund of %.6f for task %s (ReqID: %s)", preCost, upstreamTaskID, reqID)
+		
+		// Fetch original model to ensure correct reporting
+		var originalModel string
+		if err := lc.db.QueryRowContext(ctx, "SELECT model FROM sys_request_logs WHERE request_id = ?", reqID).Scan(&originalModel); err != nil {
+			originalModel = "unknown-refund"
+		}
+
+		// Plan A: Negative Record (Red Flush)
+		refundReqID := "REFUND-" + reqID
+		refundReason := "Refund for task: " + upstreamTaskID
+		
+		_, err := lc.db.ExecContext(ctx, `
+			INSERT INTO sys_request_logs 
+			(request_id, user_id, channel_id, token_key, model, request_uri, status_code, duration_ms, cost, ip, user_agent, req_body, res_body, created_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+		`, refundReqID, userID, channelID, tokenKey, originalModel, "/sys/refund", 200, 0, -preCost, "127.0.0.1", "GoLogConsumer", refundReason, "Task Failed Refund")
+
+		if err != nil {
+			log.Printf("[Refund] Insert failed: %v", err)
+		}
 	}
 }
 

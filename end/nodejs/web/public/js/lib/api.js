@@ -34,6 +34,9 @@ window.api = {
     logs: {
         list: (params) => axios.get('/api/admin/logs', { params })
     },
+    tasks: {
+        list: (params) => axios.get('/api/admin/tasks', { params })
+    },
     jobs: {
         list: () => axios.get('/api/admin/jobs'),
         trigger: (name) => axios.post(`/api/admin/jobs/${name}/run`)

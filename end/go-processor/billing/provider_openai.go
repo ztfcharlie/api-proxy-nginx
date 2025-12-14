@@ -302,3 +302,35 @@ func (s *OpenAIProvider) estimateTokens(model string, reqBody, resBody []byte, i
 	u.TotalTokens = u.PromptTokens + u.CompletionTokens
 	return u, nil
 }
+
+// CheckTaskStatus checks for async task completion (Sora, etc.)
+func (s *OpenAIProvider) CheckTaskStatus(resBody []byte) (string, string, error) {
+	var resp struct {
+		ID     string `json:"id"`
+		Status string `json:"status"` // succeeded, failed, processing
+		Object string `json:"object"`
+		Error  struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	
+	if json.Unmarshal(resBody, &resp) != nil {
+		return "", "", nil
+	}
+
+	// Only care about video objects for now
+	isAsyncObj := strings.Contains(resp.Object, "video") || strings.Contains(resp.Object, "remix")
+	
+	if isAsyncObj && resp.ID != "" && resp.Status != "" {
+		if resp.Status == "failed" {
+			return "FAILED", resp.ID, fmt.Errorf(resp.Error.Message)
+		}
+		if resp.Status == "succeeded" || resp.Status == "completed" {
+			return "SUCCEEDED", resp.ID, nil
+		}
+		// processing / queued
+		return resp.Status, resp.ID, nil
+	}
+
+	return "", "", nil
+}

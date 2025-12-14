@@ -23,6 +23,10 @@ type Strategy interface {
 	// contentType: 用于解析 multipart (如音频上传)
 	// statusCode: HTTP 状态码 (失败不扣费)
 	Calculate(model string, reqBody, resBody []byte, contentType string, statusCode int) (Usage, error)
+
+	// CheckTaskStatus 检查响应体中的任务状态
+	// 返回: status (succeeded/failed/processing), upstreamID (确认 ID), error
+	CheckTaskStatus(resBody []byte) (status string, upstreamID string, err error)
 }
 
 // Shared Response Struct for OpenAI-compatible APIs
