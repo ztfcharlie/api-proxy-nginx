@@ -186,7 +186,7 @@ func (sm *SyncManager) ForceRun() {
 // [Added] syncModels 同步模型价格 (DB -> Redis)
 func (sm *SyncManager) syncModels(ctx context.Context) error {
 	// 1. 查询所有启用模型
-	rows, err := sm.db.Query("SELECT name, price_input, price_output, price_request, price_time, price_cache FROM sys_models WHERE status = 1")
+	rows, err := sm.db.Query("SELECT name, price_input, price_output, price_request, price_time, price_cache, is_async FROM sys_models WHERE status = 1")
 	if err != nil {
 		return err
 	}
@@ -197,8 +197,9 @@ func (sm *SyncManager) syncModels(ctx context.Context) error {
 	for rows.Next() {
 		var name string
 		var pInput, pOutput, pRequest, pTime, pCache sql.NullFloat64
+		var isAsync int
 		
-		if err := rows.Scan(&name, &pInput, &pOutput, &pRequest, &pTime, &pCache); err != nil {
+		if err := rows.Scan(&name, &pInput, &pOutput, &pRequest, &pTime, &pCache, &isAsync); err != nil {
 			log.Printf("[WARN] Scan model failed: %v", err)
 			continue
 		}
@@ -206,11 +207,12 @@ func (sm *SyncManager) syncModels(ctx context.Context) error {
 		// [Refactor] Store ALL price dimensions to support multi-mode channels
 		// We do NOT determine mode here. We store raw prices.
 		priceMap[name] = map[string]interface{}{
-			"input":   pInput.Float64,
-			"output":  pOutput.Float64,
-			"request": pRequest.Float64,
-			"time":    pTime.Float64,
-			"cache":   pCache.Float64, // [Added] Cache Price
+			"input":    pInput.Float64,
+			"output":   pOutput.Float64,
+			"request":  pRequest.Float64,
+			"time":     pTime.Float64,
+			"cache":    pCache.Float64,
+			"is_async": isAsync == 1, // [Fixed] Propagate async flag
 		}
 	}
 
