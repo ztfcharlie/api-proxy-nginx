@@ -65,6 +65,40 @@ func GetAudioDuration(data []byte, filename string) (float64, error) {
 	return 0, fmt.Errorf("unsupported audio format: %s", filename)
 }
 
+// [Added] Parse text fields from multipart body
+func ParseMultipartFields(reqBody []byte, contentType string) (map[string]string, error) {
+	mediaType, params, err := mime.ParseMediaType(contentType)
+	if err != nil || !strings.HasPrefix(mediaType, "multipart/") {
+		return nil, errors.New("invalid content type")
+	}
+
+	boundary, ok := params["boundary"]
+	if !ok {
+		return nil, errors.New("no boundary")
+	}
+
+	reader := multipart.NewReader(bytes.NewReader(reqBody), boundary)
+	fields := make(map[string]string)
+
+	for {
+		part, err := reader.NextPart()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return fields, nil // Return what we parsed so far
+		}
+
+		if part.FileName() == "" {
+			// Text field
+			val, _ := io.ReadAll(part)
+			fields[part.FormName()] = string(val)
+		}
+	}
+
+	return fields, nil
+}
+
 func getMp3Duration(data []byte) (float64, error) {
 	d := mp3.NewDecoder(bytes.NewReader(data))
 	var duration float64

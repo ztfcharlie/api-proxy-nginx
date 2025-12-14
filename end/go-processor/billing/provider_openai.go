@@ -95,9 +95,26 @@ func (s *OpenAIProvider) Calculate(model string, reqBody, resBody []byte, conten
 				u.VideoSeconds = 4.0 // Default to 4s for Sora
 			}
 		} else {
-			// Multipart or Parse Fail -> Default to 1 generation
-			u.Images = 1
-			if strings.Contains(model, "sora") {
+			// Multipart: Try to parse fields
+			fields, err := ParseMultipartFields(reqBody, contentType)
+			n := 1
+			seconds := 0
+			
+			if err == nil {
+				// Parse 'n'
+				if val, ok := fields["n"]; ok {
+					fmt.Sscanf(val, "%d", &n)
+				}
+				// Parse 'seconds'
+				if val, ok := fields["seconds"]; ok {
+					fmt.Sscanf(val, "%d", &seconds)
+				}
+			}
+			
+			u.Images = n
+			if seconds > 0 {
+				u.VideoSeconds = float64(seconds)
+			} else if strings.Contains(model, "sora") {
 				u.VideoSeconds = 4.0
 			}
 		}

@@ -285,8 +285,8 @@ function _M.extract_model_name(uri)
         if m then return m end
         
         -- 2. Multipart Format
-        -- Content-Disposition: form-data; name="model"\r\n\r\nwhisper-1\r\n
-        m = text:match('name="model".-\r\n\r\n([^\r\n]+)')
+        -- Robust match for model name (alphanumeric, dot, dash)
+        m = text:match('name="model".-[\r\n]+([%w%.%-]+)')
         if m then return m end
         
         return nil
