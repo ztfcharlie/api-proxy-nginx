@@ -138,11 +138,12 @@ function _M.log_request()
         content_type = ngx.var.content_type, -- [Added] for multipart parsing
         request_id = ngx.var.my_request_id or ngx.var.request_id,
         internal_poll = ngx.req.get_headers()["X-Internal-Poll"],
-        is_poll = ngx.ctx.is_poll -- [Added] Flag from auth_manager
+        is_poll = ngx.ctx.is_poll or (ngx.req.get_headers()["X-Is-Poll"] == "true") -- [Fix] Check header too
     }
 
     -- Request Body
     local req_body = ngx.req.get_body_data()
+
     if not req_body then
         local req_file = ngx.req.get_body_file()
         if req_file then 

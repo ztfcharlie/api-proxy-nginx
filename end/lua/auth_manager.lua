@@ -268,6 +268,7 @@ function _M.authenticate_client()
         
         -- [Debug] Log routing
         ngx.ctx.is_poll = true -- Mark for Go
+        ngx.req.set_header("X-Is-Poll", "true") -- [Fix] Use Header to pass flag to log phase securely
         
         local route_key = "oauth2:task_route:" .. task_id
         local channel_id_str, _ = red:get(route_key)
