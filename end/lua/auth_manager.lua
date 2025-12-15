@@ -292,10 +292,28 @@ function _M.authenticate_client()
                 -- utils.publish_debug_log("info", "Checking User Route: " .. tostring(r.channel_id)) -- [Debug Verbose]
                 if tonumber(r.channel_id) == ch_id then
                     target_channel = r
-                    utils.publish_debug_log("info", "Sticky Match Found!") -- [Debug]
+                    utils.publish_debug_log("info", "Sticky Match Found!") 
+                    
                     local rt = nil
-                    local rt_key = "real_token:" .. r.channel_id
-                    rt, _ = red:get(rt_key)
+                    
+                    if r.type == "mock" then
+                        rt = "mock-token"
+                    elseif r.type == "vertex" then
+                        local rt_key = KEY_PREFIX .. "real_token:" .. r.channel_id
+                        rt, _ = red:get(rt_key)
+                    else
+                        -- OpenAI / API Key 类型
+                        local ch_key = KEY_PREFIX .. "channel:" .. r.channel_id
+                        local ch_data_str, _ = red:get(ch_key)
+                        if ch_data_str and ch_data_str ~= ngx.null then
+                            local ch_data = cjson.decode(ch_data_str)
+                            if ch_data.key then 
+                                rt = ch_data.key 
+                            elseif ch_data.credentials then
+                                rt = ch_data.credentials
+                            end
+                        end
+                    end
                     
                     if rt and rt ~= ngx.null then
                         target_real_token = rt
