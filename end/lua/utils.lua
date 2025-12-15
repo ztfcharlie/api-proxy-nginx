@@ -67,7 +67,14 @@ function _M.remove_privacy_headers()
         "Via",
         "Referer",
         "Origin",
-        "User-Agent"
+        "User-Agent",
+        -- [Added] High Anonymity Headers
+        "CF-Connecting-IP",
+        "True-Client-IP",
+        "X-Client-Proto",
+        "X-Client-Proto-Ver",
+        "X-Original-Forwarded-For",
+        "Forwarded"
     }
 
     for _, header in ipairs(privacy_headers) do
