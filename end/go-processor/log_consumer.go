@@ -182,10 +182,7 @@ func (lc *LogConsumer) processBatch(ctx context.Context, msgs []redis.XMessage) 
 		resBodyRaw, _ := values["res_body"].(string)
 		
 		// 处理字段
-		tokenKey := ""
-		if strings.HasPrefix(meta.ClientToken, "sk-") {
-			tokenKey = meta.ClientToken
-		}
+		tokenKey := meta.ClientToken
 		
 		channelID := 0
 		fmt.Sscanf(meta.KeyFilename, "%d", &channelID)
