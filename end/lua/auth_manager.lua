@@ -12,7 +12,7 @@ local QUERY_PATTERNS = {
     { pattern = "/suno/v1/generation/([^/]+)$", type = "suno" },
     { pattern = "/mj/task/([^/]+)/fetch$",      type = "mj" },
     { pattern = "/v1/video/status/([^/]+)$",    type = "luma" },
-    { pattern = "/v1/videos/([^/]+)$",          type = "sora" } -- [Added]
+    { pattern = "/v1/videos/(.+)",              type = "sora" } -- [Fixed] Simpler Lua pattern
 }
 
 -- [Added] OpenAI 兼容接口白名单 (用于过滤无法计费的接口如 Batch/Assistants)
