@@ -286,11 +286,13 @@ function _M.authenticate_client()
         end
 
         if channel_id_str then
-            utils.publish_debug_log("info", "Route found: " .. channel_id_str)
+            utils.publish_debug_log("info", "Sticky Target Channel: " .. channel_id_str) -- [Debug]
             local ch_id = tonumber(channel_id_str)
             for _, r in ipairs(routes) do
+                -- utils.publish_debug_log("info", "Checking User Route: " .. tostring(r.channel_id)) -- [Debug Verbose]
                 if tonumber(r.channel_id) == ch_id then
                     target_channel = r
+                    utils.publish_debug_log("info", "Sticky Match Found!") -- [Debug]
                     local rt = nil
                     local rt_key = "real_token:" .. r.channel_id
                     rt, _ = red:get(rt_key)
