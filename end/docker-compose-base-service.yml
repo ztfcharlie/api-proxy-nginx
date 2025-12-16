@@ -4,20 +4,17 @@ services:
     image: mysql:8.0
     container_name: api-proxy-mysql
     restart: unless-stopped
-    # [Security] 仅限内部网络访问，不暴露端口到宿主机
-    # ports:
-    #   - "3306:3306"
     volumes:
       - ./mysql-data:/var/lib/mysql
       - ./database:/docker-entrypoint-initdb.d:ro
     environment:
-      - MYSQL_ROOT_PASSWORD=root_password_123456
-      - MYSQL_DATABASE=oauth2_mock
-      - MYSQL_USER=oauth2_user
-      - MYSQL_PASSWORD=oauth2_password_123456
+      - MYSQL_ROOT_PASSWORD=${DB_ROOT_PASSWORD}
+      - MYSQL_DATABASE=${DB_NAME}
+      - MYSQL_USER=${DB_USER}
+      - MYSQL_PASSWORD=${DB_PASSWORD}
       - MYSQL_CHARACTER_SET_SERVER=utf8mb4
       - MYSQL_COLLATION_SERVER=utf8mb4_unicode_ci
-      - TZ=Asia/Shanghai
+      - TZ=${TZ}
     command: >
       --character-set-server=utf8mb4
       --collation-server=utf8mb4_unicode_ci
@@ -34,7 +31,7 @@ services:
     networks:
       - api-proxy-network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot_password_123456"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD}"]
       interval: 30s
       timeout: 10s
       retries: 10
@@ -48,9 +45,6 @@ services:
     image: redis:7-alpine
     container_name: api-proxy-redis
     restart: unless-stopped
-    # [Security] 仅限内部网络访问
-    # ports:
-    #   - "6379:6379"
     volumes:
       - ./redis-data:/data
     command: >
@@ -58,7 +52,7 @@ services:
       --appendonly yes
       --maxmemory 512mb
       --maxmemory-policy allkeys-lru
-      --requirepass 123456
+      --requirepass ${REDIS_PASSWORD}
       --save 900 1
       --save 300 10
       --save 60 10000
@@ -67,7 +61,7 @@ services:
     networks:
       - api-proxy-network
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "123456", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -76,50 +70,8 @@ services:
       - "com.api-proxy.service=redis"
       - "com.api-proxy.version=7-alpine"
 
-  # Go 日志处理服务 (Consumer)
-  api-proxy-log-processor:
-    build:
-      context: ./go-processor
-      dockerfile: Dockerfile
-    container_name: api-proxy-log-processor
-    restart: unless-stopped
-    environment:
-      - REDIS_HOST=api-proxy-redis
-      - REDIS_PORT=6379
-      - REDIS_PASSWORD=123456
-      - TZ=Asia/Shanghai
-      # MySQL 配置 (用于 SyncManager)
-      - DB_HOST=api-proxy-mysql
-      - DB_PORT=3306
-      - DB_NAME=oauth2_mock
-      - DB_USER=oauth2_user
-      - DB_PASSWORD=oauth2_password_123456
-      
-      # Mock 开关
-      - ENABLE_MOCK_MODE=${ENABLE_MOCK_MODE:-false}
-      
-      # 隐私开关
-      - LOG_SAVE_BODY=${LOG_SAVE_BODY:-false}
-
-      # [Added] 实时日志流开关
-      - ENABLE_DEBUG_STREAM=true
-      
-    volumes:
-      - ./logs:/app/logs
-      
-    depends_on:
-      api-proxy-redis:
-        condition: service_healthy
-      api-proxy-mysql:
-        condition: service_healthy
-    networks:
-      - api-proxy-network
-    labels:
-      - "com.api-proxy.service=log-processor"
-
 # 网络配置
 networks:
   api-proxy-network:
     driver: bridge
     name: api-proxy-network
-    

@@ -1,78 +1,66 @@
+version: '3.8'
 
 services:
-  # 主要的 API 代理服务
-  api-proxy-nginx:
+  # 1. Node.js 后台服务 (Admin API & OAuth2 Mock Generator)
+  api-proxy-nodejs:
     build:
-      context: .
+      context: ./nodejs
       dockerfile: Dockerfile
-    container_name: api-proxy-nginx
+    container_name: api-proxy-nodejs
     restart: unless-stopped
     ports:
-      - "8888:8080"   # HTTP 端口
-      - "8443:8443"   # HTTPS 端口（如果启用）
-    volumes:
-      # 配置文件挂载
-      - ./config/app_config.json:/usr/local/openresty/nginx/config/app_config.json:ro
-      - ./nginx/conf.d:/usr/local/openresty/nginx/conf/conf.d/
-      - ./nginx/nginx.conf:/usr/local/openresty/nginx/conf/nginx.conf
-      - ./lua:/usr/local/openresty/lua/
-      # 日志挂载
-      - ./logs:/var/log/nginx
-      # SSL 证书挂载（如果需要）
-      - ./ssl:/usr/local/openresty/nginx/ssl:ro
-      # 静态文件挂载（如果需要）
-      - ./html:/usr/local/openresty/nginx/html:ro
+      - "${NODE_PORT}:3000" # Admin 端口 (宿主:容器)
     environment:
-      # OpenResty 配置
-      - WORKER_PROCESSES=auto
-      - WORKER_CONNECTIONS=1024
-      # Redis 配置
-      - REDIS_HOST=api-proxy-redis
-      - REDIS_PORT=6379
-      - REDIS_PASSWORD=123456
-
-      # OAuth2 服务配置
-      - OAUTH2_SERVICE_HOST=api-proxy-nodejs
-      - OAUTH2_SERVICE_PORT=8889
-
-      # 日志配置
-      - LOG_LEVEL=info
-      - DEBUG_MODE=false
-
-      # 时区设置
-      - TZ=Asia/Shanghai
-
-      # 代理配置
-      - PROXY_READ_TIMEOUT=300
-      - PROXY_CONNECT_TIMEOUT=60
-      - LUA_BODY_PARSE_LIMIT=${LUA_BODY_PARSE_LIMIT:-524288}
-
-      # 令牌刷新配置
-      - TOKEN_REFRESH_INTERVAL=3000
-      - TOKEN_EARLY_REFRESH=300
+      # 连接基础服务
+      - DB_HOST=${DB_HOST}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
       
-      # 全局 Mock 开关
-      - ENABLE_MOCK_MODE=${ENABLE_MOCK_MODE:-false}
-      
-      # [Added] 实时日志流开关 (生产环境建议关闭)
-      - ENABLE_DEBUG_STREAM=true
-      
-      # [Added] OpenAI 全接口开放开关 (true=不拦截未知接口)
-      - OPENAI_FULL_PROXY=${OPENAI_FULL_PROXY:-false}
-
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 10s
+      - PORT=3000 # 容器内部端口固定为 3000
+      - TZ=${TZ}
     networks:
       - api-proxy-network
-    labels:
-      - "com.api-proxy.service=nginx"
-      - "com.api-proxy.version=1.0.0"
+    depends_on:
+      - api-proxy-mysql # 依赖基础服务中的数据库
+      - api-proxy-redis
 
-# 网络配置 - 使用Node.js创建的外部网络
+  # 2. Go Gateway (核心网关: 鉴权/计费/转发)
+  api-proxy-gateway:
+    build:
+      context: ./go-gateway
+      dockerfile: Dockerfile
+    container_name: api-proxy-gateway
+    restart: unless-stopped
+    ports:
+      - "${GATEWAY_PORT}:8080" # 网关入口端口 (宿主:容器)
+    environment:
+      - SERVER_PORT=8080 # 容器内部端口固定为 8080
+      
+      # 数据库连接
+      - REDIS_HOST=${REDIS_HOST}
+      - REDIS_PORT=${REDIS_PORT}
+      - REDIS_PASSWORD=${REDIS_PASSWORD}
+      
+      - DB_HOST=${DB_HOST}
+      - DB_PORT=${DB_PORT}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_NAME=${DB_NAME}
+      
+      # 上游 Node.js 服务地址 (Docker 内部直接访问 3000)
+      - NODE_BACKEND=http://api-proxy-nodejs:3000
+      
+      - TZ=${TZ}
+    networks:
+      - api-proxy-network
+    depends_on:
+      - api-proxy-nodejs
+
+# 使用外部网络 (由 docker-compose-base-service.yml 创建)
 networks:
   api-proxy-network:
     external: true

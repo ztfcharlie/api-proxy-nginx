@@ -1,9 +1,0 @@
-{
-    "error": {
-        "code": 500,
-        "message": "Internal Server Error",
-        "details": "The server encountered an internal error and was unable to complete your request."
-    },
-    "timestamp": "2025-11-30T00:00:00Z",
-    "request_id": "error-500"
-}

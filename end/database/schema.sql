@@ -9,6 +9,15 @@
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
+-- 预先清除所有表（解决外键依赖导致的 Drop 失败）
+DROP TABLE IF EXISTS `sys_token_routes`;
+DROP TABLE IF EXISTS `sys_virtual_tokens`;
+DROP TABLE IF EXISTS `sys_users`;
+DROP TABLE IF EXISTS `sys_channels`;
+DROP TABLE IF EXISTS `sys_models`;
+DROP TABLE IF EXISTS `sys_request_logs`;
+DROP TABLE IF EXISTS `sys_async_tasks`;
+
 -- ----------------------------
 -- 1. 系统用户表 (sys_users)
 -- ----------------------------
@@ -26,11 +35,6 @@ CREATE TABLE `sys_users` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uk_username` (`username`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- 初始化默认管理员 (密码: 123456)
--- 注意：实际生产环境请修改密码
-INSERT INTO `sys_users` (`username`, `password_hash`, `role`, `remark`) VALUES 
-('admin', '$2b$10$5/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0', 'admin', '超级管理员');
 
 
 -- ----------------------------
@@ -207,3 +211,10 @@ CREATE TABLE IF NOT EXISTS sys_async_tasks (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 SET FOREIGN_KEY_CHECKS = 1;
+
+-- 初始化默认管理员 (密码: 123456)
+-- 注意：实际生产环境请修改密码
+INSERT INTO `sys_users` (`username`, `password_hash`, `role`, `remark`) VALUES 
+('admin', '$2b$10$5/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0/0', 'admin', '超级管理员');
+
+
