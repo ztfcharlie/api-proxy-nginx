@@ -1,7 +1,6 @@
 package proxy
 
 import (
-	"bytes"
 	"edge-agent/internal/protocol"
 	"encoding/json"
 	"fmt"
@@ -15,38 +14,43 @@ type SenderFunc func(v interface{}) error
 
 const MockMode = true
 
-func HandleRequestWithSender(packet protocol.Packet, send SenderFunc) {
-	reqID := packet.RequestID
+// DoRequest 真正执行请求
+func DoRequest(s *RequestStreamer, send SenderFunc) {
+	reqID := s.ReqID
 
-	var reqPayload protocol.HttpRequestPayload
-	if err := json.Unmarshal(packet.Payload, &reqPayload); err != nil {
-		sendError(send, reqID, "Invalid payload format")
+	// 等待 Header 到达
+	select {
+	case <-s.MetaReady:
+	case <-time.After(10 * time.Second):
+		sendError(send, reqID, "Header timeout")
 		return
 	}
 
 	if MockMode {
 		log.Printf("[Agent] MOCK MODE: Intercepting request %s", reqID)
+		// 即使是 Mock，也要把 Body 读完，否则 Pipe 可能阻塞
+		io.Copy(io.Discard, s.GetBodyReader())
 		go mockOpenAIResponse(reqID, send)
 		return
 	}
 
-	targetURL := "https://api.openai.com" + reqPayload.URL 
-	realReq, err := http.NewRequest(reqPayload.Method, targetURL, bytes.NewReader(reqPayload.Body))
+	targetURL := "https://api.openai.com" + s.Meta.URL
+	
+	// 使用 s.GetBodyReader() 作为 Body
+	realReq, err := http.NewRequest(s.Meta.Method, targetURL, s.GetBodyReader())
 	if err != nil {
-		sendError(send, reqID, "Failed to create request: "+err.Error())
+		sendError(send, reqID, "Create req failed: "+err.Error())
 		return
 	}
 
-	for k, v := range reqPayload.Headers {
+	for k, v := range s.Meta.Headers {
 		if k != "Accept-Encoding" {
 			realReq.Header.Set(k, v)
 		}
 	}
 	realReq.Host = "api.openai.com"
 
-	log.Printf("[Agent] Forwarding request %s -> %s", reqID, targetURL)
-
-	client := &http.Client{}
+	client := &http.Client{Timeout: 180 * time.Second}
 	resp, err := client.Do(realReq)
 	if err != nil {
 		sendError(send, reqID, "Network error: "+err.Error())
@@ -56,8 +60,6 @@ func HandleRequestWithSender(packet protocol.Packet, send SenderFunc) {
 
 	buf := make([]byte, 4096)
 	isFirst := true
-
-	// simpleTokenCount := 0 
 
 	for {
 		n, err := resp.Body.Read(buf)
@@ -84,13 +86,7 @@ func HandleRequestWithSender(packet protocol.Packet, send SenderFunc) {
 
 		if err != nil {
 			if err == io.EOF {
-				finalPayload := protocol.HttpResponsePayload{
-					IsFinal: true,
-					Usage: &protocol.Usage{
-						PromptTokens:     10,
-						CompletionTokens: 20,
-					},
-				}
+				finalPayload := protocol.HttpResponsePayload{IsFinal: true}
 				sendResponse(send, reqID, finalPayload)
 			} else {
 				log.Printf("Read error: %v", err)
@@ -103,7 +99,6 @@ func HandleRequestWithSender(packet protocol.Packet, send SenderFunc) {
 func mockOpenAIResponse(reqID string, send SenderFunc) {
 	words := []string{"Hello", "!", " MOCK", " Usage", " Test", "."}
 
-	// 1. Header
 	headerPayload := protocol.HttpResponsePayload{
 		StatusCode: 200,
 		Headers: map[string]string{"Content-Type": "text/event-stream"},
@@ -111,19 +106,17 @@ func mockOpenAIResponse(reqID string, send SenderFunc) {
 	}
 	sendResponse(send, reqID, headerPayload)
 
-	// 2. Stream Body
 	for _, word := range words {
 		time.Sleep(50 * time.Millisecond)
 		content := fmt.Sprintf(`data: {"choices":[{"delta":{"content":"%s"}}]}`, word) + "\n\n"
 		sendResponse(send, reqID, protocol.HttpResponsePayload{BodyChunk: []byte(content)})
 	}
 
-	// 3. Final with Usage
 	time.Sleep(50 * time.Millisecond)
 	
 	usage := &protocol.Usage{
 		PromptTokens:     5,
-		CompletionTokens: len(words), // 6
+		CompletionTokens: len(words), 
 	}
 
 	sendResponse(send, reqID, protocol.HttpResponsePayload{

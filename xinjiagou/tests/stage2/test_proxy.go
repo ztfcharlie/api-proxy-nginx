@@ -31,7 +31,11 @@ func main() {
 	time.Sleep(2 * time.Second)
 
 	// 2. 启动 Agent
-	agentCmd := exec.Command(agentPath, "-id", "agent-dev-001")
+	agentCmd := exec.Command(agentPath)
+	// 修正: 通过环境变量注入正确的 ID，配合 Hub 的预期
+	// 继承父进程的环境变量，并覆盖 AGENT_ID
+	agentCmd.Env = append(os.Environ(), "AGENT_ID=auth-agent-001")
+	
 	agentCmd.Stdout = os.Stdout
 	agentCmd.Stderr = os.Stderr
 	agentCmd.Start()
@@ -68,7 +72,6 @@ func main() {
 		line := scanner.Text()
 		log.Printf("[Stream] %s", line)
 		
-		// 简单解析一下 content
 		if strings.Contains(line, `"content":"`) {
 			parts := strings.Split(line, `"content":"`)
 			if len(parts) > 1 {
@@ -80,7 +83,7 @@ func main() {
 
 	log.Printf("✅ 完整接收内容: [%s]", fullContent)
 
-	expected := "Hello! This is a MOCK response from Agent. I am alive!"
+	expected := "Hello! MOCK Usage Test."
 	if fullContent == expected {
 		log.Println("🏆 测试通过！Mock 数据完整无误。")
 	} else {

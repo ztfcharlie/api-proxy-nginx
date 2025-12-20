@@ -15,8 +15,6 @@ const (
     
     TypeRequest       PacketType = "request"
     TypeResponse      PacketType = "response"
-    
-    // 新增: 价格更新广播
     TypePriceUpdate   PacketType = "price_update"
 )
 
@@ -40,28 +38,29 @@ type AuthResponsePayload struct {
 
 // === 业务相关 ===
 
-// Usage 定义所有可能的计费维度
 type Usage struct {
-    PromptTokens     int    `json:"prompt_tokens,omitempty"`     // 文本输入
-    CompletionTokens int    `json:"completion_tokens,omitempty"` // 文本输出
-    
-    ImageCount       int    `json:"image_count,omitempty"`       // 图片张数
-    ImageResolution  string `json:"image_resolution,omitempty"`  // 图片分辨率
-    
-    AudioSeconds     int    `json:"audio_seconds,omitempty"`     // 音频时长
-    
-    VideoSeconds     int    `json:"video_seconds,omitempty"`     // 视频时长
-    VideoResolution  string `json:"video_resolution,omitempty"`  // 视频分辨率
+    PromptTokens     int    `json:"prompt_tokens,omitempty"`
+    CompletionTokens int    `json:"completion_tokens,omitempty"`
+    ImageCount       int    `json:"image_count,omitempty"`
+    ImageResolution  string `json:"image_resolution,omitempty"`
+    AudioSeconds     int    `json:"audio_seconds,omitempty"`
+    VideoSeconds     int    `json:"video_seconds,omitempty"`
+    VideoResolution  string `json:"video_resolution,omitempty"`
 }
 
+// HttpRequestPayload 支持流式上传
+// 逻辑: 
+// 1. 第一个包: 包含 Method, URL, Headers, PriceVersion (BodyChunk 为空或部分)
+// 2. 后续包: 只包含 BodyChunk
+// 3. 最后一个包: IsFinal=true
 type HttpRequestPayload struct {
-    Method       string            `json:"method"`
-    URL          string            `json:"url"`
-    Headers      map[string]string `json:"headers"`
-    Body         []byte            `json:"body"`
+    Method       string            `json:"method,omitempty"`
+    URL          string            `json:"url,omitempty"`
+    Headers      map[string]string `json:"headers,omitempty"`
+    PriceVersion string            `json:"price_ver,omitempty"`
     
-    // 新增: 计费版本号
-    PriceVersion string            `json:"price_ver"`
+    BodyChunk    []byte            `json:"body_chunk,omitempty"`
+    IsFinal      bool              `json:"is_final"`
 }
 
 type HttpResponsePayload struct {
@@ -70,19 +69,16 @@ type HttpResponsePayload struct {
     BodyChunk  []byte            `json:"body_chunk"`
     IsFinal    bool              `json:"is_final"`
     Error      string            `json:"error,omitempty"`
-    
-    // 新增: 只有在 IsFinal=true 时才会有 Usage
-    Usage        *Usage            `json:"usage,omitempty"`
+    Usage      *Usage            `json:"usage,omitempty"`
 }
 
-// PriceTable 定义价格表结构
 type PriceTable struct {
     Version string             `json:"version"`
     Models  map[string]ModelPrice `json:"models"`
 }
 
 type ModelPrice struct {
-    InputPrice  float64 `json:"input"`  // 每 1M Token 的价格 (USD)
+    InputPrice  float64 `json:"input"`
     OutputPrice float64 `json:"output"`
-    PerRequest  float64 `json:"per_req"` // 每次请求固定价格 (用于图片/视频)
+    PerRequest  float64 `json:"per_req"`
 }

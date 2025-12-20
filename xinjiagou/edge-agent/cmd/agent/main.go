@@ -1,14 +1,15 @@
 package main
 
 import (
+	"edge-agent/internal/config"
 	"edge-agent/internal/crypto"
 	"edge-agent/internal/protocol"
 	"edge-agent/internal/proxy"
 	"edge-agent/internal/ui"
 	"encoding/hex"
 	"encoding/json"
-	"flag"
 	"log"
+	"math/rand"
 	"net/url"
 	"os"
 	"os/signal"
@@ -21,25 +22,25 @@ import (
 )
 
 var (
-	hubAddr = flag.String("hub", "localhost:8080", "Hub server address")
-	agentID = flag.String("id", "agent-001", "Unique Agent ID")
-	keyFile = flag.String("key", "agent.key", "Path to private key file")
-	uiAddr  = flag.String("ui", "127.0.0.1:9999", "Local UI address")
-	
+	cfg *config.Config
 	wsWriteMu sync.Mutex
-	// 默认限流: 每秒 2 个请求 (RPM=120)，桶大小 5
-	limiter = rate.NewLimiter(2, 5)
+	limiter   *rate.Limiter
+	activeStreams sync.Map
 )
 
 func main() {
-	flag.Parse()
-	log.Printf("[Agent] Starting agent: %s", *agentID)
+	rand.Seed(time.Now().UnixNano())
+	cfg = config.Load()
+	log.Printf("[Agent] Starting agent: %s (Hub: %s)", cfg.AgentID, cfg.HubAddr)
 
-	ui.GlobalState.AgentID = *agentID
-	ui.GlobalState.HubAddr = *hubAddr
-	ui.StartServer(*uiAddr)
+	rps := rate.Limit(float64(cfg.RateLimitRPM) / 60.0)
+	limiter = rate.NewLimiter(rps, cfg.RateLimitBurst)
 
-	keys, err := crypto.LoadOrGenerateKeys(*keyFile)
+	ui.GlobalState.AgentID = cfg.AgentID
+	ui.GlobalState.HubAddr = cfg.HubAddr
+	ui.StartServer("127.0.0.1:" + cfg.UIPort)
+
+	keys, err := crypto.LoadOrGenerateKeys(cfg.KeyFile)
 	if err != nil {
 		log.Fatalf("Failed to load keys: %v", err)
 	}
@@ -47,99 +48,131 @@ func main() {
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
 
+	retryCount := 0
+
 	for {
 		ui.GlobalState.Connected = false
+		startTime := time.Now()
+		
 		err := connectAndServe(keys)
-		if err != nil {
-			log.Printf("[Agent] Connection error: %v", err)
-		}
 		
 		ui.GlobalState.Connected = false
-		log.Println("[Agent] Reconnecting in 3 seconds...")
-		select {
-		case <-interrupt:
-			return
-		case <-time.After(3 * time.Second):
+		if err != nil {
+			log.Printf("[Agent] Connection lost: %v", err)
 		}
+
+		if time.Since(startTime) > 60*time.Second {
+			retryCount = 0
+		} else {
+			retryCount++
+		}
+
+		backoff := time.Second * (1 << retryCount)
+		if backoff > 30*time.Second { backoff = 30 * time.Second }
+		jitter := time.Duration(rand.Intn(1000)) * time.Millisecond
+		time.Sleep(backoff + jitter)
 	}
 }
 
 func connectAndServe(keys *crypto.KeyPair) error {
-	u := url.URL{Scheme: "ws", Host: *hubAddr, Path: "/tunnel/connect", RawQuery: "agent_id=" + *agentID}
-	log.Printf("[Agent] Connecting to %s", u.String())
-
+	u := url.URL{Scheme: "ws", Host: cfg.HubAddr, Path: "/tunnel/connect", RawQuery: "agent_id=" + cfg.AgentID}
 	conn, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
-	if err != nil {
-		return err
-	}
+	if err != nil { return err }
 	defer conn.Close()
 
 	safeWriteJSON := func(v interface{}) error {
 		wsWriteMu.Lock()
 		defer wsWriteMu.Unlock()
+		conn.SetWriteDeadline(time.Now().Add(5 * time.Second))
 		return conn.WriteJSON(v)
 	}
 
+	conn.SetReadDeadline(time.Now().Add(10 * time.Second))
 	regPayload := protocol.RegisterPayload{Version: "v0.3", PublicKey: keys.GetPublicKeyHex()}
 	regData, _ := json.Marshal(regPayload)
-	if err := safeWriteJSON(protocol.Packet{Type: protocol.TypeRegister, Payload: regData}); err != nil {
-		return err
-	}
+	if err := safeWriteJSON(protocol.Packet{Type: protocol.TypeRegister, Payload: regData}); err != nil { return err }
 
 	_, msg, err := conn.ReadMessage()
 	if err != nil { return err }
-	var challengePacket protocol.Packet
-	json.Unmarshal(msg, &challengePacket)
-	
+	var packet protocol.Packet
+	json.Unmarshal(msg, &packet)
 	var challenge protocol.AuthChallengePayload
-	json.Unmarshal(challengePacket.Payload, &challenge)
-
+	json.Unmarshal(packet.Payload, &challenge)
 	signature := keys.Sign([]byte(challenge.Nonce))
 	authPayload := protocol.AuthResponsePayload{Signature: hex.EncodeToString(signature)}
 	authData, _ := json.Marshal(authPayload)
-	if err := safeWriteJSON(protocol.Packet{Type: protocol.TypeAuthResponse, Payload: authData}); err != nil {
-		return err
-	}
+	if err := safeWriteJSON(protocol.Packet{Type: protocol.TypeAuthResponse, Payload: authData}); err != nil { return err }
 
 	log.Println("[Agent] Handshake successful!")
 	ui.GlobalState.Connected = true
 
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done: return
+			case <-ticker.C:
+				if err := safeWriteJSON(protocol.Packet{Type: protocol.TypePing}); err != nil {
+					conn.Close(); return
+				}
+			}
+		}
+	}()
+
+	pongWait := 60 * time.Second
+	conn.SetReadDeadline(time.Now().Add(pongWait))
+
 	for {
 		_, message, err := conn.ReadMessage()
-		if err != nil {
-			return err
-		}
+		if err != nil { return err }
+		conn.SetReadDeadline(time.Now().Add(pongWait))
 
-		var packet protocol.Packet
-		if err := json.Unmarshal(message, &packet); err != nil {
-			continue
-		}
+		var pkt protocol.Packet
+		if err := json.Unmarshal(message, &pkt); err != nil { continue }
 
-		switch packet.Type {
+		switch pkt.Type {
 		case protocol.TypeRequest:
-			// === 核心修改: 限流检查 ===
-			if !limiter.Allow() {
-				log.Printf("[Agent] Rate limit exceeded! Rejecting request %s", packet.RequestID)
-				
-				// 构造错误响应
-				respPayload := protocol.HttpResponsePayload{
-					StatusCode: 429,
-					Error:      "Agent Rate Limit Exceeded",
-					IsFinal:    true,
-				}
-				data, _ := json.Marshal(respPayload)
-				safeWriteJSON(protocol.Packet{
-					Type:      protocol.TypeResponse,
-					RequestID: packet.RequestID,
-					Payload:   data,
-				})
-				continue
-			}
+			var payload protocol.HttpRequestPayload
+			if err := json.Unmarshal(pkt.Payload, &payload); err != nil { continue }
+
+			val, loaded := activeStreams.Load(pkt.RequestID)
 			
-			atomic.AddInt64(&ui.GlobalState.TotalRequests, 1)
-			go func(pkt protocol.Packet) {
-				proxy.HandleRequestWithSender(pkt, safeWriteJSON)
-			}(packet)
+			if !loaded {
+				if !limiter.Allow() {
+					log.Printf("[Agent] Rate limit exceeded!")
+					respPayload := protocol.HttpResponsePayload{StatusCode: 429, Error: "Rate Limit", IsFinal: true}
+					data, _ := json.Marshal(respPayload)
+					safeWriteJSON(protocol.Packet{Type: protocol.TypeResponse, RequestID: pkt.RequestID, Payload: data})
+					continue
+				}
+				atomic.AddInt64(&ui.GlobalState.TotalRequests, 1)
+
+				streamer := proxy.NewRequestStreamer(pkt.RequestID)
+				activeStreams.Store(pkt.RequestID, streamer)
+				val = streamer
+
+				go func(id string) {
+					defer activeStreams.Delete(id)
+					proxy.DoRequest(streamer, safeWriteJSON)
+				}(pkt.RequestID)
+			}
+
+			streamer := val.(*proxy.RequestStreamer)
+			// 修正: 检查 buffer 是否满
+			if err := streamer.WriteChunk(payload); err != nil {
+				log.Printf("[Agent] Stream stalled, dropping req %s: %v", pkt.RequestID, err)
+				// 停止流
+				activeStreams.Delete(pkt.RequestID)
+				// 发送错误回 Hub
+				respPayload := protocol.HttpResponsePayload{Error: "Agent Buffer Overflow", IsFinal: true}
+				data, _ := json.Marshal(respPayload)
+				safeWriteJSON(protocol.Packet{Type: protocol.TypeResponse, RequestID: pkt.RequestID, Payload: data})
+			}
+
+		case protocol.TypePong:
 		}
 	}
 }

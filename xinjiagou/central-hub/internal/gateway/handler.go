@@ -20,50 +20,65 @@ type Handler struct {
 }
 
 func NewHandler(t *tunnel.TunnelServer, b *billing.Manager) *Handler {
-	return &Handler{
-		tunnel:  t,
-		billing: b,
-	}
+	return &Handler{tunnel: t, billing: b}
 }
 
 func (h *Handler) HandleOpenAIRequest(w http.ResponseWriter, r *http.Request) {
 	reqID := uuid.New().String()
 
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "Failed to read body", http.StatusBadRequest)
-		return
-	}
-	
-	// 简单的 Body 解析以获取 Model (为了计费)
-	// 这里会反序列化两次，有优化空间，MVP 先这样
-	var reqBodyMap map[string]interface{}
-	modelName := "unknown"
-	if err := json.Unmarshal(body, &reqBodyMap); err == nil {
-		if m, ok := reqBodyMap["model"].(string); ok {
-			modelName = m
-		}
-	}
+	// 回滚: 恢复为指定的认证 Agent ID
+	targetAgentID := "auth-agent-001"
 
-	payload := protocol.HttpRequestPayload{
-		Method: r.Method,
-		URL:    r.URL.Path,
-		Headers: map[string]string{
-			"Content-Type":  r.Header.Get("Content-Type"),
-			"Authorization": r.Header.Get("Authorization"),
-		},
-		Body:         body,
-		PriceVersion: h.billing.GetCurrentPriceTable().Version, // 带上版本号
-	}
-
-	// 派单
-	targetAgentID := "auth-agent-001" // 注意：这里要和 Agent 启动 ID 一致
-	respChan, err := h.tunnel.DispatchRequest(targetAgentID, reqID, payload)
+	// 1. 初始化请求通道
+	respChan, err := h.tunnel.InitRequest(targetAgentID, reqID)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to dispatch: %v", err), http.StatusServiceUnavailable)
+		http.Error(w, fmt.Sprintf("Agent offline: %v", err), http.StatusServiceUnavailable)
 		return
 	}
 	defer h.tunnel.CleanupRequest(reqID)
+
+	// 2. 启动流式发送 Goroutine
+	errChan := make(chan error, 1)
+	go func() {
+		defer close(errChan)
+		
+		metaPayload := protocol.HttpRequestPayload{
+			Method:       r.Method,
+			URL:          r.URL.Path,
+			Headers:      map[string]string{
+				"Content-Type":  r.Header.Get("Content-Type"),
+				"Authorization": r.Header.Get("Authorization"),
+			},
+			PriceVersion: h.billing.GetCurrentPriceTable().Version,
+			IsFinal:      false,
+		}
+		if err := h.tunnel.SendRequestChunk(targetAgentID, reqID, metaPayload); err != nil {
+			errChan <- err
+			return
+		}
+
+		buf := make([]byte, 32*1024) 
+		for {
+			n, readErr := r.Body.Read(buf)
+			if n > 0 {
+				chunkPayload := protocol.HttpRequestPayload{
+					BodyChunk: buf[:n],
+					IsFinal:   false,
+				}
+				if err := h.tunnel.SendRequestChunk(targetAgentID, reqID, chunkPayload); err != nil {
+					errChan <- err
+					return
+				}
+			}
+			if readErr != nil {
+				if readErr == io.EOF {
+					endPayload := protocol.HttpRequestPayload{IsFinal: true}
+					h.tunnel.SendRequestChunk(targetAgentID, reqID, endPayload)
+				}
+				break
+			}
+		}
+	}()
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -73,19 +88,23 @@ func (h *Handler) HandleOpenAIRequest(w http.ResponseWriter, r *http.Request) {
 
 	timeout := time.After(60 * time.Second)
 	firstPacketReceived := false
+	ctx := r.Context()
 
 	for {
 		select {
-		case packet, ok := <-respChan:
-			if !ok {
+		case <-ctx.Done():
+			log.Printf("[Gateway] Client disconnected %s", reqID)
+			return
+		case err := <-errChan:
+			if err != nil {
+				log.Printf("[Gateway] Upload error: %v", err)
 				return
 			}
+		case packet, ok := <-respChan:
+			if !ok { return }
 
 			var resp protocol.HttpResponsePayload
-			if err := json.Unmarshal(packet.Payload, &resp); err != nil {
-				log.Printf("Invalid response payload: %v", err)
-				return
-			}
+			if err := json.Unmarshal(packet.Payload, &resp); err != nil { return }
 
 			if resp.Error != "" {
 				http.Error(w, "Agent Error: "+resp.Error, http.StatusBadGateway)
@@ -93,9 +112,7 @@ func (h *Handler) HandleOpenAIRequest(w http.ResponseWriter, r *http.Request) {
 			}
 
 			if !firstPacketReceived {
-				if resp.StatusCode != 0 {
-					w.WriteHeader(resp.StatusCode)
-				}
+				if resp.StatusCode != 0 { w.WriteHeader(resp.StatusCode) }
 				w.Header().Set("Content-Type", "text/event-stream")
 				w.Header().Set("Connection", "keep-alive")
 				firstPacketReceived = true
@@ -107,23 +124,11 @@ func (h *Handler) HandleOpenAIRequest(w http.ResponseWriter, r *http.Request) {
 			}
 
 			if resp.IsFinal {
-				// === 结算时刻 ===
-				if resp.Usage != nil {
-					cost := h.billing.CalculateCost(modelName, resp.Usage, payload.PriceVersion)
-					log.Printf("💰 [Billing] ReqID: %s, Model: %s, Usage: %+v, Cost: $%.6f", 
-						reqID, modelName, resp.Usage, cost)
-					
-					// TODO: 写入 MySQL ledger 表
-				} else {
-					log.Printf("⚠️ [Billing] ReqID: %s finished but NO usage reported!", reqID)
-				}
+				// 结算逻辑
 				return
 			}
 
 		case <-timeout:
-			if !firstPacketReceived {
-				http.Error(w, "Agent timeout", http.StatusGatewayTimeout)
-			}
 			return
 		}
 	}
