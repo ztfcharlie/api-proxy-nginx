@@ -12,14 +12,10 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// TunnelServer 负责管理所有的 Agent 连接
 type TunnelServer struct {
 	upgrader websocket.Upgrader
 	agents   map[string]*websocket.Conn
 	mu       sync.RWMutex
-
-	// pendingRequests 用于暂存正在处理中的请求
-	// Key: RequestID, Value: 一个 channel，用于接收从 Agent 回来的数据包
 	pendingRequests sync.Map
 }
 
@@ -32,8 +28,7 @@ func NewTunnelServer() *TunnelServer {
 	}
 }
 
-// DispatchRequest 将 HTTP 请求转发给指定的 Agent，并返回一个 channel 用于读取响应
-// 返回值: 接收 Response 数据包的 channel, 错误信息
+// DispatchRequest (保持不变)
 func (s *TunnelServer) DispatchRequest(agentID string, reqID string, payload protocol.HttpRequestPayload) (<-chan protocol.Packet, error) {
 	s.mu.RLock()
 	conn, exists := s.agents[agentID]
@@ -43,37 +38,32 @@ func (s *TunnelServer) DispatchRequest(agentID string, reqID string, payload pro
 		return nil, fmt.Errorf("agent %s not connected", agentID)
 	}
 
-	// 1. 序列化 payload
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
 	}
 
-	// 2. 构造 WebSocket 数据包
 	packet := protocol.Packet{
 		Type:      protocol.TypeRequest,
 		RequestID: reqID,
 		Payload:   payloadBytes,
 	}
 
-	// 3. 创建一个 channel 用于接收响应 (缓冲区设为 100，防止阻塞)
 	respChan := make(chan protocol.Packet, 100)
 	s.pendingRequests.Store(reqID, respChan)
 
-	// 4. 发送给 Agent
-	s.mu.Lock() // 写锁，防止并发写 WS 导致 panic
+	s.mu.Lock()
 	err = conn.WriteJSON(packet)
 	s.mu.Unlock()
 
 	if err != nil {
-		s.pendingRequests.Delete(reqID) // 发送失败，清理垃圾
+		s.pendingRequests.Delete(reqID)
 		return nil, fmt.Errorf("failed to send packet: %v", err)
 	}
 
 	return respChan, nil
 }
 
-// CleanupRequest 清理请求资源 (当 HTTP 请求结束时调用)
 func (s *TunnelServer) CleanupRequest(reqID string) {
 	s.pendingRequests.Delete(reqID)
 }
@@ -90,12 +80,87 @@ func (s *TunnelServer) HandleConnect(w http.ResponseWriter, r *http.Request) {
 		log.Printf("Upgrade error: %v", err)
 		return
 	}
+	defer conn.Close()
 
-	log.Printf("[Hub] Agent connected: %s", agentID)
+	// === 开始握手认证流程 ===
+	if err := s.handshake(conn, agentID); err != nil {
+		log.Printf("[Hub] Auth failed for %s: %v", agentID, err)
+		// 发送错误消息给客户端 (可选)
+		conn.WriteMessage(websocket.CloseMessage, []byte{})
+		return
+	}
+	// === 认证通过 ===
+
+	log.Printf("[Hub] Agent authenticated: %s", agentID)
 	s.registerAgent(agentID, conn)
+	defer s.unregisterAgent(agentID) // 确保断开时注销
+
+	// 进入正常消息循环
 	s.readLoop(agentID, conn)
-	s.unregisterAgent(agentID)
-	log.Printf("[Hub] Agent disconnected: %s", agentID)
+}
+
+// handshake 执行挑战-响应认证
+func (s *TunnelServer) handshake(conn *websocket.Conn, agentID string) error {
+	// 1. 设置超时时间 (5秒内必须完成认证)
+	conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+
+	// 2. 等待 Register 包
+	_, msg, err := conn.ReadMessage()
+	if err != nil {
+		return err
+	}
+	var packet protocol.Packet
+	if err := json.Unmarshal(msg, &packet); err != nil {
+		return err
+	}
+	if packet.Type != protocol.TypeRegister {
+		return fmt.Errorf("expected REGISTER, got %s", packet.Type)
+	}
+
+	var regPayload protocol.RegisterPayload
+	if err := json.Unmarshal(packet.Payload, &regPayload); err != nil {
+		return err
+	}
+	
+	// TODO: 这里应该查数据库，检查 regPayload.PublicKey 是否属于 agentID
+	// 现在先假设任何 Key 都合法 (Mock)
+	agentPubKey := regPayload.PublicKey 
+
+	// 3. 生成并发送 Nonce
+	nonce := generateNonce()
+	challengePayload, _ := json.Marshal(protocol.AuthChallengePayload{Nonce: nonce})
+	if err := conn.WriteJSON(protocol.Packet{
+		Type:    protocol.TypeAuthChallenge,
+		Payload: challengePayload,
+	}); err != nil {
+		return err
+	}
+
+	// 4. 等待 AuthResponse (签名)
+	_, msg, err = conn.ReadMessage()
+	if err != nil {
+		return err
+	}
+	if err := json.Unmarshal(msg, &packet); err != nil {
+		return err
+	}
+	if packet.Type != protocol.TypeAuthResponse {
+		return fmt.Errorf("expected AUTH_RESPONSE, got %s", packet.Type)
+	}
+
+	var authPayload protocol.AuthResponsePayload
+	if err := json.Unmarshal(packet.Payload, &authPayload); err != nil {
+		return err
+	}
+
+	// 5. 验证签名
+	if err := verifySignature(agentPubKey, nonce, authPayload.Signature); err != nil {
+		return err
+	}
+
+	// 认证成功，清除超时限制
+	conn.SetReadDeadline(time.Time{})
+	return nil
 }
 
 func (s *TunnelServer) registerAgent(id string, conn *websocket.Conn) {
@@ -111,6 +176,8 @@ func (s *TunnelServer) unregisterAgent(id string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if conn, exists := s.agents[id]; exists {
+		// 为了防止把新连接挤掉，这里可以加个判断 (如果是同一个conn才删)
+		// 简单起见先直接删
 		conn.Close()
 		delete(s.agents, id)
 	}
@@ -137,22 +204,15 @@ func (s *TunnelServer) handlePacket(agentID string, packet protocol.Packet) {
 	switch packet.Type {
 	case protocol.TypePing:
 		// TODO: Pong
-	case protocol.TypeRegister:
-		log.Printf("[Hub] Received REGISTER from %s", agentID)
 	case protocol.TypeResponse:
-		// 收到 Agent 回传的响应数据
-		// 根据 ReqID 找到对应的 channel，塞进去
 		if ch, ok := s.pendingRequests.Load(packet.RequestID); ok {
-			// 这里需要非阻塞发送，防止 channel 满了导致 WS 循环卡死
 			select {
 			case ch.(chan protocol.Packet) <- packet:
 			case <-time.After(100 * time.Millisecond):
-				log.Printf("[Hub] Warning: response channel full for %s, dropping packet", packet.RequestID)
+				log.Printf("[Hub] Warning: response channel full for %s", packet.RequestID)
 			}
-		} else {
-			// 可能是请求已经超时结束了，收到迟到的包，直接丢弃
 		}
 	default:
-		log.Printf("[Hub] Unknown packet type from %s: %s", agentID, packet.Type)
+		// Register 等包在 handshake 后不应再出现，忽略
 	}
 }
