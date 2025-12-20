@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context" // 引入 context
 	"edge-agent/internal/config"
 	"edge-agent/internal/crypto"
 	"edge-agent/internal/protocol"
@@ -80,6 +81,10 @@ func connectAndServe(keys *crypto.KeyPair) error {
 	if err != nil { return err }
 	defer conn.Close()
 
+	// 补丁: 创建一个跟连接生命周期绑定的 Context
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel() // 只要函数退出 (连接断开)，就取消 ctx
+
 	safeWriteJSON := func(v interface{}) error {
 		wsWriteMu.Lock()
 		defer wsWriteMu.Unlock()
@@ -156,17 +161,15 @@ func connectAndServe(keys *crypto.KeyPair) error {
 
 				go func(id string) {
 					defer activeStreams.Delete(id)
-					proxy.DoRequest(streamer, safeWriteJSON)
+					// 补丁: 传入 ctx
+					proxy.DoRequest(ctx, streamer, safeWriteJSON)
 				}(pkt.RequestID)
 			}
 
 			streamer := val.(*proxy.RequestStreamer)
-			// 修正: 检查 buffer 是否满
 			if err := streamer.WriteChunk(payload); err != nil {
 				log.Printf("[Agent] Stream stalled, dropping req %s: %v", pkt.RequestID, err)
-				// 停止流
 				activeStreams.Delete(pkt.RequestID)
-				// 发送错误回 Hub
 				respPayload := protocol.HttpResponsePayload{Error: "Agent Buffer Overflow", IsFinal: true}
 				data, _ := json.Marshal(respPayload)
 				safeWriteJSON(protocol.Packet{Type: protocol.TypeResponse, RequestID: pkt.RequestID, Payload: data})
