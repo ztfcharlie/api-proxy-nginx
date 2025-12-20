@@ -1,6 +1,7 @@
 package main
 
 import (
+	"central-hub/internal/billing"
 	"central-hub/internal/gateway"
 	"central-hub/internal/tunnel"
 	"log"
@@ -8,20 +9,17 @@ import (
 )
 
 func main() {
-	// 1. 初始化 TunnelServer
 	wsServer := tunnel.NewTunnelServer()
+	
+	// 初始化计费管理器
+	billMgr := billing.NewManager()
 
-	// 2. 初始化 Gateway Handler
-	gwHandler := gateway.NewHandler(wsServer)
+	// 注入到 Gateway
+	gwHandler := gateway.NewHandler(wsServer, billMgr)
 
-	// 3. 注册路由
-	// WebSocket 连接口
 	http.HandleFunc("/tunnel/connect", wsServer.HandleConnect)
-
-	// OpenAI 兼容接口
 	http.HandleFunc("/v1/chat/completions", gwHandler.HandleOpenAIRequest)
 
-	// 4. 启动 HTTP 服务
 	addr := ":8080"
 	log.Printf("[Hub] Server starting on %s ...", addr)
 	

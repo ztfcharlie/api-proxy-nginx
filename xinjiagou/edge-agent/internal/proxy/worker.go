@@ -11,13 +11,10 @@ import (
 	"time"
 )
 
-// SenderFunc 定义发送数据的函数签名
 type SenderFunc func(v interface{}) error
 
-// MockMode 控制是否开启模拟模式
 const MockMode = true
 
-// HandleRequestWithSender 处理请求
 func HandleRequestWithSender(packet protocol.Packet, send SenderFunc) {
 	reqID := packet.RequestID
 
@@ -27,16 +24,13 @@ func HandleRequestWithSender(packet protocol.Packet, send SenderFunc) {
 		return
 	}
 
-	// === MOCK 逻辑开始 ===
 	if MockMode {
 		log.Printf("[Agent] MOCK MODE: Intercepting request %s", reqID)
 		go mockOpenAIResponse(reqID, send)
 		return
 	}
-	// === MOCK 逻辑结束 ===
 
 	targetURL := "https://api.openai.com" + reqPayload.URL 
-	
 	realReq, err := http.NewRequest(reqPayload.Method, targetURL, bytes.NewReader(reqPayload.Body))
 	if err != nil {
 		sendError(send, reqID, "Failed to create request: "+err.Error())
@@ -63,6 +57,8 @@ func HandleRequestWithSender(packet protocol.Packet, send SenderFunc) {
 	buf := make([]byte, 4096)
 	isFirst := true
 
+	// simpleTokenCount := 0 
+
 	for {
 		n, err := resp.Body.Read(buf)
 		if n > 0 {
@@ -88,7 +84,14 @@ func HandleRequestWithSender(packet protocol.Packet, send SenderFunc) {
 
 		if err != nil {
 			if err == io.EOF {
-				sendResponse(send, reqID, protocol.HttpResponsePayload{IsFinal: true})
+				finalPayload := protocol.HttpResponsePayload{
+					IsFinal: true,
+					Usage: &protocol.Usage{
+						PromptTokens:     10,
+						CompletionTokens: 20,
+					},
+				}
+				sendResponse(send, reqID, finalPayload)
 			} else {
 				log.Printf("Read error: %v", err)
 			}
@@ -97,42 +100,37 @@ func HandleRequestWithSender(packet protocol.Packet, send SenderFunc) {
 	}
 }
 
-// mockOpenAIResponse 模拟 OpenAI 的流式响应
 func mockOpenAIResponse(reqID string, send SenderFunc) {
-	words := []string{"Hello", "!", " This", " is", " a", " MOCK", " response", " from", " Agent", ".", " I", " am", " alive", "!"}
+	words := []string{"Hello", "!", " MOCK", " Usage", " Test", "."}
 
-	// 1. 发送头部
+	// 1. Header
 	headerPayload := protocol.HttpResponsePayload{
 		StatusCode: 200,
-		Headers: map[string]string{
-			"Content-Type": "text/event-stream",
-			"Server":       "MockAgent/1.0",
-		},
-		BodyChunk: []byte(""),
+		Headers: map[string]string{"Content-Type": "text/event-stream"},
 		IsFinal:   false,
 	}
 	sendResponse(send, reqID, headerPayload)
 
-	// 2. 模拟逐字吐出
+	// 2. Stream Body
 	for _, word := range words {
-		time.Sleep(100 * time.Millisecond)
-
-		content := fmt.Sprintf(`data: {"id":"chatcmpl-mock","object":"chat.completion.chunk","created":123,"model":"gpt-mock","choices":[{"index":0,"delta":{"content":"%s"},"finish_reason":null}]}`+"\n\n", word)
-		
-		chunkPayload := protocol.HttpResponsePayload{
-			BodyChunk: []byte(content),
-			IsFinal:   false,
-		}
-		sendResponse(send, reqID, chunkPayload)
+		time.Sleep(50 * time.Millisecond)
+		content := fmt.Sprintf(`data: {"choices":[{"delta":{"content":"%s"}}]}`, word) + "\n\n"
+		sendResponse(send, reqID, protocol.HttpResponsePayload{BodyChunk: []byte(content)})
 	}
 
-	// 3. 发送 [DONE]
-	time.Sleep(100 * time.Millisecond)
-	donePayload := protocol.HttpResponsePayload{
+	// 3. Final with Usage
+	time.Sleep(50 * time.Millisecond)
+	
+	usage := &protocol.Usage{
+		PromptTokens:     5,
+		CompletionTokens: len(words), // 6
+	}
+
+	sendResponse(send, reqID, protocol.HttpResponsePayload{
 		BodyChunk: []byte("data: [DONE]\n\n"),
 		IsFinal:   true,
-	}
-	sendResponse(send, reqID, donePayload)
+		Usage:     usage,
+	})
 }
 
 func sendResponse(send SenderFunc, reqID string, payload protocol.HttpResponsePayload) {
@@ -146,9 +144,5 @@ func sendResponse(send SenderFunc, reqID string, payload protocol.HttpResponsePa
 }
 
 func sendError(send SenderFunc, reqID string, errMsg string) {
-	payload := protocol.HttpResponsePayload{
-		Error:   errMsg,
-		IsFinal: true,
-	}
-	sendResponse(send, reqID, payload)
+	sendResponse(send, reqID, protocol.HttpResponsePayload{Error: errMsg, IsFinal: true})
 }
