@@ -167,24 +167,17 @@ func (h *Handler) HandleOpenAIRequest(w http.ResponseWriter, r *http.Request) {
 
 			if resp.IsFinal {
 				if resp.Usage != nil {
-					// 使用 Handler 里闭包捕获的 payload.PriceVersion
-					// 但注意：payload 变量在 go func() 里，这里访问不到
-					// 所以我们必须重新获取当前价格版本，或者从 metaPayload 传递过来
-					// 简单做法：直接取 billing manager 的当前版本 (这可能有一点点 race，但对于 MVP 可接受)
-					// 更严谨做法：metaPayload 应该在 InitRequest 时返回? 不，Agent 会把 PriceVer 传回来吗?
-					// Agent 现在的协议里，Response 不带 PriceVer。
-					// 修正：我们应该信任 Hub 发单时的版本。
-					
-					// 重新获取当前版本作为 "结算版本"
 					priceVer := h.billing.GetCurrentPriceTable().Version
-					
 					cost := h.billing.CalculateCost(modelName, resp.Usage, priceVer) 
 					agentIncome := cost * 0.8
 					
 					log.Printf("💰 [Settlement] ReqID: %s, User: %d, Cost: $%.6f, Hash: %s", 
 						reqID, user.ID, cost, resp.AgentHash)
 					
-					// 传入 priceVer
+					// 1. 写入 Redis (极速)
+					h.redis.IncrAgentIncome(context.Background(), targetAgentID, agentIncome)
+
+					// 2. 写入 MySQL (只记流水和扣用户，避开 Agent 热点)
 					if err := h.db.SettleTransaction(reqID, user.ID, targetAgentID, modelName, priceVer, cost, agentIncome, resp.AgentHash); err != nil {
 						log.Printf("❌ [DB] Settle failed: %v", err)
 					} else {

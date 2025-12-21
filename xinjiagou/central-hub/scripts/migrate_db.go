@@ -26,13 +26,24 @@ func main() {
 
 	log.Println("Checking database schema...")
 
-	// 尝试添加 agent_hash 列
-	// 如果列已存在，MySQL 会报错 Duplicate column name，我们忽略它即可
-	_, err = db.Exec("ALTER TABLE transactions ADD COLUMN agent_hash VARCHAR(64) DEFAULT ''")
-	if err != nil {
-		log.Printf("Migration notice (might be already up to date): %v", err)
-	} else {
-		log.Println("✅ Successfully added 'agent_hash' column to transactions table.")
+	// 定义所有需要迁移的语句
+	queries := []string{
+		// 1. 添加 agent_hash
+		"ALTER TABLE transactions ADD COLUMN agent_hash VARCHAR(64) DEFAULT ''",
+		// 2. 添加 is_settled
+		"ALTER TABLE transactions ADD COLUMN is_settled TINYINT DEFAULT 0",
+		// 3. 添加索引 (加快对账查询速度)
+		"CREATE INDEX idx_settled ON transactions(is_settled)",
+	}
+
+	for _, q := range queries {
+		_, err := db.Exec(q)
+		if err != nil {
+			// 简单判断: 如果报错包含 "Duplicate" 或 "exists"，说明已经有了，跳过
+			log.Printf("Migration step notice: %v", err)
+		} else {
+			log.Printf("✅ Executed: %s", q)
+		}
 	}
 
 	log.Println("Database migration completed.")

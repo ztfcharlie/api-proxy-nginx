@@ -39,11 +39,27 @@ func main() {
 	wsServer := tunnel.NewTunnelServer(cfg, redisStore)
 	billMgr := billing.NewManager()
 	
-	// 注入 redis
 	gwHandler := gateway.NewHandler(wsServer, billMgr, database, redisStore)
 
 	http.HandleFunc("/tunnel/connect", wsServer.HandleConnect)
 	http.HandleFunc("/v1/chat/completions", gwHandler.HandleOpenAIRequest)
+
+	// === 启动后台对账 Worker ===
+	go func() {
+		log.Println("[Worker] Reconciliation worker started (Interval: 60s)")
+		ticker := time.NewTicker(60 * time.Second)
+		defer ticker.Stop()
+
+		for range ticker.C {
+			count, err := database.ReconcileAgents()
+			if err != nil {
+				log.Printf("❌ [Worker] Reconcile error: %v", err)
+			} else if count > 0 {
+				log.Printf("✅ [Worker] Reconciled %d transactions", count)
+			}
+		}
+	}()
+	// ========================
 
 	addr := ":" + cfg.Port
 	server := &http.Server{

@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -47,16 +48,19 @@ func (r *RedisStore) RateLimit(ctx context.Context, key string, limit int, windo
 	return val == 1, 0, nil
 }
 
-// IncrUserActive 增加用户当前并发数
 func (r *RedisStore) IncrUserActive(ctx context.Context, userID int) (int64, error) {
 	return r.client.Incr(ctx, fmtKey(userID)).Result()
 }
 
-// DecrUserActive 减少用户当前并发数
 func (r *RedisStore) DecrUserActive(ctx context.Context, userID int) error {
 	return r.client.Decr(ctx, fmtKey(userID)).Err()
 }
 
 func fmtKey(uid int) string {
 	return fmt.Sprintf("user_active:%d", uid)
+}
+
+// IncrAgentIncome 增加 Agent 待结算收入 (Redis原子操作)
+func (r *RedisStore) IncrAgentIncome(ctx context.Context, agentID string, amount float64) error {
+	return r.client.IncrByFloat(ctx, "agent_income:"+agentID, amount).Err()
 }
