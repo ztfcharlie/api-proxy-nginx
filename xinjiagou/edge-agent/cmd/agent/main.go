@@ -1,9 +1,10 @@
 package main
 
 import (
-	"context" // 引入 context
+	"context"
 	"edge-agent/internal/config"
 	"edge-agent/internal/crypto"
+	"edge-agent/internal/ledger"
 	"edge-agent/internal/protocol"
 	"edge-agent/internal/proxy"
 	"edge-agent/internal/ui"
@@ -27,6 +28,7 @@ var (
 	wsWriteMu sync.Mutex
 	limiter   *rate.Limiter
 	activeStreams sync.Map
+	store     *ledger.Store
 )
 
 func main() {
@@ -36,6 +38,12 @@ func main() {
 
 	rps := rate.Limit(float64(cfg.RateLimitRPM) / 60.0)
 	limiter = rate.NewLimiter(rps, cfg.RateLimitBurst)
+
+	var err error
+	store, err = ledger.NewStore("ledger.db")
+	if err != nil {
+		log.Fatalf("Failed to init ledger: %v", err)
+	}
 
 	ui.GlobalState.AgentID = cfg.AgentID
 	ui.GlobalState.HubAddr = cfg.HubAddr
@@ -81,9 +89,8 @@ func connectAndServe(keys *crypto.KeyPair) error {
 	if err != nil { return err }
 	defer conn.Close()
 
-	// 补丁: 创建一个跟连接生命周期绑定的 Context
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel() // 只要函数退出 (连接断开)，就取消 ctx
+	defer cancel()
 
 	safeWriteJSON := func(v interface{}) error {
 		wsWriteMu.Lock()
@@ -161,8 +168,19 @@ func connectAndServe(keys *crypto.KeyPair) error {
 
 				go func(id string) {
 					defer activeStreams.Delete(id)
-					// 补丁: 传入 ctx
-					proxy.DoRequest(ctx, streamer, safeWriteJSON)
+					
+					// 修正: 回调函数现在必须返回 string (Hash)
+					onComplete := func(rid string, usage *protocol.Usage) string {
+						hash, err := store.RecordTransaction(rid, usage.PromptTokens, usage.CompletionTokens)
+						if err != nil {
+							log.Printf("❌ [Ledger] Failed to record: %v", err)
+							return ""
+						}
+						log.Printf("✅ [Ledger] Recorded tx %s, hash: %s...", rid, hash[:8])
+						return hash
+					}
+					
+					proxy.DoRequest(ctx, streamer, safeWriteJSON, onComplete)
 				}(pkt.RequestID)
 			}
 

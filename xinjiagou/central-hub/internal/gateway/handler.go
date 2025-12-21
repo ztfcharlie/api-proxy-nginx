@@ -2,6 +2,8 @@ package gateway
 
 import (
 	"central-hub/internal/billing"
+	"central-hub/internal/cache" // 引入 cache
+	"central-hub/internal/db"
 	"central-hub/internal/protocol"
 	"central-hub/internal/tunnel"
 	"encoding/json"
@@ -9,6 +11,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -17,19 +20,71 @@ import (
 type Handler struct {
 	tunnel  *tunnel.TunnelServer
 	billing *billing.Manager
+	db      *db.DB
+	redis   *cache.RedisStore // 注入 Redis
 }
 
-func NewHandler(t *tunnel.TunnelServer, b *billing.Manager) *Handler {
-	return &Handler{tunnel: t, billing: b}
+func NewHandler(t *tunnel.TunnelServer, b *billing.Manager, d *db.DB, r *cache.RedisStore) *Handler {
+	return &Handler{tunnel: t, billing: b, db: d, redis: r}
 }
 
 func (h *Handler) HandleOpenAIRequest(w http.ResponseWriter, r *http.Request) {
+	authHeader := r.Header.Get("Authorization")
+	apiKey := strings.TrimPrefix(authHeader, "Bearer ")
+	if apiKey == "" {
+		http.Error(w, "Missing Authorization header", http.StatusUnauthorized)
+		return
+	}
+
+	user, err := h.db.GetUserByAPIKey(apiKey)
+	if err != nil {
+		log.Printf("[Auth] Invalid Key: %s", apiKey)
+		http.Error(w, "Invalid API Key", http.StatusUnauthorized)
+		return
+	}
+	
+	// === 补丁: 并发透支防护 ===
+	// 检查当前并发数
+	activeCount, err := h.redis.IncrUserActive(r.Context(), user.ID)
+	if err == nil {
+		// 规则: 余额 < 5.0 时，只能有 1 个并发
+		maxConcurrent := 10
+		if user.Balance < 5.0 {
+			maxConcurrent = 1
+		}
+		
+		if int(activeCount) > maxConcurrent {
+			h.redis.DecrUserActive(context.Background(), user.ID) // 立即回滚
+			http.Error(w, fmt.Sprintf("Concurrency limit exceeded. Balance < 5.0 allows 1 concurrent req."), http.StatusTooManyRequests)
+			return
+		}
+	}
+	// 退出时减少并发数
+	defer h.redis.DecrUserActive(context.Background(), user.ID)
+	// === 补丁结束 ===
+
+	if user.Balance <= 0 {
+		http.Error(w, "Insufficient balance", http.StatusPaymentRequired)
+		return
+	}
+
 	reqID := uuid.New().String()
+	targetAgentID := "auth-agent-001" 
 
-	// 回滚: 恢复为指定的认证 Agent ID
-	targetAgentID := "auth-agent-001"
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Failed to read body", http.StatusBadRequest)
+		return
+	}
+	
+	var reqBodyMap map[string]interface{}
+	modelName := "unknown"
+	if err := json.Unmarshal(body, &reqBodyMap); err == nil {
+		if m, ok := reqBodyMap["model"].(string); ok {
+			modelName = m
+		}
+	}
 
-	// 1. 初始化请求通道
 	respChan, err := h.tunnel.InitRequest(targetAgentID, reqID)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Agent offline: %v", err), http.StatusServiceUnavailable)
@@ -37,7 +92,6 @@ func (h *Handler) HandleOpenAIRequest(w http.ResponseWriter, r *http.Request) {
 	}
 	defer h.tunnel.CleanupRequest(reqID)
 
-	// 2. 启动流式发送 Goroutine
 	errChan := make(chan error, 1)
 	go func() {
 		defer close(errChan)
@@ -57,27 +111,20 @@ func (h *Handler) HandleOpenAIRequest(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		buf := make([]byte, 32*1024) 
-		for {
-			n, readErr := r.Body.Read(buf)
-			if n > 0 {
-				chunkPayload := protocol.HttpRequestPayload{
-					BodyChunk: buf[:n],
-					IsFinal:   false,
-				}
-				if err := h.tunnel.SendRequestChunk(targetAgentID, reqID, chunkPayload); err != nil {
-					errChan <- err
-					return
-				}
-			}
-			if readErr != nil {
-				if readErr == io.EOF {
-					endPayload := protocol.HttpRequestPayload{IsFinal: true}
-					h.tunnel.SendRequestChunk(targetAgentID, reqID, endPayload)
-				}
-				break
+		chunkSize := 32 * 1024
+		for i := 0; i < len(body); i += chunkSize {
+			end := i + chunkSize
+			if end > len(body) { end = len(body) }
+			chunk := body[i:end]
+			
+			if err := h.tunnel.SendRequestChunk(targetAgentID, reqID, protocol.HttpRequestPayload{
+				BodyChunk: chunk, IsFinal: false,
+			}); err != nil {
+				errChan <- err
+				return
 			}
 		}
+		h.tunnel.SendRequestChunk(targetAgentID, reqID, protocol.HttpRequestPayload{IsFinal: true})
 	}()
 
 	flusher, ok := w.(http.Flusher)
@@ -124,7 +171,19 @@ func (h *Handler) HandleOpenAIRequest(w http.ResponseWriter, r *http.Request) {
 			}
 
 			if resp.IsFinal {
-				// 结算逻辑
+				if resp.Usage != nil {
+					cost := h.billing.CalculateCost(modelName, resp.Usage, "v1") 
+					agentIncome := cost * 0.8
+					
+					log.Printf("💰 [Settlement] ReqID: %s, User: %d, Cost: $%.6f, Hash: %s", 
+						reqID, user.ID, cost, resp.AgentHash)
+					
+					if err := h.db.SettleTransaction(reqID, user.ID, targetAgentID, modelName, cost, agentIncome, resp.AgentHash); err != nil {
+						log.Printf("❌ [DB] Settle failed: %v", err)
+					} else {
+						log.Printf("✅ [DB] Settle success!")
+					}
+				}
 				return
 			}
 

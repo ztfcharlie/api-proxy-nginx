@@ -2,7 +2,9 @@ package main
 
 import (
 	"central-hub/internal/billing"
+	"central-hub/internal/cache"
 	"central-hub/internal/config"
+	"central-hub/internal/db"
 	"central-hub/internal/gateway"
 	"central-hub/internal/tunnel"
 	"context"
@@ -16,11 +18,29 @@ import (
 
 func main() {
 	cfg := config.Load()
-	log.Printf("[Config] Loaded configuration. Port: %s, MaxAgents: %d", cfg.Port, cfg.MaxAgents)
+	log.Printf("[Config] Loaded configuration. Port: %s", cfg.Port)
 
-	wsServer := tunnel.NewTunnelServer(cfg)
+	dsn := os.Getenv("DB_DSN")
+	if dsn == "" {
+		dsn = "root:123456@tcp(127.0.0.1:3306)/xinjiagou"
+	}
+	database, err := db.NewDB(dsn)
+	if err != nil {
+		log.Fatalf("Failed to connect to DB: %v", err)
+	}
+
+	redisAddr := os.Getenv("REDIS_ADDR")
+	if redisAddr == "" {
+		redisAddr = "127.0.0.1:6379"
+	}
+	redisStore := cache.NewRedisStore(redisAddr)
+	log.Println("[Cache] Connected to Redis")
+
+	wsServer := tunnel.NewTunnelServer(cfg, redisStore)
 	billMgr := billing.NewManager()
-	gwHandler := gateway.NewHandler(wsServer, billMgr)
+	
+	// 注入 redis
+	gwHandler := gateway.NewHandler(wsServer, billMgr, database, redisStore)
 
 	http.HandleFunc("/tunnel/connect", wsServer.HandleConnect)
 	http.HandleFunc("/v1/chat/completions", gwHandler.HandleOpenAIRequest)
@@ -34,7 +54,6 @@ func main() {
 		IdleTimeout:       cfg.HTTPIdleTimeout,
 	}
 
-	// 在 Goroutine 中启动 Server，防止阻塞后续的 Shutdown 逻辑
 	go func() {
 		log.Printf("[Hub] Server starting on %s ...", addr)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -42,15 +61,11 @@ func main() {
 		}
 	}()
 
-	// 补丁 2: 优雅停机
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	
-	// 阻塞直到收到信号
 	<-quit
 	log.Println("[Hub] Shutting down server...")
 
-	// 设定 30秒 的宽限期，让正在处理的请求做完
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 

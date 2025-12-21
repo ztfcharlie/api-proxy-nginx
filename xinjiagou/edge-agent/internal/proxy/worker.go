@@ -1,7 +1,7 @@
 package proxy
 
 import (
-	"context" // 引入 context
+	"context"
 	"edge-agent/internal/protocol"
 	"encoding/json"
 	"fmt"
@@ -13,11 +13,12 @@ import (
 )
 
 type SenderFunc func(v interface{}) error
+// 修改: 回调返回 Hash 字符串
+type CompleteCallback func(reqID string, usage *protocol.Usage) string
 
 const MockMode = true
 
-// DoRequest 真正执行请求 (增加 ctx 参数)
-func DoRequest(ctx context.Context, s *RequestStreamer, send SenderFunc) {
+func DoRequest(ctx context.Context, s *RequestStreamer, send SenderFunc, onComplete CompleteCallback) {
 	reqID := s.ReqID
 
 	select {
@@ -25,14 +26,14 @@ func DoRequest(ctx context.Context, s *RequestStreamer, send SenderFunc) {
 	case <-time.After(10 * time.Second):
 		sendError(send, reqID, "Header timeout")
 		return
-	case <-ctx.Done(): // 监听连接断开
+	case <-ctx.Done():
 		return
 	}
 
 	if MockMode {
 		log.Printf("[Agent] MOCK MODE: Intercepting request %s", reqID)
 		io.Copy(io.Discard, s.GetBodyReader())
-		go mockOpenAIResponse(reqID, send)
+		go mockOpenAIResponse(reqID, send, onComplete)
 		return
 	}
 
@@ -47,8 +48,6 @@ func DoRequest(ctx context.Context, s *RequestStreamer, send SenderFunc) {
 
 	targetURL := "https://api.openai.com" + s.Meta.URL
 	
-	// 补丁: 使用 NewRequestWithContext 绑定生命周期
-	// 一旦 ctx 取消 (连接断开)，这个 HTTP 请求会立即终止
 	realReq, err := http.NewRequestWithContext(ctx, s.Meta.Method, targetURL, s.GetBodyReader())
 	if err != nil {
 		sendError(send, reqID, "Create req failed: "+err.Error())
@@ -70,7 +69,6 @@ func DoRequest(ctx context.Context, s *RequestStreamer, send SenderFunc) {
 	client := &http.Client{Timeout: 180 * time.Second}
 	resp, err := client.Do(realReq)
 	if err != nil {
-		// 如果是 ctx 取消导致的错误，我们就不发 error 给 Hub 了 (因为连接已经断了)
 		if ctx.Err() == nil {
 			sendError(send, reqID, "Network error: "+err.Error())
 		}
@@ -107,9 +105,13 @@ func DoRequest(ctx context.Context, s *RequestStreamer, send SenderFunc) {
 		if err != nil {
 			if err == io.EOF {
 				finalPayload := protocol.HttpResponsePayload{IsFinal: true}
-				sendResponse(send, reqID, finalPayload)
+				
+				// TODO: 在这里解析 Usage 并调用 onComplete
+				// 为了简化，这里先不传 Usage
+				// 真实场景：ParseSSE(buffer) -> Usage
+				
+sendResponse(send, reqID, finalPayload)
 			} else {
-				// 同样检查是否因 ctx 取消
 				if ctx.Err() == nil {
 					log.Printf("Read error: %v", err)
 				}
@@ -119,8 +121,7 @@ func DoRequest(ctx context.Context, s *RequestStreamer, send SenderFunc) {
 	}
 }
 
-// ... (Mock 和 sendResponse 保持不变) ...
-func mockOpenAIResponse(reqID string, send SenderFunc) {
+func mockOpenAIResponse(reqID string, send SenderFunc, onComplete CompleteCallback) {
 	words := []string{"Hello", "!", " MOCK", " Usage", " Test", "."}
 	headerPayload := protocol.HttpResponsePayload{
 		StatusCode: 200, Headers: map[string]string{"Content-Type": "text/event-stream"}, IsFinal: false,
@@ -133,7 +134,19 @@ func mockOpenAIResponse(reqID string, send SenderFunc) {
 	}
 	time.Sleep(50 * time.Millisecond)
 	usage := &protocol.Usage{PromptTokens: 5, CompletionTokens: 5}
-	sendResponse(send, reqID, protocol.HttpResponsePayload{BodyChunk: []byte("data: [DONE]\n\n"), IsFinal: true, Usage: usage})
+	
+	// 回调写入 SQLite 并获取 Hash
+	hash := ""
+	if onComplete != nil {
+		hash = onComplete(reqID, usage)
+	}
+
+	sendResponse(send, reqID, protocol.HttpResponsePayload{
+		BodyChunk: []byte("data: [DONE]\n\n"),
+		IsFinal:   true,
+		Usage:     usage,
+		AgentHash: hash, // 发送 Hash
+	})
 }
 
 func sendResponse(send SenderFunc, reqID string, payload protocol.HttpResponsePayload) {

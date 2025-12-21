@@ -47,7 +47,6 @@ type HttpRequestPayload struct {
     URL          string            `json:"url,omitempty"`
     Headers      map[string]string `json:"headers,omitempty"`
     PriceVersion string            `json:"price_ver,omitempty"`
-    
     BodyChunk    []byte            `json:"body_chunk,omitempty"`
     IsFinal      bool              `json:"is_final"`
 }
@@ -59,6 +58,9 @@ type HttpResponsePayload struct {
     IsFinal    bool              `json:"is_final"`
     Error      string            `json:"error,omitempty"`
     Usage      *Usage            `json:"usage,omitempty"`
+    
+    // 新增
+    AgentHash  string            `json:"agent_hash,omitempty"`
 }
 
 type PriceTable struct {
