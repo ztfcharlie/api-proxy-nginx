@@ -1,8 +1,9 @@
 package tunnel
 
 import (
-	"central-hub/internal/cache" // 引入 cache
+	"central-hub/internal/cache"
 	"central-hub/internal/config"
+	"central-hub/internal/db"
 	"central-hub/internal/protocol"
 	"context"
 	"encoding/json"
@@ -18,7 +19,8 @@ import (
 
 type TunnelServer struct {
 	cfg              *config.Config
-	redis            *cache.RedisStore // 注入 Redis
+	redis            *cache.RedisStore
+	db               *db.DB
 	upgrader         websocket.Upgrader
 	agents           map[string]*AgentSession
 	mu               sync.RWMutex
@@ -27,12 +29,12 @@ type TunnelServer struct {
 	handshakeLimiter *rate.Limiter
 }
 
-// NewTunnelServer 增加 redis 参数
-func NewTunnelServer(cfg *config.Config, rdb *cache.RedisStore) *TunnelServer {
+func NewTunnelServer(cfg *config.Config, rdb *cache.RedisStore, database *db.DB) *TunnelServer {
 	return &TunnelServer{
-		cfg:      cfg,
-		redis:    rdb,
-		upgrader: websocket.Upgrader{
+		cfg:              cfg,
+		redis:            rdb,
+		db:               database,
+		upgrader:         websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool { return true },
 		},
 		agents:           make(map[string]*AgentSession),
@@ -82,7 +84,6 @@ func (s *TunnelServer) HandleConnect(w http.ResponseWriter, r *http.Request) {
 	}
 	s.registerAgent(agentID, session)
 
-	// Redis 注册 (异步)
 	go func() {
 		if err := s.redis.RegisterAgent(context.Background(), agentID); err != nil {
 			log.Printf("[Redis] Failed to register agent %s: %v", agentID, err)
@@ -92,41 +93,56 @@ func (s *TunnelServer) HandleConnect(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		s.unregisterAgent(agentID)
 		s.CloseSessionAndNotify(agentID, session)
-		// Redis 注销
 		s.redis.UnregisterAgent(context.Background(), agentID)
 	}()
 
 	s.readLoop(agentID, session)
 }
 
-// ... handshake (不变) ...
 func (s *TunnelServer) handshake(conn *websocket.Conn, agentID string) error {
 	conn.SetReadDeadline(time.Now().Add(s.cfg.WSWriteWait))
 	conn.SetWriteDeadline(time.Now().Add(s.cfg.WSWriteWait))
 
 	_, msg, err := conn.ReadMessage()
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	var packet protocol.Packet
-	if err := json.Unmarshal(msg, &packet); err != nil { return err }
-	if packet.Type != protocol.TypeRegister { return fmt.Errorf("expected REGISTER") }
+	if err := json.Unmarshal(msg, &packet); err != nil {
+		return err
+	}
+	if packet.Type != protocol.TypeRegister {
+		return fmt.Errorf("expected REGISTER")
+	}
 
 	var regPayload protocol.RegisterPayload
 	json.Unmarshal(packet.Payload, &regPayload)
-	agentPubKey := regPayload.PublicKey 
+	agentPubKey := regPayload.PublicKey
+
+	// 校验公钥
+	if err := s.db.RegisterOrValidateAgent(agentID, agentPubKey); err != nil {
+		return fmt.Errorf("key validation failed: %v", err)
+	}
 
 	nonce := generateNonce()
 	challengePayload, _ := json.Marshal(protocol.AuthChallengePayload{Nonce: nonce})
-	if err := conn.WriteJSON(protocol.Packet{Type: protocol.TypeAuthChallenge, Payload: challengePayload}); err != nil { return err }
+	if err := conn.WriteJSON(protocol.Packet{Type: protocol.TypeAuthChallenge, Payload: challengePayload}); err != nil {
+		return err
+	}
 
 	conn.SetReadDeadline(time.Now().Add(s.cfg.WSWriteWait))
 	_, msg, err = conn.ReadMessage()
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	json.Unmarshal(msg, &packet)
-	
+
 	var authPayload protocol.AuthResponsePayload
 	json.Unmarshal(packet.Payload, &authPayload)
 
-	if err := verifySignature(agentPubKey, nonce, authPayload.Signature); err != nil { return err }
+	if err := verifySignature(agentPubKey, nonce, authPayload.Signature); err != nil {
+		return err
+	}
 
 	conn.SetReadDeadline(time.Time{})
 	conn.SetWriteDeadline(time.Time{})

@@ -45,7 +45,41 @@ func (d *DB) GetUserByAPIKey(key string) (*User, error) {
 	return &u, nil
 }
 
-// SettleTransaction 结算交易 (优化版: 移除 Agent 热点更新)
+// GetAgentPublicKey 获取 Agent 注册的公钥
+func (d *DB) GetAgentPublicKey(agentID string) (string, error) {
+	var pubKey string
+	err := d.conn.QueryRow("SELECT public_key FROM agents WHERE id = ?", agentID).Scan(&pubKey)
+	if err != nil {
+		return "", err
+	}
+	return pubKey, nil
+}
+
+// RegisterOrValidateAgent 自动注册或验证 Agent
+func (d *DB) RegisterOrValidateAgent(agentID, pubKey string) error {
+	var existingKey string
+	err := d.conn.QueryRow("SELECT public_key FROM agents WHERE id = ?", agentID).Scan(&existingKey)
+	
+	if err == sql.ErrNoRows {
+		// 新 Agent，自动注册 (TOFU 模式)
+		_, err := d.conn.Exec("INSERT INTO agents (id, name, public_key) VALUES (?, 'AutoReg', ?)", agentID, pubKey)
+		if err != nil {
+			return fmt.Errorf("register failed: %v", err)
+		}
+		log.Printf("[DB] New agent registered: %s", agentID)
+		return nil
+	} else if err != nil {
+		return err
+	}
+
+	// 已存在，校验 Key
+	if existingKey != pubKey {
+		return fmt.Errorf("public key mismatch! expected %s..., got %s...", existingKey[:8], pubKey[:8])
+	}
+	
+	return nil
+}
+
 func (d *DB) SettleTransaction(reqID string, userID int, agentID string, model string, priceVer string, cost float64, agentIncome float64, agentHash string) error {
 	maxRetries := 3
 	var err error
@@ -76,7 +110,6 @@ func (d *DB) settleTxInternal(reqID string, userID int, agentID string, model st
 	}
 	defer tx.Rollback()
 
-	// 1. 扣用户钱 (用户比较分散，行锁冲突较小)
 	res, err := tx.Exec("UPDATE users SET balance = balance - ? WHERE id = ? AND balance >= ?", cost, userID, cost)
 	if err != nil {
 		return fmt.Errorf("deduct failed: %v", err)
@@ -86,10 +119,9 @@ func (d *DB) settleTxInternal(reqID string, userID int, agentID string, model st
 		return fmt.Errorf("insufficient balance")
 	}
 
-	// 2. 加 Agent 钱 -> 移除了！改为 Redis 处理
-	// 这里只确保 Agent 存在即可 (可选)
+	// 注意：Agent 余额更新已移至 ReconcileAgents (Worker) 或 Redis
+	// 这里只负责写入流水
 
-	// 3. 记流水 (Insert 操作，无行锁冲突)
 	_, err = tx.Exec(`
 		INSERT INTO transactions (req_id, user_id, agent_id, model, price_ver, total_cost, agent_income, agent_hash)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)

@@ -36,7 +36,8 @@ func main() {
 	redisStore := cache.NewRedisStore(redisAddr)
 	log.Println("[Cache] Connected to Redis")
 
-	wsServer := tunnel.NewTunnelServer(cfg, redisStore)
+	// 注入 database
+	wsServer := tunnel.NewTunnelServer(cfg, redisStore, database)
 	billMgr := billing.NewManager()
 	
 	gwHandler := gateway.NewHandler(wsServer, billMgr, database, redisStore)
@@ -44,7 +45,7 @@ func main() {
 	http.HandleFunc("/tunnel/connect", wsServer.HandleConnect)
 	http.HandleFunc("/v1/chat/completions", gwHandler.HandleOpenAIRequest)
 
-	// === 启动后台对账 Worker ===
+	// 启动 Worker
 	go func() {
 		log.Println("[Worker] Reconciliation worker started (Interval: 60s)")
 		ticker := time.NewTicker(60 * time.Second)
@@ -59,7 +60,6 @@ func main() {
 			}
 		}
 	}()
-	// ========================
 
 	addr := ":" + cfg.Port
 	server := &http.Server{

@@ -26,20 +26,27 @@ func main() {
 
 	log.Println("Checking database schema...")
 
-	// 定义所有需要迁移的语句
 	queries := []string{
-		// 1. 添加 agent_hash
 		"ALTER TABLE transactions ADD COLUMN agent_hash VARCHAR(64) DEFAULT ''",
-		// 2. 添加 is_settled
 		"ALTER TABLE transactions ADD COLUMN is_settled TINYINT DEFAULT 0",
-		// 3. 添加索引 (加快对账查询速度)
 		"CREATE INDEX idx_settled ON transactions(is_settled)",
+		
+		// 新增: 创建提现表 (如果不存在)
+		`CREATE TABLE IF NOT EXISTS withdrawals (
+			id VARCHAR(64) PRIMARY KEY,
+			agent_id VARCHAR(64) NOT NULL,
+			amount DECIMAL(18, 6) NOT NULL,
+			status TINYINT DEFAULT 0 COMMENT '0=Pending, 1=Paid, 2=Rejected',
+			tx_hash VARCHAR(128) COMMENT 'Payment gateway transaction id',
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			processed_at TIMESTAMP NULL,
+			INDEX idx_agent (agent_id)
+		)`,
 	}
 
 	for _, q := range queries {
 		_, err := db.Exec(q)
 		if err != nil {
-			// 简单判断: 如果报错包含 "Duplicate" 或 "exists"，说明已经有了，跳过
 			log.Printf("Migration step notice: %v", err)
 		} else {
 			log.Printf("✅ Executed: %s", q)

@@ -39,13 +39,24 @@ CREATE TABLE IF NOT EXISTS transactions (
     agent_income DECIMAL(18, 6) NOT NULL,
     agent_hash VARCHAR(64) DEFAULT '',
     
-    -- 新增: 结转标记。1代表该笔金额已经累加到 agents.balance，可以安全归档删除。
     is_settled TINYINT DEFAULT 0,
     
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     INDEX idx_user (user_id),
     INDEX idx_agent (agent_id),
-    INDEX idx_settled (is_settled) -- 方便查询未结转数据
+    INDEX idx_settled (is_settled)
+);
+
+-- 新增: 提现记录表 (预留)
+CREATE TABLE IF NOT EXISTS withdrawals (
+    id VARCHAR(64) PRIMARY KEY,
+    agent_id VARCHAR(64) NOT NULL,
+    amount DECIMAL(18, 6) NOT NULL,
+    status TINYINT DEFAULT 0 COMMENT '0=Pending, 1=Paid, 2=Rejected',
+    tx_hash VARCHAR(128) COMMENT 'Payment gateway transaction id',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    processed_at TIMESTAMP NULL,
+    INDEX idx_agent (agent_id)
 );
 
 INSERT IGNORE INTO users (username, api_key, balance) VALUES ('test_user', 'sk-test-123', 10.00);

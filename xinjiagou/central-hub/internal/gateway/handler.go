@@ -174,13 +174,14 @@ func (h *Handler) HandleOpenAIRequest(w http.ResponseWriter, r *http.Request) {
 					log.Printf("💰 [Settlement] ReqID: %s, User: %d, Cost: $%.6f, Hash: %s", 
 						reqID, user.ID, cost, resp.AgentHash)
 					
-					// 1. 写入 Redis (极速)
-					h.redis.IncrAgentIncome(context.Background(), targetAgentID, agentIncome)
-
-					// 2. 写入 MySQL (只记流水和扣用户，避开 Agent 热点)
+					// 修复: 先写 MySQL (真理)，成功后再更新 Redis (缓存)
+					// 防止数据库回滚导致 Redis 虚增收入
 					if err := h.db.SettleTransaction(reqID, user.ID, targetAgentID, modelName, priceVer, cost, agentIncome, resp.AgentHash); err != nil {
 						log.Printf("❌ [DB] Settle failed: %v", err)
+						// 注意：这里不用回滚 Redis，因为还没加呢
 					} else {
+						// DB 成功了，现在可以安全地更新 Redis 显示了
+						h.redis.IncrAgentIncome(context.Background(), targetAgentID, agentIncome)
 						log.Printf("✅ [DB] Settle success!")
 					}
 				}
