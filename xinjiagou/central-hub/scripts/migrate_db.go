@@ -30,6 +30,7 @@ func main() {
 		"ALTER TABLE transactions ADD COLUMN agent_hash VARCHAR(64) DEFAULT ''",
 		"ALTER TABLE transactions ADD COLUMN is_settled TINYINT DEFAULT 0",
 		"CREATE INDEX idx_settled ON transactions(is_settled)",
+		"ALTER TABLE agents ADD COLUMN tier CHAR(1) DEFAULT 'B'", // 新增: Agent 等级
 		
 		// 新增: 创建提现表 (如果不存在)
 		`CREATE TABLE IF NOT EXISTS withdrawals (
@@ -42,6 +43,7 @@ func main() {
 			processed_at TIMESTAMP NULL,
 			INDEX idx_agent (agent_id)
 		)`,
+		"INSERT IGNORE INTO users (username, api_key, balance) VALUES ('ant_user', 'sk-ant-test-key-123', 10.00)",
 	}
 
 	for _, q := range queries {

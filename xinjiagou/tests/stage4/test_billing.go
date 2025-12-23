@@ -3,6 +3,7 @@ package main
 import (
 	"bufio"
 	"bytes"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -46,13 +47,20 @@ func main() {
 		for scanner.Scan() {
 			line := scanner.Text()
 			// 打印出来方便看
-			// fmt.Println("[HubLog]", line) 
+			fmt.Println("[HubLog]", line) 
 			logChan <- line
 		}
 	}()
 
 	// 2. 启动 Agent
-	agentCmd := exec.Command(agentPath, "-id", "auth-agent-001")
+	// 使用随机 ID 避免 Key 冲突
+	randomID := fmt.Sprintf("bill-agent-%d", time.Now().Unix())
+	// loader.go 只读环境变量，不读 flag，所以 flag -id 无效
+	agentCmd := exec.Command(agentPath) 
+	agentCmd.Env = append(os.Environ(), 
+		"AGENT_ID="+randomID,
+		"HUB_ADDRESS=localhost:8080",
+	)
 	agentCmd.Stdout = os.Stdout
 	agentCmd.Stderr = os.Stderr
 	agentCmd.Start()
@@ -67,12 +75,22 @@ func main() {
 		"messages": [{"role": "user", "content": "hi"}],
 		"stream": true
 	}`)
-	resp, err := http.Post("http://localhost:8080/v1/chat/completions", "application/json", bytes.NewBuffer(reqBody))
+	
+	req, _ := http.NewRequest("POST", "http://localhost:8080/v1/chat/completions", bytes.NewBuffer(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer sk-test-123") // From init.sql
+	
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	
 	if err != nil {
 		log.Fatalf("Req failed: %v", err)
 	}
-	io.Copy(io.Discard, resp.Body)
+	
+	respBytes, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
+	log.Printf("HTTP Status: %s", resp.Status)
+	log.Printf("HTTP Body: %s", string(respBytes))
 
 	// 4. 检查日志
 	log.Println("4. 等待计费日志...")
@@ -84,7 +102,7 @@ func main() {
 	for {
 		select {
 		case line := <-logChan:
-			if strings.Contains(line, "💰 [Billing]") && strings.Contains(line, "Cost:") {
+			if strings.Contains(line, "💰 [Settlement]") && strings.Contains(line, "Cost:") {
 				log.Println("✅ 找到计费日志: " + line)
 				found = true
 				goto END

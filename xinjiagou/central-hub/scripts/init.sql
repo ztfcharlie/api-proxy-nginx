@@ -60,4 +60,5 @@ CREATE TABLE IF NOT EXISTS withdrawals (
 );
 
 INSERT IGNORE INTO users (username, api_key, balance) VALUES ('test_user', 'sk-test-123', 10.00);
+INSERT IGNORE INTO users (username, api_key, balance) VALUES ('ant_user', 'sk-ant-test-key-123', 10.00);
 INSERT IGNORE INTO price_tables (version, content) VALUES ('v1.0.0', '{"models": {"gpt-4": {"input": 30.0, "output": 60.0}, "gpt-3.5-turbo": {"input": 0.5, "output": 1.5}}}');

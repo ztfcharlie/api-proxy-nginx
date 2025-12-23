@@ -29,7 +29,7 @@ func NewHandler(t *tunnel.TunnelServer, b *billing.Manager, d *db.DB, r *cache.R
 	return &Handler{tunnel: t, billing: b, db: d, redis: r}
 }
 
-func (h *Handler) HandleOpenAIRequest(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) HandleRequest(w http.ResponseWriter, r *http.Request) {
 	authHeader := r.Header.Get("Authorization")
 	apiKey := strings.TrimPrefix(authHeader, "Bearer ")
 	if apiKey == "" {
@@ -64,21 +64,71 @@ func (h *Handler) HandleOpenAIRequest(w http.ResponseWriter, r *http.Request) {
 	}
 
 	reqID := uuid.New().String()
-	targetAgentID := "auth-agent-001" 
-
+	
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Failed to read body", http.StatusBadRequest)
 		return
 	}
+
+	// === 风控拦截点 (Moderation Filter) ===
+	// TODO: 将来接入真实的大模型审核 API
+	// 目前仅做简单的 Mock 演示: 如果内容包含 "illegal_bomb", 则拦截
+	if strings.Contains(string(body), "illegal_bomb") {
+		log.Printf("[Moderation] Blocked request %s due to sensitive content", reqID)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden) // 403 or 401 as requested
+		json.NewEncoder(w).Encode(map[string]interface{}{
+			"error": map[string]string{
+				"code":    "sensitive_words_detected",
+				"message": "Content moderation failed with status 403",
+				"type":    "hub_error",
+			},
+		})
+		return
+	}
+	// ======================================
 	
-	var reqBodyMap map[string]interface{}
+	// Lightweight Sniffing: Try to find "model" in the first 1KB
+	// Avoid full JSON parsing to support stream/partial bodies
 	modelName := "unknown"
-	if err := json.Unmarshal(body, &reqBodyMap); err == nil {
-		if m, ok := reqBodyMap["model"].(string); ok {
-			modelName = m
+	limit := 1024
+	if len(body) < limit { limit = len(body) }
+	head := string(body[:limit])
+	
+	// Very naive regex-like search: "model": "xyz"
+	// Better approach: use a fast json parser like buger/jsonparser, but for now str matching is okay for MVP
+	if idx := strings.Index(head, `"model"`); idx != -1 {
+		// Look for value after :
+		rest := head[idx+7:]
+		if startQuote := strings.Index(rest, `"` ); startQuote != -1 {
+			rest = rest[startQuote+1:]
+			if endQuote := strings.Index(rest, `"` ); endQuote != -1 {
+				modelName = rest[:endQuote]
+			}
 		}
 	}
+
+	// Extract Provider from API Key prefix
+	// e.g. "sk-ant-..." -> "anthropic"
+	// e.g. "sk-goog-..." -> "google"
+	// Default to "openai"
+	targetProvider := "openai"
+	if strings.HasPrefix(apiKey, "sk-ant-") {
+		targetProvider = "anthropic"
+	} else if strings.HasPrefix(apiKey, "sk-goog-") {
+		targetProvider = "google"
+	}
+
+	result, err := h.tunnel.SelectAgent(r.Context(), targetProvider, modelName)
+	if err != nil {
+		log.Printf("[Gateway] No agent found for provider %s model %s: %v", targetProvider, modelName, err)
+		http.Error(w, fmt.Sprintf("No agent available for %s/%s", targetProvider, modelName), http.StatusServiceUnavailable)
+		return
+	}
+	
+	targetAgentID := result.AgentID
+	targetInstanceID := result.InstanceID
 
 	respChan, err := h.tunnel.InitRequest(targetAgentID, reqID)
 	if err != nil {
@@ -92,14 +142,15 @@ func (h *Handler) HandleOpenAIRequest(w http.ResponseWriter, r *http.Request) {
 		defer close(errChan)
 		
 		metaPayload := protocol.HttpRequestPayload{
-			Method:       r.Method,
-			URL:          r.URL.Path,
-			Headers:      map[string]string{
+			Method:           r.Method,
+			URL:              r.URL.Path, // Path Pass-through
+			Headers:          map[string]string{
 				"Content-Type":  r.Header.Get("Content-Type"),
 				"Authorization": r.Header.Get("Authorization"),
 			},
-			PriceVersion: h.billing.GetCurrentPriceTable().Version,
-			IsFinal:      false,
+			PriceVersion:     h.billing.GetCurrentPriceTable().Version,
+			IsFinal:          false,
+			TargetInstanceID: targetInstanceID,
 		}
 		if err := h.tunnel.SendRequestChunk(targetAgentID, reqID, metaPayload); err != nil {
 			errChan <- err

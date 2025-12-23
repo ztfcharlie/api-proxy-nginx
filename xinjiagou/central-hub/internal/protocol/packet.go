@@ -13,6 +13,7 @@ const (
     TypeRequest       PacketType = "request"
     TypeResponse      PacketType = "response"
     TypePriceUpdate   PacketType = "price_update"
+    TypeModelUpdate   PacketType = "model_update" // 新增: Agent 主动上报模型变更
 )
 
 type Packet struct {
@@ -21,10 +22,26 @@ type Packet struct {
     Payload   json.RawMessage `json:"payload,omitempty"`
 }
 
-type RegisterPayload struct {
-    Version   string `json:"version"`
-    PublicKey string `json:"public_key"`
+// InstanceConfig 描述一个具体的账号实例 (不含Key)
+type InstanceConfig struct {
+    ID       string   `json:"id"`       // Agent本地唯一标识 (e.g. "acc-1")
+    Provider string   `json:"provider"` // "openai", "anthropic"
+    Models   []string `json:"models"`   // 支持的模型列表
+    Tier     string   `json:"tier"`     // 账号等级: "T0", "T1"
+    RPM      int      `json:"rpm"`      // 自定义的RPM限制
+    Tags     []string `json:"tags"`     // e.g. ["vertex", "us-east"]
 }
+
+type RegisterPayload struct {
+    Version   string           `json:"version"`
+    PublicKey string           `json:"public_key"`
+    Instances []InstanceConfig `json:"instances"` // 列表形式上报
+}
+
+type ModelUpdatePayload struct {
+    Instances []InstanceConfig `json:"instances"`
+}
+
 type AuthChallengePayload struct {
     Nonce string `json:"nonce"`
 }
@@ -43,12 +60,13 @@ type Usage struct {
 }
 
 type HttpRequestPayload struct {
-    Method       string            `json:"method,omitempty"`
-    URL          string            `json:"url,omitempty"`
-    Headers      map[string]string `json:"headers,omitempty"`
-    PriceVersion string            `json:"price_ver,omitempty"`
-    BodyChunk    []byte            `json:"body_chunk,omitempty"`
-    IsFinal      bool              `json:"is_final"`
+    Method           string            `json:"method,omitempty"`
+    URL              string            `json:"url,omitempty"`
+    Headers          map[string]string `json:"headers,omitempty"`
+    PriceVersion     string            `json:"price_ver,omitempty"`
+    BodyChunk        []byte            `json:"body_chunk,omitempty"`
+    IsFinal          bool              `json:"is_final"`
+    TargetInstanceID string            `json:"target_instance_id,omitempty"` // 新增: 指导 Agent 选号
 }
 
 type HttpResponsePayload struct {

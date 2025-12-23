@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/url"
 	"os"
@@ -37,7 +38,9 @@ func main() {
 	// 删除旧的 key 文件以确保重新生成
 	os.Remove(filepath.Join(cwd, "edge-agent", "agent.key"))
 
-	agentCmd := exec.Command(agentPath, "-id", "auth-agent-001")
+	// 使用随机 Agent ID 确保 TOFU 生效 (避免 DB 中已有旧 Key 导致冲突)
+	randomID := fmt.Sprintf("auth-agent-%d", time.Now().Unix())
+	agentCmd := exec.Command(agentPath, "-id", randomID)
 	// 捕获输出用于分析
 	var agentOut strings.Builder
 	agentCmd.Stdout = &agentOut

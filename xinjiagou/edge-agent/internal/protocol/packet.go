@@ -13,6 +13,7 @@ const (
     TypeRequest       PacketType = "request"
     TypeResponse      PacketType = "response"
     TypePriceUpdate   PacketType = "price_update"
+    TypeModelUpdate   PacketType = "model_update"
 )
 
 type Packet struct {
@@ -21,10 +22,25 @@ type Packet struct {
     Payload   json.RawMessage `json:"payload,omitempty"`
 }
 
-type RegisterPayload struct {
-    Version   string `json:"version"`
-    PublicKey string `json:"public_key"`
+type InstanceConfig struct {
+    ID       string   `json:"id"`
+    Provider string   `json:"provider"`
+    Models   []string `json:"models"`
+    Tier     string   `json:"tier"`
+    RPM      int      `json:"rpm"`
+    Tags     []string `json:"tags"`
 }
+
+type RegisterPayload struct {
+    Version   string           `json:"version"`
+    PublicKey string           `json:"public_key"`
+    Instances []InstanceConfig `json:"instances"`
+}
+
+type ModelUpdatePayload struct {
+    Instances []InstanceConfig `json:"instances"`
+}
+
 type AuthChallengePayload struct {
     Nonce string `json:"nonce"`
 }
@@ -43,12 +59,13 @@ type Usage struct {
 }
 
 type HttpRequestPayload struct {
-    Method       string            `json:"method,omitempty"`
-    URL          string            `json:"url,omitempty"`
-    Headers      map[string]string `json:"headers,omitempty"`
-    PriceVersion string            `json:"price_ver,omitempty"`
-    BodyChunk    []byte            `json:"body_chunk,omitempty"`
-    IsFinal      bool              `json:"is_final"`
+    Method           string            `json:"method,omitempty"`
+    URL              string            `json:"url,omitempty"`
+    Headers          map[string]string `json:"headers,omitempty"`
+    PriceVersion     string            `json:"price_ver,omitempty"`
+    BodyChunk        []byte            `json:"body_chunk,omitempty"`
+    IsFinal          bool              `json:"is_final"`
+    TargetInstanceID string            `json:"target_instance_id,omitempty"`
 }
 
 type HttpResponsePayload struct {

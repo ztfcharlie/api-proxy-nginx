@@ -1,0 +1,7 @@
+2025/12/22 22:42:24 [Agent] Starting agent: agent-default (Hub: localhost:8080)
+2025/12/22 22:42:24 [Ledger] SQLite initialized with Hash Chain support
+2025/12/22 22:42:24 [UI] Admin Dashboard running at http://127.0.0.1:9999
+2025/12/22 22:42:24 [Agent] Handshake successful! Models reported: [gpt-4 gpt-3.5-turbo]
+2025/12/22 22:42:34 [Agent] Dynamic Config Change: Adding 'gpt-4-turbo'
+2025/12/22 22:42:34 [Agent] Models changed, sending update: [gpt-4 gpt-3.5-turbo gpt-4-turbo]
+2025/12/22 22:43:12 [Agent] Connection lost: read tcp [::1]:54781->[::1]:8080: wsarecv: An existing connection was forcibly closed by the remote host.

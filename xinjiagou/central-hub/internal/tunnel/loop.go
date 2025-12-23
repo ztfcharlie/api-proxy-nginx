@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"central-hub/internal/protocol"
+	"central-hub/internal/router"
 	"encoding/json"
 	"log"
 	"runtime/debug"
@@ -43,6 +44,19 @@ func (s *TunnelServer) handlePacket(agentID string, session *AgentSession, packe
 		pongPacket := protocol.Packet{Type: protocol.TypePong}
 		session.SafeWrite(pongPacket)
 		
+	case protocol.TypeModelUpdate:
+		var payload protocol.ModelUpdatePayload
+		if err := json.Unmarshal(packet.Payload, &payload); err == nil {
+			session.Instances = payload.Instances
+			log.Printf("[Hub] Agent %s updated instances: %d", agentID, len(session.Instances))
+			
+			// Update Router
+			s.Router.UpdateAgent(agentID, router.AgentInfo{
+				ID:        agentID, 
+				Instances: session.Instances,
+			})
+		}
+
 	case protocol.TypeResponse:
 		if ch, ok := s.pendingRequests.Load(packet.RequestID); ok {
 			select {

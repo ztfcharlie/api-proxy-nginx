@@ -32,7 +32,16 @@ func main() {
 
 	// 2. 启动 Agent
 	// 指定 UI 端口，防止冲突
-	agentCmd := exec.Command(agentPath, "-id", "auth-agent-001", "-ui", "127.0.0.1:9999")
+	// 使用随机 ID
+	randomID := "ops-agent-" + time.Now().Format("150405")
+	
+	agentCmd := exec.Command(agentPath)
+	agentCmd.Env = append(os.Environ(), 
+		"AGENT_ID="+randomID,
+		"UI_PORT=9999",
+		"RATE_LIMIT_RPM=60",
+		"RATE_LIMIT_BURST=1",
+	)
 	agentCmd.Stdout = os.Stdout
 	agentCmd.Stderr = os.Stderr // 观察 Agent 日志
 	agentCmd.Start()
@@ -74,7 +83,12 @@ func main() {
 			defer wg.Done()
 			
 			reqBody := []byte(`{"model": "gpt-4", "messages": [{"role": "user", "content": "hi"}]}`)
-			r, err := http.Post("http://localhost:8080/v1/chat/completions", "application/json", bytes.NewBuffer(reqBody))
+			rReq, _ := http.NewRequest("POST", "http://localhost:8080/v1/chat/completions", bytes.NewBuffer(reqBody))
+			rReq.Header.Set("Content-Type", "application/json")
+			rReq.Header.Set("Authorization", "Bearer sk-test-123")
+			
+			client := &http.Client{}
+			r, err := client.Do(rReq)
 			
 			mu.Lock()
 			defer mu.Unlock()

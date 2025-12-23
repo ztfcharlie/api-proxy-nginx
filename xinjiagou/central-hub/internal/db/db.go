@@ -55,29 +55,31 @@ func (d *DB) GetAgentPublicKey(agentID string) (string, error) {
 	return pubKey, nil
 }
 
-// RegisterOrValidateAgent 自动注册或验证 Agent
-func (d *DB) RegisterOrValidateAgent(agentID, pubKey string) error {
+// RegisterOrValidateAgent 自动注册或验证 Agent, 返回 Tier
+func (d *DB) RegisterOrValidateAgent(agentID, pubKey string) (string, error) {
 	var existingKey string
-	err := d.conn.QueryRow("SELECT public_key FROM agents WHERE id = ?", agentID).Scan(&existingKey)
+	var tier string
+	
+	err := d.conn.QueryRow("SELECT public_key, tier FROM agents WHERE id = ?", agentID).Scan(&existingKey, &tier)
 	
 	if err == sql.ErrNoRows {
 		// 新 Agent，自动注册 (TOFU 模式)
-		_, err := d.conn.Exec("INSERT INTO agents (id, name, public_key) VALUES (?, 'AutoReg', ?)", agentID, pubKey)
+		_, err := d.conn.Exec("INSERT INTO agents (id, name, public_key, tier) VALUES (?, 'AutoReg', ?, 'B')", agentID, pubKey)
 		if err != nil {
-			return fmt.Errorf("register failed: %v", err)
+			return "", fmt.Errorf("register failed: %v", err)
 		}
-		log.Printf("[DB] New agent registered: %s", agentID)
-		return nil
+		log.Printf("[DB] New agent registered: %s (Tier B)", agentID)
+		return "B", nil
 	} else if err != nil {
-		return err
+		return "", err
 	}
 
 	// 已存在，校验 Key
 	if existingKey != pubKey {
-		return fmt.Errorf("public key mismatch! expected %s..., got %s...", existingKey[:8], pubKey[:8])
+		return "", fmt.Errorf("public key mismatch! expected %s..., got %s...", existingKey[:8], pubKey[:8])
 	}
 	
-	return nil
+	return tier, nil
 }
 
 func (d *DB) SettleTransaction(reqID string, userID int, agentID string, model string, priceVer string, cost float64, agentIncome float64, agentHash string) error {

@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 	"edge-agent/internal/protocol"
+	"edge-agent/internal/proxy/providers"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,11 +14,9 @@ import (
 )
 
 type SenderFunc func(v interface{}) error
-// 修改: 回调返回 Hash 字符串
 type CompleteCallback func(reqID string, usage *protocol.Usage) string
 
-const MockMode = true
-
+// DoRequest 执行真实的代理请求
 func DoRequest(ctx context.Context, s *RequestStreamer, send SenderFunc, onComplete CompleteCallback) {
 	reqID := s.ReqID
 
@@ -30,57 +29,92 @@ func DoRequest(ctx context.Context, s *RequestStreamer, send SenderFunc, onCompl
 		return
 	}
 
-	if MockMode {
-		log.Printf("[Agent] MOCK MODE: Intercepting request %s", reqID)
-		io.Copy(io.Discard, s.GetBodyReader())
-		go mockOpenAIResponse(reqID, send, onComplete)
+	instanceID := s.Meta.TargetInstanceID
+	if instanceID == "" {
+		sendError(send, reqID, "No TargetInstanceID provided")
 		return
 	}
 
-	if !strings.HasPrefix(s.Meta.URL, "/") {
-		sendError(send, reqID, "Invalid URL format: must start with /")
-		return
+	// 1. 查找实例配置 (Mock Lookup)
+	// 在真实代码中，这里应该查本地 DB 或 Config
+	instance := &protocol.InstanceConfig{
+		ID: instanceID,
+		// 临时: 假设 ID 就是 Key，且 Endpoint 是官方的
+		// 生产环境必须从加密存储读取
 	}
-	if strings.Contains(s.Meta.URL, "@") {
-		sendError(send, reqID, "Invalid URL format: illegal char @")
-		return
-	}
-
-	targetURL := "https://api.openai.com" + s.Meta.URL
 	
-	realReq, err := http.NewRequestWithContext(ctx, s.Meta.Method, targetURL, s.GetBodyReader())
+	// 2. 选择适配器
+	// 我们需要知道 Provider，但 s.Meta (HttpRequestPayload) 里没传 Provider
+	// 这是一个设计遗漏。Hub 应该传 Provider 或者我们根据 InstanceID 查出来。
+	// 临时方案: 假设 instanceID 包含 provider 前缀 (如 ant-1, acc-1=openai)
+	providerName := "openai"
+	if strings.HasPrefix(instanceID, "ant-") {
+		providerName = "anthropic"
+	}
+	// 更严谨的做法: protocol.HttpRequestPayload 应该包含 Provider 字段
+	
+	adapter := providers.GetAdapter(providerName)
+	sniffer := adapter.GetSniffer()
+
+	// 3. 构造请求
+	// 默认 BaseURL
+	baseURL := "https://api.openai.com"
+	if providerName == "anthropic" {
+		baseURL = "https://api.anthropic.com"
+	}
+	
+	targetURL := baseURL + s.Meta.URL
+	
+	req, err := http.NewRequestWithContext(ctx, s.Meta.Method, targetURL, s.GetBodyReader())
 	if err != nil {
-		sendError(send, reqID, "Create req failed: "+err.Error())
+		sendError(send, reqID, "NewReq failed: "+err.Error())
 		return
 	}
 
-	if realReq.URL.Host != "api.openai.com" {
-		sendError(send, reqID, "Security Alert: Host mismatch!")
+	// 4. 适配器重写请求 (鉴权/Header)
+	if err := adapter.RewriteRequest(req, instance); err != nil {
+		sendError(send, reqID, "Rewrite failed: "+err.Error())
 		return
 	}
 
-	for k, v := range s.Meta.Headers {
-		if k != "Accept-Encoding" {
-			realReq.Header.Set(k, v)
-		}
-	}
-	realReq.Host = "api.openai.com"
-
+	// 5. 发送请求
 	client := &http.Client{Timeout: 180 * time.Second}
-	resp, err := client.Do(realReq)
+	resp, err := client.Do(req)
 	if err != nil {
-		if ctx.Err() == nil {
-			sendError(send, reqID, "Network error: "+err.Error())
-		}
+		sendError(send, reqID, "Network error: "+err.Error())
 		return
 	}
 	defer resp.Body.Close()
 
+	// 6. 处理响应
+	// 使用 TeeReader: 一边发给 Hub，一边喂给 Sniffer
+	pr, pw := io.Pipe()
+	
+	// 启动一个 goroutine 负责把 resp.Body 写入 pipe
+	// 同时也写入 Sniffer
+	go func() {
+		defer pw.Close()
+		// MultiWriter: 写入 Pipe (给 Hub) 和 Sniffer (计费)
+		mw := io.MultiWriter(pw, sniffer)
+		
+		buf := make([]byte, 4096)
+		for {
+			n, err := resp.Body.Read(buf)
+			if n > 0 {
+				mw.Write(buf[:n])
+			}
+			if err != nil {
+				break
+			}
+		}
+	}()
+
+	// 主循环: 读取 pipe 发送给 Hub
 	buf := make([]byte, 4096)
 	isFirst := true
-
+	
 	for {
-		n, err := resp.Body.Read(buf)
+		n, err := pr.Read(buf)
 		if n > 0 {
 			chunk := make([]byte, n)
 			copy(chunk, buf[:n])
@@ -104,17 +138,20 @@ func DoRequest(ctx context.Context, s *RequestStreamer, send SenderFunc, onCompl
 
 		if err != nil {
 			if err == io.EOF {
-				finalPayload := protocol.HttpResponsePayload{IsFinal: true}
-				
-				// TODO: 在这里解析 Usage 并调用 onComplete
-				// 为了简化，这里先不传 Usage
-				// 真实场景：ParseSSE(buffer) -> Usage
-				
-sendResponse(send, reqID, finalPayload)
-			} else {
-				if ctx.Err() == nil {
-					log.Printf("Read error: %v", err)
+				// 7. 流结束，上报计费
+				usage := sniffer.GetUsage()
+				hash := ""
+				if onComplete != nil && usage != nil {
+					hash = onComplete(reqID, usage)
 				}
+				
+				sendResponse(send, reqID, protocol.HttpResponsePayload{
+					IsFinal:   true,
+					Usage:     usage,
+					AgentHash: hash,
+				})
+			} else {
+				log.Printf("Read pipe error: %v", err)
 			}
 			break
 		}

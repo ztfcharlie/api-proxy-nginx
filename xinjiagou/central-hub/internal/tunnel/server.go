@@ -5,6 +5,7 @@ import (
 	"central-hub/internal/config"
 	"central-hub/internal/db"
 	"central-hub/internal/protocol"
+	"central-hub/internal/router"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -21,6 +22,7 @@ type TunnelServer struct {
 	cfg              *config.Config
 	redis            *cache.RedisStore
 	db               *db.DB
+	Router           *router.SmartRouter
 	upgrader         websocket.Upgrader
 	agents           map[string]*AgentSession
 	mu               sync.RWMutex
@@ -34,6 +36,7 @@ func NewTunnelServer(cfg *config.Config, rdb *cache.RedisStore, database *db.DB)
 		cfg:              cfg,
 		redis:            rdb,
 		db:               database,
+		Router:           router.NewSmartRouter(),
 		upgrader:         websocket.Upgrader{
 			CheckOrigin: func(r *http.Request) bool { return true },
 		},
@@ -71,18 +74,29 @@ func (s *TunnelServer) HandleConnect(w http.ResponseWriter, r *http.Request) {
 
 	conn.SetReadLimit(s.cfg.WSReadLimit)
 
-	if err := s.handshake(conn, agentID); err != nil {
+	instances, tier, err := s.handshake(conn, agentID)
+	if err != nil {
 		log.Printf("[Hub] Auth failed for %s: %v", agentID, err)
 		conn.Close()
 		return
 	}
+	
+	log.Printf("[Hub] Agent %s connected. Instances: %d, Tier: %s", agentID, len(instances), tier)
 
 	session := &AgentSession{
 		Conn:       conn,
 		cfg:        s.cfg,
+		Instances:  instances,
 		activeReqs: make(map[string]bool),
 	}
 	s.registerAgent(agentID, session)
+
+	// Update Router
+	s.Router.UpdateAgent(agentID, router.AgentInfo{
+		ID:        agentID, 
+		Instances: instances,
+		Tier:      tier,
+	})
 
 	go func() {
 		if err := s.redis.RegisterAgent(context.Background(), agentID); err != nil {
@@ -92,6 +106,7 @@ func (s *TunnelServer) HandleConnect(w http.ResponseWriter, r *http.Request) {
 
 	defer func() {
 		s.unregisterAgent(agentID)
+		s.Router.RemoveAgent(agentID)
 		s.CloseSessionAndNotify(agentID, session)
 		s.redis.UnregisterAgent(context.Background(), agentID)
 	}()
@@ -99,41 +114,43 @@ func (s *TunnelServer) HandleConnect(w http.ResponseWriter, r *http.Request) {
 	s.readLoop(agentID, session)
 }
 
-func (s *TunnelServer) handshake(conn *websocket.Conn, agentID string) error {
+func (s *TunnelServer) handshake(conn *websocket.Conn, agentID string) ([]protocol.InstanceConfig, string, error) {
 	conn.SetReadDeadline(time.Now().Add(s.cfg.WSWriteWait))
 	conn.SetWriteDeadline(time.Now().Add(s.cfg.WSWriteWait))
 
 	_, msg, err := conn.ReadMessage()
 	if err != nil {
-		return err
+		return nil, "", err
 	}
 	var packet protocol.Packet
 	if err := json.Unmarshal(msg, &packet); err != nil {
-		return err
+		return nil, "", err
 	}
 	if packet.Type != protocol.TypeRegister {
-		return fmt.Errorf("expected REGISTER")
+		return nil, "", fmt.Errorf("expected REGISTER")
 	}
 
 	var regPayload protocol.RegisterPayload
 	json.Unmarshal(packet.Payload, &regPayload)
 	agentPubKey := regPayload.PublicKey
+	instances := regPayload.Instances // 获取实例列表
 
 	// 校验公钥
-	if err := s.db.RegisterOrValidateAgent(agentID, agentPubKey); err != nil {
-		return fmt.Errorf("key validation failed: %v", err)
+	tier, err := s.db.RegisterOrValidateAgent(agentID, agentPubKey)
+	if err != nil {
+		return nil, "", fmt.Errorf("key validation failed: %v", err)
 	}
 
 	nonce := generateNonce()
 	challengePayload, _ := json.Marshal(protocol.AuthChallengePayload{Nonce: nonce})
 	if err := conn.WriteJSON(protocol.Packet{Type: protocol.TypeAuthChallenge, Payload: challengePayload}); err != nil {
-		return err
+		return nil, "", err
 	}
 
 	conn.SetReadDeadline(time.Now().Add(s.cfg.WSWriteWait))
 	_, msg, err = conn.ReadMessage()
 	if err != nil {
-		return err
+		return nil, "", err
 	}
 	json.Unmarshal(msg, &packet)
 
@@ -141,12 +158,12 @@ func (s *TunnelServer) handshake(conn *websocket.Conn, agentID string) error {
 	json.Unmarshal(packet.Payload, &authPayload)
 
 	if err := verifySignature(agentPubKey, nonce, authPayload.Signature); err != nil {
-		return err
+		return nil, "", err
 	}
 
 	conn.SetReadDeadline(time.Time{})
 	conn.SetWriteDeadline(time.Time{})
-	return nil
+	return instances, tier, nil
 }
 
 func (s *TunnelServer) registerAgent(id string, session *AgentSession) {
@@ -162,4 +179,9 @@ func (s *TunnelServer) unregisterAgent(id string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	delete(s.agents, id)
+}
+
+// SelectAgent wraps the router selection
+func (s *TunnelServer) SelectAgent(ctx context.Context, provider, model string) (*router.SelectResult, error) {
+	return s.Router.Select(ctx, router.SelectCriteria{Provider: provider, Model: model})
 }

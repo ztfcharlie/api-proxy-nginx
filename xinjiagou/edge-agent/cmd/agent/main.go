@@ -29,11 +29,39 @@ var (
 	limiter   *rate.Limiter
 	activeStreams sync.Map
 	store     *ledger.Store
+	modelMgr  *ModelManager
 )
+
+// ModelManager manages the supported instances
+type ModelManager struct {
+	mu        sync.Mutex
+	instances []protocol.InstanceConfig
+}
+
+func (m *ModelManager) GetInstances() []protocol.InstanceConfig {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return append([]protocol.InstanceConfig(nil), m.instances...)
+}
+
+func (m *ModelManager) UpdateInstances(newInstances []protocol.InstanceConfig) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.instances = newInstances
+}
 
 func main() {
 	rand.Seed(time.Now().UnixNano())
 	cfg = config.Load()
+	
+	// Init Instances (Mock config for Multi-Account)
+	modelMgr = &ModelManager{
+		instances: []protocol.InstanceConfig{
+			{ID: "acc-1", Provider: "openai", Models: []string{"gpt-4"}, Tier: "T0", RPM: 5000},
+			{ID: "acc-2", Provider: "openai", Models: []string{"gpt-3.5-turbo"}, Tier: "T3", RPM: 60},
+		},
+	}
+	
 	log.Printf("[Agent] Starting agent: %s (Hub: %s)", cfg.AgentID, cfg.HubAddr)
 
 	rps := rate.Limit(float64(cfg.RateLimitRPM) / 60.0)
@@ -56,6 +84,18 @@ func main() {
 
 	interrupt := make(chan os.Signal, 1)
 	signal.Notify(interrupt, os.Interrupt)
+	
+	// Simulate Dynamic Update
+	go func() {
+		time.Sleep(10 * time.Second)
+		log.Println("[Agent] Dynamic Config Change: Adding 'anthropic' account")
+		newConfig := []protocol.InstanceConfig{
+			{ID: "acc-1", Provider: "openai", Models: []string{"gpt-4"}, Tier: "T0", RPM: 5000},
+			{ID: "acc-2", Provider: "openai", Models: []string{"gpt-3.5-turbo"}, Tier: "T3", RPM: 60},
+			{ID: "ant-1", Provider: "anthropic", Models: []string{"claude-3-opus"}, Tier: "T1", RPM: 100},
+		}
+		modelMgr.UpdateInstances(newConfig)
+	}()
 
 	retryCount := 0
 
@@ -100,7 +140,14 @@ func connectAndServe(keys *crypto.KeyPair) error {
 	}
 
 	conn.SetReadDeadline(time.Now().Add(10 * time.Second))
-	regPayload := protocol.RegisterPayload{Version: "v0.3", PublicKey: keys.GetPublicKeyHex()}
+	
+	// Send Initial Instances
+	currentInstances := modelMgr.GetInstances()
+	regPayload := protocol.RegisterPayload{
+		Version:   "v0.3", 
+		PublicKey: keys.GetPublicKeyHex(),
+		Instances: currentInstances,
+	}
 	regData, _ := json.Marshal(regPayload)
 	if err := safeWriteJSON(protocol.Packet{Type: protocol.TypeRegister, Payload: regData}); err != nil { return err }
 
@@ -115,20 +162,43 @@ func connectAndServe(keys *crypto.KeyPair) error {
 	authData, _ := json.Marshal(authPayload)
 	if err := safeWriteJSON(protocol.Packet{Type: protocol.TypeAuthResponse, Payload: authData}); err != nil { return err }
 
-	log.Println("[Agent] Handshake successful!")
+	log.Println("[Agent] Handshake successful! Instances reported:", len(currentInstances))
 	ui.GlobalState.Connected = true
 
 	done := make(chan struct{})
 	defer close(done)
+	
+	// Heartbeat & Dynamic Update Loop
 	go func() {
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
+		
+		// Check for updates every 5 seconds
+		modelTicker := time.NewTicker(5 * time.Second)
+		defer modelTicker.Stop()
+		
+		lastInstancesJSON, _ := json.Marshal(currentInstances)
+
 		for {
 			select {
 			case <-done: return
 			case <-ticker.C:
 				if err := safeWriteJSON(protocol.Packet{Type: protocol.TypePing}); err != nil {
 					conn.Close(); return
+				}
+			case <-modelTicker.C:
+				newInstances := modelMgr.GetInstances()
+				newInstancesJSON, _ := json.Marshal(newInstances)
+				if string(newInstancesJSON) != string(lastInstancesJSON) {
+					// Detect change, send update
+					log.Printf("[Agent] Config changed, sending update...")
+					updatePayload := protocol.ModelUpdatePayload{Instances: newInstances}
+					payloadData, _ := json.Marshal(updatePayload)
+					if err := safeWriteJSON(protocol.Packet{Type: protocol.TypeModelUpdate, Payload: payloadData}); err != nil {
+						log.Printf("[Agent] Failed to send update: %v", err)
+						conn.Close(); return
+					}
+					lastInstancesJSON = newInstancesJSON
 				}
 			}
 		}

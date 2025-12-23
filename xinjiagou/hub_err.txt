@@ -1,0 +1,15 @@
+2025/12/22 22:42:21 [Config] HUB_PORT not found, using default: 8080
+2025/12/22 22:42:21 [Config] MAX_AGENTS not found, using default: 
+2025/12/22 22:42:21 [Config] HTTP_READ_TIMEOUT not found, using default: 
+2025/12/22 22:42:21 [Config] HTTP_WRITE_TIMEOUT not found, using default: 
+2025/12/22 22:42:21 [Config] HTTP_IDLE_TIMEOUT not found, using default: 
+2025/12/22 22:42:21 [Config] WS_PING_WAIT not found, using default: 
+2025/12/22 22:42:21 [Config] WS_WRITE_WAIT not found, using default: 
+2025/12/22 22:42:21 [Config] WS_READ_LIMIT_BYTES not found, using default: 
+2025/12/22 22:42:21 [Config] Loaded configuration. Port: 8080
+2025/12/22 22:42:21 [DB] Connected to MySQL
+2025/12/22 22:42:21 [Cache] Connected to Redis
+2025/12/22 22:42:21 [Worker] Reconciliation worker started (Interval: 60s)
+2025/12/22 22:42:21 [Hub] Server starting on :8080 ...
+2025/12/22 22:42:24 [Hub] Agent agent-default connected. Models: [gpt-4 gpt-3.5-turbo]
+2025/12/22 22:42:34 [Hub] Agent agent-default updated models: [gpt-4 gpt-3.5-turbo gpt-4-turbo]

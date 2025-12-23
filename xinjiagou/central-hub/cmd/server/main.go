@@ -43,7 +43,8 @@ func main() {
 	gwHandler := gateway.NewHandler(wsServer, billMgr, database, redisStore)
 
 	http.HandleFunc("/tunnel/connect", wsServer.HandleConnect)
-	http.HandleFunc("/v1/chat/completions", gwHandler.HandleOpenAIRequest)
+	// 通配路由: 接管所有 API 请求 (OpenAI, Anthropic, Google...)
+	http.HandleFunc("/", gwHandler.HandleRequest)
 
 	// 启动 Worker
 	go func() {

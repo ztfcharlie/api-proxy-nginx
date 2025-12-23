@@ -2,6 +2,7 @@ package tunnel
 
 import (
 	"central-hub/internal/config"
+	"central-hub/internal/protocol"
 	"sync"
 	"time"
 
@@ -12,6 +13,7 @@ type AgentSession struct {
 	Conn    *websocket.Conn
 	writeMu sync.Mutex
 	cfg     *config.Config
+	Instances []protocol.InstanceConfig // 修改: 实例列表
 
 	// 补丁: 记录该 Agent 正在处理的请求 ID
 	activeReqs   map[string]bool
