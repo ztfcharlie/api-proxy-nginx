@@ -1,13 +1,10 @@
 package providers
 
 import (
-	"bytes"
 	"context"
-	"crypto/sha256"
+	"edge-agent/internal/keystore"
 	"edge-agent/internal/protocol"
-	"encoding/hex"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -18,12 +15,20 @@ import (
 
 type AWSAdapter struct{}
 
+func (a *AWSAdapter) GetBaseURL(instance *protocol.InstanceConfig) string {
+	return "https://bedrock-runtime.us-east-1.amazonaws.com"
+}
+
 func (a *AWSAdapter) RewriteRequest(req *http.Request, instance *protocol.InstanceConfig) error {
-	// Mock: Parse AK/SK from ID "ACCESS_KEY:SECRET_KEY:REGION"
-	// In production, load from secure file using instance.ID
-	parts := strings.Split(instance.ID, ":")
+	secret, ok := keystore.GlobalStore.Get(instance.ID)
+	if !ok {
+		return fmt.Errorf("credential not found for instance %s", instance.ID)
+	}
+
+	// Parse AK/SK from stored secret "ACCESS_KEY:SECRET_KEY:REGION"
+	parts := strings.Split(secret, ":")
 	if len(parts) < 3 {
-		return fmt.Errorf("invalid AWS credentials format in ID, expected AK:SK:REGION")
+		return fmt.Errorf("invalid AWS credentials format in keystore, expected AK:SK:REGION")
 	}
 	ak, sk, region := parts[0], parts[1], parts[2]
 
@@ -39,26 +44,20 @@ func (a *AWSAdapter) RewriteRequest(req *http.Request, instance *protocol.Instan
 
 	signer := v4.NewSigner()
 
-	// Calculate Payload Hash (Required for SigV4)
-	var payloadHash string
-	if req.Body != nil {
-		bodyBytes, err := io.ReadAll(req.Body)
-		if err != nil {
-			return err
-		}
-		// Restore Body
-		req.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
-		
-		hash := sha256.Sum256(bodyBytes)
-		payloadHash = hex.EncodeToString(hash[:])
-	} else {
-		hash := sha256.Sum256([]byte{})
-		payloadHash = hex.EncodeToString(hash[:])
-	}
+	// Performance Optimization: Use UNSIGNED-PAYLOAD
+	// This avoids reading the entire body into memory to calculate the hash.
+	// Bedrock via HTTPS supports this.
+	payloadHash := "UNSIGNED-PAYLOAD"
 
 	// Sign the request
 	// This adds Authorization, X-Amz-Date, X-Amz-Content-Sha256 headers
-	signErr := signer.SignHTTP(context.Background(), creds, req, payloadHash, serviceName, region, time.Now())
+	signErr := signer.SignHTTP(req.Context(), creds, req, payloadHash, serviceName, region, time.Now())
+	
+	// Check for clock skew hint (heuristic)
+	if signErr != nil && strings.Contains(signErr.Error(), "Time") {
+		fmt.Printf("[AWS] Warning: Signing error. Check system clock sync! Error: %v\n", signErr)
+	}
+	
 	return signErr
 }
 

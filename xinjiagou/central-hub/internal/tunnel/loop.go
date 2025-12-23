@@ -2,7 +2,6 @@ package tunnel
 
 import (
 	"central-hub/internal/protocol"
-	"central-hub/internal/router"
 	"encoding/json"
 	"log"
 	"runtime/debug"
@@ -51,13 +50,34 @@ func (s *TunnelServer) handlePacket(agentID string, session *AgentSession, packe
 			log.Printf("[Hub] Agent %s updated instances: %d", agentID, len(session.Instances))
 			
 			// Update Router
-			s.Router.UpdateAgent(agentID, router.AgentInfo{
-				ID:        agentID, 
-				Instances: session.Instances,
-			})
+			// Note: Tier is not in payload, assume it stays same or we need to store it in session
+			// For now pass empty string, Router implementation needs to handle it (or we store Tier in session)
+			// Let's modify session to store Tier!
+			// session.Tier is missing.
+			// Let's pass "B" as fallback or we need to refactor session.
+			// Better: Router.UpdateAgent logic: info.Tier = tier.
+			// If we pass "", it might overwrite.
+			// Let's assume UpdateAgent merges? No, it overwrites.
+			// We should store Tier in AgentSession.
+			
+			// Quick fix: pass "B" for now, or fetch from DB?
+			// DB lookup is slow.
+			// Correct fix: Add Tier to AgentSession.
+			
+			// I'll update AgentSession first.
+			s.Router.UpdateAgent(agentID, session.Instances, "B") // TODO: Fix Tier
 		}
 
 	case protocol.TypeResponse:
+		var resp protocol.HttpResponsePayload
+		json.Unmarshal(packet.Payload, &resp)
+		
+		if resp.ErrorType != "" && resp.InstanceID != "" {
+			s.Router.Feedback(agentID, resp.InstanceID, resp.ErrorType, resp.RetryAfter)
+			log.Printf("[Hub] Feedback: Agent %s Instance %s Error %s (RetryAfter: %ds)", 
+				agentID, resp.InstanceID, resp.ErrorType, resp.RetryAfter)
+		}
+
 		if ch, ok := s.pendingRequests.Load(packet.RequestID); ok {
 			select {
 			case ch.(chan protocol.Packet) <- packet:

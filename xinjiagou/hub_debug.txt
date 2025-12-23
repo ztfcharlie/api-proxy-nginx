@@ -1,0 +1,111 @@
+2025/12/23 23:38:03 [Config] HUB_PORT not found, using default: 8080
+2025/12/23 23:38:03 [Config] MAX_AGENTS not found, using default: 
+2025/12/23 23:38:03 [Config] HTTP_READ_TIMEOUT not found, using default: 
+2025/12/23 23:38:03 [Config] HTTP_WRITE_TIMEOUT not found, using default: 
+2025/12/23 23:38:03 [Config] HTTP_IDLE_TIMEOUT not found, using default: 
+2025/12/23 23:38:03 [Config] WS_PING_WAIT not found, using default: 
+2025/12/23 23:38:03 [Config] WS_WRITE_WAIT not found, using default: 
+2025/12/23 23:38:03 [Config] WS_READ_LIMIT_BYTES not found, using default: 
+2025/12/23 23:38:03 [Config] Loaded configuration. Port: 8080
+2025/12/23 23:38:03 [DB] Connected to MySQL
+2025/12/23 23:38:03 [Cache] Connected to Redis
+2025/12/23 23:38:03 [Worker] Reconciliation worker started (Interval: 60s)
+2025/12/23 23:38:03 [Hub] Server starting on :8080 ...
+2025/12/23 23:38:03 [DB] New agent registered: all-agent-1766504283 (Tier B)
+2025/12/23 23:38:03 [Hub] Agent all-agent-1766504283 connected. Instances: 1, Tier: B
+2025/12/23 23:38:08 [Hub] Agent all-agent-1766504283 updated instances: 5
+2025/12/23 23:38:15 [ACCESS] [::1]:7952 | POST | /v1/chat/completions | 500 | 5.6007ms
+2025/12/23 23:38:16 [ACCESS] [::1]:7952 | POST | /v1/chat/completions | 500 | 1.8234ms
+2025/12/23 23:38:17 [ACCESS] [::1]:7952 | POST | /v1/chat/completions | 500 | 1.929ms
+2025/12/23 23:38:18 [ACCESS] [::1]:7952 | POST | /v1/chat/completions | 500 | 2.0196ms
+2025/12/23 23:38:51 [Config] HUB_PORT not found, using default: 8080
+2025/12/23 23:38:51 [Config] MAX_AGENTS not found, using default: 
+2025/12/23 23:38:51 [Config] HTTP_READ_TIMEOUT not found, using default: 
+2025/12/23 23:38:51 [Config] HTTP_WRITE_TIMEOUT not found, using default: 
+2025/12/23 23:38:51 [Config] HTTP_IDLE_TIMEOUT not found, using default: 
+2025/12/23 23:38:51 [Config] WS_PING_WAIT not found, using default: 
+2025/12/23 23:38:51 [Config] WS_WRITE_WAIT not found, using default: 
+2025/12/23 23:38:51 [Config] WS_READ_LIMIT_BYTES not found, using default: 
+2025/12/23 23:38:51 [Config] Loaded configuration. Port: 8080
+2025/12/23 23:38:51 [DB] Connected to MySQL
+2025/12/23 23:38:51 [Cache] Connected to Redis
+2025/12/23 23:38:51 [Worker] Reconciliation worker started (Interval: 60s)
+2025/12/23 23:38:51 [Hub] Server starting on :8080 ...
+2025/12/23 23:38:51 [DB] New agent registered: all-agent-1766504330 (Tier B)
+2025/12/23 23:38:51 [Hub] Agent all-agent-1766504330 connected. Instances: 1, Tier: B
+2025/12/23 23:38:56 [Hub] Agent all-agent-1766504330 updated instances: 5
+2025/12/23 23:39:04 💰 [Settlement] ReqID: 91702fe4-0572-46cc-8c99-1ebfd19e6eb9, User: 2, Cost: $0.000000, Hash: b144559f02ff4e3fa4f10c44f1a179a4c8dcdeb5035c658fe8ed28f78aaf531f
+2025/12/23 23:39:04 ❌ [DB] Settle failed: insufficient balance
+2025/12/23 23:39:04 [ACCESS] [::1]:41768 | POST | /v1/chat/completions | 401 | 958.1719ms
+2025/12/23 23:39:05 💰 [Settlement] ReqID: 5accec42-452d-4807-b724-3e303fbec142, User: 4, Cost: $0.000000, Hash: 096561bc82fd2215eff08627cc05f18c8402e7f3603168613b76fed9deb5bcfe
+2025/12/23 23:39:05 ❌ [DB] Settle failed: insufficient balance
+2025/12/23 23:39:05 [ACCESS] [::1]:41768 | POST | /v1/chat/completions | 200 | 723.599ms
+2025/12/23 23:39:07 [ACCESS] [::1]:41768 | POST | /v1/chat/completions | 404 | 826.897ms
+2025/12/23 23:39:08 [ACCESS] [::1]:41768 | POST | /v1/chat/completions | 502 | 2.1195ms
+2025/12/24 00:06:33 [Config] HUB_PORT not found, using default: 8080
+2025/12/24 00:06:33 [Config] MAX_AGENTS not found, using default: 
+2025/12/24 00:06:33 [Config] HTTP_READ_TIMEOUT not found, using default: 
+2025/12/24 00:06:33 [Config] HTTP_WRITE_TIMEOUT not found, using default: 
+2025/12/24 00:06:33 [Config] HTTP_IDLE_TIMEOUT not found, using default: 
+2025/12/24 00:06:33 [Config] WS_PING_WAIT not found, using default: 
+2025/12/24 00:06:33 [Config] WS_WRITE_WAIT not found, using default: 
+2025/12/24 00:06:33 [Config] WS_READ_LIMIT_BYTES not found, using default: 
+2025/12/24 00:06:33 [Config] Loaded configuration. Port: 8080
+2025/12/24 00:06:33 [DB] Connected to MySQL
+2025/12/24 00:06:33 [Cache] Connected to Redis
+2025/12/24 00:06:33 [Worker] Reconciliation worker started (Interval: 60s)
+2025/12/24 00:06:33 [Hub] Server starting on :8080 ...
+2025/12/24 00:06:35 [Gateway] No agent found for provider openai model gpt-4: no agents available
+2025/12/24 00:06:35 [ACCESS] [::1]:3334 | POST | /v1/chat/completions | 503 | 12.1883ms
+2025/12/24 00:06:35 [Gateway] Request too large for model gpt-4. Size: 2097153, Limit: 2097152
+2025/12/24 00:06:35 [ACCESS] [::1]:3336 | POST | /v1/chat/completions | 413 | 11.3617ms
+2025/12/24 00:19:39 [Config] HUB_PORT not found, using default: 8080
+2025/12/24 00:19:39 [Config] MAX_AGENTS not found, using default: 
+2025/12/24 00:19:39 [Config] HTTP_READ_TIMEOUT not found, using default: 
+2025/12/24 00:19:39 [Config] HTTP_WRITE_TIMEOUT not found, using default: 
+2025/12/24 00:19:39 [Config] HTTP_IDLE_TIMEOUT not found, using default: 
+2025/12/24 00:19:39 [Config] WS_PING_WAIT not found, using default: 
+2025/12/24 00:19:39 [Config] WS_WRITE_WAIT not found, using default: 
+2025/12/24 00:19:39 [Config] WS_READ_LIMIT_BYTES not found, using default: 
+2025/12/24 00:19:39 [Config] Loaded configuration. Port: 8080
+2025/12/24 00:19:39 [DB] Connected to MySQL
+2025/12/24 00:19:39 [Cache] Connected to Redis
+2025/12/24 00:19:39 [Worker] Reconciliation worker started (Interval: 60s)
+2025/12/24 00:19:39 [Hub] Server starting on :8080 ...
+2025/12/24 00:19:39 [DB] New agent registered: all-agent-1766506778 (Tier B)
+2025/12/24 00:19:39 [Hub] Agent all-agent-1766506778 connected. Instances: 1, Tier: B
+2025/12/24 00:19:44 [Hub] Agent all-agent-1766506778 updated instances: 5
+2025/12/24 00:19:55 💰 [Settlement] ReqID: f7bb8213-7dce-4890-88fc-12dca4f8d809, User: 2, Cost: $0.000000, Hash: f4992be2ba8524c8c96afc668c7dfceefa0383d1da182fc1b5e40e046172b889
+2025/12/24 00:19:55 ❌ [DB] Settle failed: insufficient balance
+2025/12/24 00:19:55 [ACCESS] [::1]:39721 | POST | /v1/chat/completions | 401 | 4.0052375s
+2025/12/24 00:19:57 💰 [Settlement] ReqID: dd785da0-c0c4-499a-b863-ee88aaac4c62, User: 4, Cost: $0.000000, Hash: af033b3bba3e68e160277d36e71b20bba5039f8f5e6325733f53a02bdd5529e5
+2025/12/24 00:19:57 ❌ [DB] Settle failed: insufficient balance
+2025/12/24 00:19:57 [ACCESS] [::1]:39721 | POST | /v1/chat/completions | 200 | 1.481036s
+2025/12/24 00:20:00 [ACCESS] [::1]:39721 | POST | /v1/chat/completions | 404 | 1.7784134s
+2025/12/24 00:20:01 [ACCESS] [::1]:39721 | POST | /v1/chat/completions | 502 | 2.0677ms
+2025/12/24 01:26:51 [Config] HUB_PORT not found, using default: 8080
+2025/12/24 01:26:51 [Config] MAX_AGENTS not found, using default: 
+2025/12/24 01:26:51 [Config] HTTP_READ_TIMEOUT not found, using default: 
+2025/12/24 01:26:51 [Config] HTTP_WRITE_TIMEOUT not found, using default: 
+2025/12/24 01:26:51 [Config] HTTP_IDLE_TIMEOUT not found, using default: 
+2025/12/24 01:26:51 [Config] WS_PING_WAIT not found, using default: 
+2025/12/24 01:26:51 [Config] WS_WRITE_WAIT not found, using default: 
+2025/12/24 01:26:51 [Config] WS_READ_LIMIT_BYTES not found, using default: 
+2025/12/24 01:26:51 [Config] Loaded configuration. Port: 8080
+2025/12/24 01:26:51 [DB] Connected to MySQL
+2025/12/24 01:26:51 [Cache] Connected to Redis
+2025/12/24 01:26:51 [Billing] Reloading prices from DB...
+2025/12/24 01:26:51 [Worker] Reconciliation worker started (Interval: 60s)
+2025/12/24 01:26:51 [Hub] Server starting on :8080 ...
+2025/12/24 01:26:51 [Hub] Auth failed for all-agent-1766510811: key validation failed: agent all-agent-1766510811 not registered and TOFU is disabled
+2025/12/24 01:26:54 [Hub] Auth failed for all-agent-1766510811: key validation failed: agent all-agent-1766510811 not registered and TOFU is disabled
+2025/12/24 01:26:58 [Hub] Auth failed for all-agent-1766510811: key validation failed: agent all-agent-1766510811 not registered and TOFU is disabled
+2025/12/24 01:27:03 [ed7d9243-c7b4-441d-b68b-429e7be0a44b] [Gateway] No agent found for provider anthropic model claude-3-opus: no agents available
+2025/12/24 01:27:03 [ACCESS] ed7d9243-c7b4-441d-b68b-429e7be0a44b | [::1]:52415 | POST | /v1/chat/completions | 503 | 12.2315ms
+2025/12/24 01:27:04 [a58916f3-0fbe-4daf-b88d-0b515cf87ee7] [Gateway] No agent found for provider google model gemini-pro: no agents available
+2025/12/24 01:27:04 [ACCESS] a58916f3-0fbe-4daf-b88d-0b515cf87ee7 | [::1]:52415 | POST | /v1/chat/completions | 503 | 3.3885ms
+2025/12/24 01:27:05 [94b22b1e-2aae-40b7-b0fa-7f541996e197] [Gateway] No agent found for provider aws model claude-v2: no agents available
+2025/12/24 01:27:05 [ACCESS] 94b22b1e-2aae-40b7-b0fa-7f541996e197 | [::1]:52415 | POST | /v1/chat/completions | 503 | 3.4294ms
+2025/12/24 01:27:06 [025c7b33-d2f4-4488-85bb-6ef7acf4b73b] [Gateway] No agent found for provider azure model gpt-4: no agents available
+2025/12/24 01:27:06 [ACCESS] 025c7b33-d2f4-4488-85bb-6ef7acf4b73b | [::1]:52415 | POST | /v1/chat/completions | 503 | 1.9747ms
+2025/12/24 01:27:07 [Hub] Auth failed for all-agent-1766510811: key validation failed: agent all-agent-1766510811 not registered and TOFU is disabled

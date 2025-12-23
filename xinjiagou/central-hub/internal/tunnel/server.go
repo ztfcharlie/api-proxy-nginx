@@ -91,12 +91,24 @@ func (s *TunnelServer) HandleConnect(w http.ResponseWriter, r *http.Request) {
 	}
 	s.registerAgent(agentID, session)
 
+	// Send Probe (Verify IP)
+	// TODO: Get Hub Public URL from config. For now use localhost:8080 or relative
+	// Agent will prepend its view of hub address? No, we send full URL.
+	// Assume Hub is accessible at http://localhost:8080/api/probe/echo
+	probePayload := protocol.ProbePayload{URL: "http://localhost:8080/api/probe/echo"}
+	probeBytes, _ := json.Marshal(probePayload)
+	session.SafeWrite(protocol.Packet{Type: protocol.TypeProbe, Payload: probeBytes})
+
 	// Update Router
-	s.Router.UpdateAgent(agentID, router.AgentInfo{
-		ID:        agentID, 
-		Instances: instances,
-		Tier:      tier,
-	})
+	s.Router.UpdateAgent(agentID, instances, tier)
+
+	// Audit Log
+	remoteIP := getIP(r)
+	auditInsts := make([]struct{ID, Provider string}, len(instances))
+	for i, inst := range instances {
+		auditInsts[i] = struct{ID, Provider string}{inst.ID, inst.Provider}
+	}
+	s.db.LogAudit(agentID, "connect", remoteIP, auditInsts)
 
 	go func() {
 		if err := s.redis.RegisterAgent(context.Background(), agentID); err != nil {
@@ -184,4 +196,32 @@ func (s *TunnelServer) unregisterAgent(id string) {
 // SelectAgent wraps the router selection
 func (s *TunnelServer) SelectAgent(ctx context.Context, provider, model string) (*router.SelectResult, error) {
 	return s.Router.Select(ctx, router.SelectCriteria{Provider: provider, Model: model})
+}
+
+func (s *TunnelServer) HandleEcho(w http.ResponseWriter, r *http.Request) {
+	ip := getIP(r)
+	// TODO: Log probe success if we can identify agent (requires token)
+	w.Write([]byte(ip))
+}
+
+func (s *TunnelServer) KickAgent(agentID string) error {
+	s.mu.Lock()
+	session, exists := s.agents[agentID]
+	s.mu.Unlock()
+	
+	if !exists {
+		return fmt.Errorf("agent not found")
+	}
+	
+	// Close connection, this will trigger cleanup in readLoop
+	session.Conn.Close()
+	return nil
+}
+
+func getIP(r *http.Request) string {
+	ip := r.Header.Get("X-Forwarded-For")
+	if ip == "" {
+		ip = r.RemoteAddr
+	}
+	return ip
 }

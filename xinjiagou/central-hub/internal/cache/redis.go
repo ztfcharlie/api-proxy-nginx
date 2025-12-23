@@ -14,7 +14,11 @@ type RedisStore struct {
 
 func NewRedisStore(addr string) *RedisStore {
 	rdb := redis.NewClient(&redis.Options{
-		Addr: addr,
+		Addr:         addr,
+		Password:     "", // no password set
+		DB:           0,  // use default DB
+		PoolSize:     100,
+		MinIdleConns: 10,
 	})
 	return &RedisStore{client: rdb}
 }
@@ -79,7 +83,11 @@ func (r *RedisStore) IncrAgentIncome(ctx context.Context, agentID string, amount
 
 // IncrUserActive (保留用于兼容旧代码，但建议用通用的 IncrConcurrency)
 func (r *RedisStore) IncrUserActive(ctx context.Context, userID int) (int64, error) {
-	return r.client.Incr(ctx, fmt.Sprintf("user_active:%d", userID)).Result()
+	key := fmt.Sprintf("user:active:%d", userID)
+	val, err := r.client.Incr(ctx, key).Result()
+	// Set TTL to 1 hour to prevent permanent lock if crash happens
+	r.client.Expire(ctx, key, 1*time.Hour)
+	return val, err
 }
 func (r *RedisStore) DecrUserActive(ctx context.Context, userID int) error {
 	return r.client.Decr(ctx, fmt.Sprintf("user_active:%d", userID)).Err()

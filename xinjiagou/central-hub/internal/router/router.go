@@ -4,13 +4,20 @@ import (
 	"central-hub/internal/protocol"
 	"context"
 	"errors"
+	"time"
 )
+
+type InstanceStatus struct {
+	Config       protocol.InstanceConfig
+	BrokenUntil  time.Time
+	FailureCount int
+}
 
 type AgentInfo struct {
 	ID        string
-	Instances []protocol.InstanceConfig // 存储所有实例
-	Tier      string                    // Agent 整体等级 (DB中存储)
-	Load      int                       // Agent 整体负载
+	Instances map[string]*InstanceStatus // ID -> Status
+	Tier      string
+	Load      int
 }
 
 type SelectCriteria struct {
@@ -28,8 +35,9 @@ type SelectResult struct {
 
 type Router interface {
 	Select(ctx context.Context, criteria SelectCriteria) (*SelectResult, error)
-	UpdateAgent(id string, info AgentInfo)
+	UpdateAgent(id string, config []protocol.InstanceConfig, tier string) // Changed signature
 	RemoveAgent(id string)
+	Feedback(agentID, instanceID, errorType string, retryAfter int) // 新增: 熔断反馈
 }
 
 var ErrNoAgents = errors.New("no agents available")

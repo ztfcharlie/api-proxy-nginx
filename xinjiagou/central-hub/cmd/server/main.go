@@ -6,6 +6,7 @@ import (
 	"central-hub/internal/config"
 	"central-hub/internal/db"
 	"central-hub/internal/gateway"
+	"central-hub/internal/middleware"
 	"central-hub/internal/tunnel"
 	"context"
 	"log"
@@ -14,9 +15,20 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 func main() {
+	// Setup Logging
+	log.SetOutput(&lumberjack.Logger{
+		Filename:   "hub.log",
+		MaxSize:    100, // megabytes
+		MaxBackups: 5,
+		MaxAge:     28, // days
+	})
+
 	cfg := config.Load()
 	log.Printf("[Config] Loaded configuration. Port: %s", cfg.Port)
 
@@ -38,13 +50,27 @@ func main() {
 
 	// 注入 database
 	wsServer := tunnel.NewTunnelServer(cfg, redisStore, database)
-	billMgr := billing.NewManager()
+	billMgr := billing.NewManager(database)
 	
 	gwHandler := gateway.NewHandler(wsServer, billMgr, database, redisStore)
 
 	http.HandleFunc("/tunnel/connect", wsServer.HandleConnect)
+	http.HandleFunc("/api/probe/echo", wsServer.HandleEcho)
+	
+	// Admin API (Protected)
+	kickHandler := func(w http.ResponseWriter, r *http.Request) {
+		id := r.URL.Query().Get("id")
+		if err := wsServer.KickAgent(id); err != nil {
+			http.Error(w, err.Error(), 404)
+		} else {
+			w.Write([]byte("kicked"))
+		}
+	}
+	http.HandleFunc("/api/admin/kick", middleware.AdminAuth(kickHandler))
+	
+	http.Handle("/metrics", promhttp.Handler())
 	// 通配路由: 接管所有 API 请求 (OpenAI, Anthropic, Google...)
-	http.HandleFunc("/", gwHandler.HandleRequest)
+	http.HandleFunc("/", middleware.CORS(middleware.Logging(gwHandler.HandleRequest)))
 
 	// 启动 Worker
 	go func() {
@@ -65,10 +91,11 @@ func main() {
 	addr := ":" + cfg.Port
 	server := &http.Server{
 		Addr:              addr,
-		Handler:           nil,
-		ReadHeaderTimeout: cfg.HTTPReadTimeout,
-		WriteTimeout:      cfg.HTTPWriteTimeout,
-		IdleTimeout:       cfg.HTTPIdleTimeout,
+		Handler:           nil, // Use DefaultServeMux
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       300 * time.Second, // 5 min for LLM streaming
+		WriteTimeout:      300 * time.Second,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	go func() {

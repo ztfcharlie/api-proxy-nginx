@@ -24,9 +24,16 @@ var GlobalState AgentState
 func StartServer(addr string) {
 	http.HandleFunc("/", handleDashboard)
 	http.HandleFunc("/api/status", handleStatus)
+	http.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("ok")) })
 
 	log.Printf("[UI] Admin Dashboard running at http://%s", addr)
-	go http.ListenAndServe(addr, nil)
+	
+	server := &http.Server{
+		Addr:         addr,
+		ReadTimeout:  5 * time.Second,
+		WriteTimeout: 10 * time.Second,
+	}
+	go server.ListenAndServe()
 }
 
 func handleDashboard(w http.ResponseWriter, r *http.Request) {

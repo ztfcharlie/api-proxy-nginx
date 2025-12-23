@@ -3,9 +3,13 @@ package gateway
 import (
 	"central-hub/internal/billing"
 	"central-hub/internal/cache"
+	"central-hub/internal/config"
 	"central-hub/internal/db"
+	"central-hub/internal/middleware"
 	"central-hub/internal/protocol"
 	"central-hub/internal/tunnel"
+	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -13,23 +17,57 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"golang.org/x/time/rate"
 )
 
 type Handler struct {
-	tunnel  *tunnel.TunnelServer
-	billing *billing.Manager
-	db      *db.DB
-	redis   *cache.RedisStore
+	tunnel      *tunnel.TunnelServer
+	billing     *billing.Manager
+	db          *db.DB
+	redis       *cache.RedisStore
+	userLimiters sync.Map // UserID -> *rate.Limiter
 }
 
 func NewHandler(t *tunnel.TunnelServer, b *billing.Manager, d *db.DB, r *cache.RedisStore) *Handler {
 	return &Handler{tunnel: t, billing: b, db: d, redis: r}
 }
 
+func (h *Handler) getUserLimiter(userID int) *rate.Limiter {
+	val, ok := h.userLimiters.Load(userID)
+	if ok {
+		return val.(*rate.Limiter)
+	}
+	// Default 60 RPM
+	l := rate.NewLimiter(rate.Limit(1.0), 5) 
+	h.userLimiters.Store(userID, l)
+	return l
+}
+
+func logCtx(ctx context.Context, format string, v ...interface{}) {
+	reqID, _ := ctx.Value(middleware.RequestIDKey).(string)
+	log.Printf("[%s] "+format, append([]interface{}{reqID}, v...)...)
+}
+
+func maskKey(key string) string {
+	if len(key) < 8 {
+		return "***"
+	}
+	return key[:3] + "***" + key[len(key)-4:]
+}
+
 func (h *Handler) HandleRequest(w http.ResponseWriter, r *http.Request) {
+	// Get Request ID from Middleware
+	var reqID string
+	if val := r.Context().Value(middleware.RequestIDKey); val != nil {
+		reqID = val.(string)
+	} else {
+		reqID = uuid.New().String() // Fallback
+	}
+
 	authHeader := r.Header.Get("Authorization")
 	apiKey := strings.TrimPrefix(authHeader, "Bearer ")
 	if apiKey == "" {
@@ -39,11 +77,18 @@ func (h *Handler) HandleRequest(w http.ResponseWriter, r *http.Request) {
 
 	user, err := h.db.GetUserByAPIKey(apiKey)
 	if err != nil {
-		log.Printf("[Auth] Invalid Key: %s", apiKey)
+		logCtx(r.Context(), "[Auth] Invalid Key: %s", maskKey(apiKey))
 		http.Error(w, "Invalid API Key", http.StatusUnauthorized)
 		return
 	}
 	
+	// RPM Check
+	limiter := h.getUserLimiter(user.ID)
+	if !limiter.Allow() {
+		http.Error(w, "Rate limit exceeded (RPM)", http.StatusTooManyRequests)
+		return
+	}
+
 	activeCount, err := h.redis.IncrUserActive(r.Context(), user.ID)
 	if err == nil {
 		maxConcurrent := 10
@@ -62,52 +107,75 @@ func (h *Handler) HandleRequest(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Insufficient balance", http.StatusPaymentRequired)
 		return
 	}
-
-	reqID := uuid.New().String()
 	
-	body, err := io.ReadAll(r.Body)
+	// 1. Pre-read for Sniffing
+	sniffBuf := make([]byte, config.SniffBufferLen)
+	n, _ := io.ReadFull(r.Body, sniffBuf)
+	head := sniffBuf[:n]
+	
+	// 2. Sniff Model
+	// Lightweight Sniffing logic moved here
+	modelName := "unknown"
+	
+	sniffBytes := head
+	if r.Header.Get("Content-Encoding") == "gzip" {
+		gz, err := gzip.NewReader(bytes.NewReader(head))
+		if err == nil {
+			// Try to read enough for sniffing
+			uncompressed := make([]byte, config.SniffBufferLen)
+			n, _ := io.ReadFull(gz, uncompressed)
+			sniffBytes = uncompressed[:n]
+			gz.Close()
+		}
+	}
+	
+	// 1. Find "model"
+	// Use head (string)
+	headStr := string(sniffBytes)
+	idx := strings.Index(headStr, `"model"`)
+	if idx != -1 {
+		rest := headStr[idx+7:]
+		colonIdx := strings.Index(rest, ":")
+		if colonIdx != -1 {
+			valuePart := rest[colonIdx+1:]
+			startQuote := strings.Index(valuePart, `"`)
+			if startQuote != -1 {
+				valueContent := valuePart[startQuote+1:]
+				endQuote := strings.Index(valueContent, `"`)
+				if endQuote != -1 {
+					modelName = valueContent[:endQuote]
+				}
+			}
+		}
+	}
+
+	// 3. Apply Dynamic Limit
+	limit := config.GetLimit(modelName)
+	
+	// Check if we already exceeded limit in head? (Unlikely for 4KB head vs 1MB limit)
+	
+	// 4. Read Remaining with Limit
+	// We read limit - n + 1 to detect overflow
+	remainingLimit := limit - int64(n) + 1
+	if remainingLimit < 0 { remainingLimit = 0 }
+	
+	remainingReader := io.LimitReader(r.Body, remainingLimit)
+	fullReader := io.MultiReader(bytes.NewReader(head), remainingReader)
+	
+	body, err := io.ReadAll(fullReader)
 	if err != nil {
 		http.Error(w, "Failed to read body", http.StatusBadRequest)
 		return
 	}
-
-	// === 风控拦截点 (Moderation Filter) ===
-	// TODO: 将来接入真实的大模型审核 API
-	// 目前仅做简单的 Mock 演示: 如果内容包含 "illegal_bomb", 则拦截
-	if strings.Contains(string(body), "illegal_bomb") {
-		log.Printf("[Moderation] Blocked request %s due to sensitive content", reqID)
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusForbidden) // 403 or 401 as requested
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"error": map[string]string{
-				"code":    "sensitive_words_detected",
-				"message": "Content moderation failed with status 403",
-				"type":    "hub_error",
-			},
-		})
+	
+	if int64(len(body)) > limit {
+		logCtx(r.Context(), "[Gateway] Request too large for model %s. Size: %d, Limit: %d", modelName, len(body), limit)
+		http.Error(w, "Request entity too large", http.StatusRequestEntityTooLarge)
 		return
 	}
-	// ======================================
-	
-	// Lightweight Sniffing: Try to find "model" in the first 1KB
-	// Avoid full JSON parsing to support stream/partial bodies
-	modelName := "unknown"
-	limit := 1024
-	if len(body) < limit { limit = len(body) }
-	head := string(body[:limit])
-	
-	// Very naive regex-like search: "model": "xyz"
-	// Better approach: use a fast json parser like buger/jsonparser, but for now str matching is okay for MVP
-	if idx := strings.Index(head, `"model"`); idx != -1 {
-		// Look for value after :
-		rest := head[idx+7:]
-		if startQuote := strings.Index(rest, `"` ); startQuote != -1 {
-			rest = rest[startQuote+1:]
-			if endQuote := strings.Index(rest, `"` ); endQuote != -1 {
-				modelName = rest[:endQuote]
-			}
-		}
-	}
+
+	// Extract Provider from API Key prefix
+
 
 	// Extract Provider from API Key prefix
 	// e.g. "sk-ant-..." -> "anthropic"
@@ -118,11 +186,15 @@ func (h *Handler) HandleRequest(w http.ResponseWriter, r *http.Request) {
 		targetProvider = "anthropic"
 	} else if strings.HasPrefix(apiKey, "sk-goog-") {
 		targetProvider = "google"
+	} else if strings.HasPrefix(apiKey, "sk-aws-") {
+		targetProvider = "aws"
+	} else if strings.HasPrefix(apiKey, "sk-azure-") {
+		targetProvider = "azure"
 	}
 
 	result, err := h.tunnel.SelectAgent(r.Context(), targetProvider, modelName)
 	if err != nil {
-		log.Printf("[Gateway] No agent found for provider %s model %s: %v", targetProvider, modelName, err)
+		logCtx(r.Context(), "[Gateway] No agent found for provider %s model %s: %v", targetProvider, modelName, err)
 		http.Error(w, fmt.Sprintf("No agent available for %s/%s", targetProvider, modelName), http.StatusServiceUnavailable)
 		return
 	}
@@ -132,34 +204,40 @@ func (h *Handler) HandleRequest(w http.ResponseWriter, r *http.Request) {
 
 	respChan, err := h.tunnel.InitRequest(targetAgentID, reqID)
 	if err != nil {
+		logCtx(r.Context(), "[Gateway] InitRequest failed (Agent offline?): %v", err)
 		http.Error(w, fmt.Sprintf("Agent offline: %v", err), http.StatusServiceUnavailable)
 		return
 	}
 	defer h.tunnel.CleanupRequest(reqID)
 
-	errChan := make(chan error, 1)
-	go func() {
-		defer close(errChan)
-		
-		metaPayload := protocol.HttpRequestPayload{
-			Method:           r.Method,
-			URL:              r.URL.Path, // Path Pass-through
-			Headers:          map[string]string{
-				"Content-Type":  r.Header.Get("Content-Type"),
-				"Authorization": r.Header.Get("Authorization"),
-			},
-			PriceVersion:     h.billing.GetCurrentPriceTable().Version,
-			IsFinal:          false,
-			TargetInstanceID: targetInstanceID,
-		}
-		if err := h.tunnel.SendRequestChunk(targetAgentID, reqID, metaPayload); err != nil {
-			errChan <- err
-			return
-		}
-
-		chunkSize := 32 * 1024
-		for i := 0; i < len(body); i += chunkSize {
-			end := i + chunkSize
+		errChan := make(chan error, 1)
+		go func() {
+			defer close(errChan)
+			
+			// Filter Headers
+			headers := make(map[string]string)
+			for k, v := range r.Header {
+				// Limit header size
+				if len(k) > 100 || len(v[0]) > 1000 { continue }
+				headers[k] = v[0]
+			}
+			
+			metaPayload := protocol.HttpRequestPayload{
+				Method:           r.Method,
+				URL:              r.URL.Path, // Path Pass-through
+				Headers:          headers,
+				PriceVersion:     h.billing.GetCurrentPriceTable().Version,
+				IsFinal:          false,
+				TargetInstanceID: targetInstanceID,
+				TargetProvider:   targetProvider, // 传递 Provider
+			}
+			if err := h.tunnel.SendRequestChunk(targetAgentID, reqID, metaPayload); err != nil {			        			errChan <- err
+			        			return
+			        		}
+			        
+			        		chunkSize := config.ChunkSize
+			        		for i := 0; i < len(body); i += chunkSize {
+			        			end := i + chunkSize
 			if end > len(body) { end = len(body) }
 			chunk := body[i:end]
 			
@@ -179,67 +257,77 @@ func (h *Handler) HandleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	timeout := time.After(60 * time.Second)
-	firstPacketReceived := false
-	ctx := r.Context()
-
-	for {
-		select {
-		case <-ctx.Done():
-			log.Printf("[Gateway] Client disconnected %s", reqID)
-			return
-		case err := <-errChan:
-			if err != nil {
-				log.Printf("[Gateway] Upload error: %v", err)
+		timeout := time.After(60 * time.Second)
+		firstPacketReceived := false
+		ctx := r.Context()
+		
+		var totalBytesSent int64
+	
+		for {
+			select {
+			case <-ctx.Done():
+				logCtx(ctx, "[Gateway] Client disconnected")
+				h.tunnel.SendAbort(targetAgentID, reqID)
+				h.tunnel.CleanupRequest(reqID)
 				return
-			}
-		case packet, ok := <-respChan:
-			if !ok { return }
-
-			var resp protocol.HttpResponsePayload
-			if err := json.Unmarshal(packet.Payload, &resp); err != nil { return }
-
-			if resp.Error != "" {
-				http.Error(w, "Agent Error: "+resp.Error, http.StatusBadGateway)
-				return
-			}
-
-			if !firstPacketReceived {
-				if resp.StatusCode != 0 { w.WriteHeader(resp.StatusCode) }
-				w.Header().Set("Content-Type", "text/event-stream")
-				w.Header().Set("Connection", "keep-alive")
-				firstPacketReceived = true
-			}
-
-			if len(resp.BodyChunk) > 0 {
-				w.Write(resp.BodyChunk)
-				flusher.Flush()
-			}
-
-			if resp.IsFinal {
-				if resp.Usage != nil {
-					priceVer := h.billing.GetCurrentPriceTable().Version
-					cost := h.billing.CalculateCost(modelName, resp.Usage, priceVer) 
-					agentIncome := cost * 0.8
+			case packet, ok := <-respChan:
+				if !ok { return }
+	
+							var resp protocol.HttpResponsePayload
+							if err := json.Unmarshal(packet.Payload, &resp); err != nil { return }
+							
+							if resp.Error != "" {
+								w.Header().Set("Content-Type", "application/json")
+								w.WriteHeader(http.StatusBadGateway)
+								json.NewEncoder(w).Encode(map[string]interface{}{
+									"error": map[string]string{
+										"message": resp.Error,
+										"type":    "agent_error",
+										"code":    resp.ErrorType,
+									},
+								})
+								return
+							}
+				
+							if !firstPacketReceived {
+								if resp.StatusCode != 0 { w.WriteHeader(resp.StatusCode) }
+								w.Header().Set("Content-Type", "text/event-stream")
+								w.Header().Set("Connection", "keep-alive")
+								firstPacketReceived = true
+							}
+				
+							if len(resp.BodyChunk) > 0 {					w.Write(resp.BodyChunk)
+					flusher.Flush()
 					
-					log.Printf("💰 [Settlement] ReqID: %s, User: %d, Cost: $%.6f, Hash: %s", 
-						reqID, user.ID, cost, resp.AgentHash)
-					
-					// 修复: 先写 MySQL (真理)，成功后再更新 Redis (缓存)
-					// 防止数据库回滚导致 Redis 虚增收入
-					if err := h.db.SettleTransaction(reqID, user.ID, targetAgentID, modelName, priceVer, cost, agentIncome, resp.AgentHash); err != nil {
-						log.Printf("❌ [DB] Settle failed: %v", err)
-						// 注意：这里不用回滚 Redis，因为还没加呢
-					} else {
-						// DB 成功了，现在可以安全地更新 Redis 显示了
-						h.redis.IncrAgentIncome(context.Background(), targetAgentID, agentIncome)
-						log.Printf("✅ [DB] Settle success!")
+					totalBytesSent += int64(len(resp.BodyChunk))
+					// Rough check: 1MB ~ $0.05 (GPT-4 text). If balance < $0.01 and bytes > 10MB, kill.
+					if user.Balance < 1.0 && totalBytesSent > 10*1024*1024 {
+						logCtx(ctx, "[Gateway] Abort: Low balance and high traffic")
+						h.tunnel.SendAbort(targetAgentID, reqID)
+						return
 					}
 				}
-				return
-			}
 
-		case <-timeout:
+				if resp.IsFinal {
+					if resp.Usage != nil {
+						priceVer := h.billing.GetCurrentPriceTable().Version
+						cost := h.billing.CalculateCost(modelName, resp.Usage, priceVer) 
+						agentIncome := cost * 0.8
+						
+						logCtx(ctx, "💰 [Settlement] User: %d, Cost: $%.6f, Hash: %s", 
+							user.ID, cost, resp.AgentHash)
+						
+						// 修复: 先写 MySQL (真理)，成功后再更新 Redis (缓存)
+						if err := h.db.SettleTransaction(reqID, user.ID, targetAgentID, modelName, priceVer, cost, agentIncome, resp.AgentHash); err != nil {
+							logCtx(ctx, "❌ [DB] Settle failed: %v", err)
+						} else {
+							h.redis.IncrAgentIncome(context.Background(), targetAgentID, agentIncome)
+							logCtx(ctx, "✅ [DB] Settle success!")
+						}
+					}
+					return
+				}
+			case <-timeout:
 			return
 		}
 	}

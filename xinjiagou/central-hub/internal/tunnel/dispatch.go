@@ -49,6 +49,20 @@ func (s *TunnelServer) SendRequestChunk(agentID string, reqID string, payload pr
 	return session.SafeWrite(packet)
 }
 
+func (s *TunnelServer) SendAbort(agentID string, reqID string) {
+	s.mu.RLock()
+	session, exists := s.agents[agentID]
+	s.mu.RUnlock()
+
+	if !exists { return }
+
+	packet := protocol.Packet{
+		Type:      protocol.TypeAbort,
+		RequestID: reqID,
+	}
+	session.SafeWrite(packet)
+}
+
 func (s *TunnelServer) CleanupRequest(reqID string) {
 	s.pendingRequests.Delete(reqID)
 }

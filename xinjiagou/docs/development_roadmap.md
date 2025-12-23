@@ -96,3 +96,57 @@
 *   **数据库**: MySQL (localhost, root, 123456)
 *   **缓存**: Redis (localhost, 无密码/123456)
 *   **跨平台**: 代码需考虑 Linux/Mac 适配 (路径分隔符、换行符等使用标准库处理)。
+
+
+
+
+  当前里程碑总结 (Phase 8 Completed)
+
+   1. 架构全覆盖: 实现了 OpenAI, Anthropic, Google (Vertex/Studio), AWS (Bedrock), Azure 五大主流厂商的适配器。
+   2. SDK 集成: 成功引入并集成了 AWS 和 Google 的官方 SDK 鉴权组件，保证了签名逻辑的准确性。
+   3. 真实转发: 彻底移除了 Mock 逻辑，Agent 现在是一个真正具备“多语种”能力的 API 代理。
+
+  现在的系统能力
+
+   * Request: 用户发任何格式的请求 -> Hub 透传 -> Agent 根据 Instance 配置重写 Header/URL/Auth -> 发送给厂商。
+   * Response: 厂商返回任何格式 -> Agent 透传给 Hub -> Hub 透传给用户。
+   * Billing:
+       * OpenAI/Anthropic: 支持流式 Usage 嗅探。
+       * Google/AWS/Azure: 具备嗅探框架（目前是占位符或简单实现，待厂商返回真实数据后微调）。
+
+  ---
+
+  下一步计划：迈向生产环境 (Phase 9: Production Hardening)
+
+  现在的代码虽然功能全了，但离“敢在生产环境跑”还有一段距离。我们需要做 "硬化" (Hardening) 工作。
+
+  1. 密钥安全 (Key Security)
+  目前 InstanceConfig.ID 被滥用来存储 Key（甚至 AK:SK）。这在测试时方便，在生产环境是灾难。
+  任务: 实现本地加密 KeyStore。
+   * Agent 启动时要求输入密码。
+   * 配置文件里的 Key 是加密存储的。
+   * 运行时解密到内存。
+
+  2. 错误处理与重试 (Resilience)
+  如果 AWS 签名过期了怎么办？如果 Google Token 刷新失败怎么办？
+  任务:
+   * 实现 TokenRefresher (针对 Vertex)。
+   * 实现 RetryMiddleware (针对 429/5xx)。
+
+  3. 性能优化 (Performance)
+  AWS Adapter 里为了计算 Hash 读取了整个 Body。如果用户上传一个 10MB 的 PDF 给 Claude，内存会爆吗？
+  任务: 优化流式转发，尽量避免全量 ReadAll。
+  (注: AWS SigV4 必须算 Payload Hash，所以不得不读。但我们可以限制最大 Body Size)
+
+  4. 前端管理面板 (UI)
+  目前的 UI 只是个 Mock。
+  任务: 实现一个真正的 Web 界面，允许用户添加/删除 Instance，查看实时 RPM 和收益。
+
+
+  既然基础设施已经非常完善，我建议我们可以开始 Phase 9: Production Hardening。
+
+   1. KeyStore: 实现本地加密存储，不再把 AK/SK 写在 ID 里（那个 AKID:SECRET:Region 是个巨大的安全隐患）。
+   2. Retry: 当 Google 返回 200 空 Body 这种诡异情况时，Agent 应该能识别并重试，或者返回明确的错误给 Hub。
+   3. UI: 做一个好一点的管理界面，方便你配置这些复杂的 Instance。
+
+  你最关心哪一个方向？还是说你想先部署上线跑一跑试试？

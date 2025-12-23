@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"context"
+	"edge-agent/internal/config"
 	"edge-agent/internal/protocol"
 	"edge-agent/internal/proxy/providers"
 	"encoding/json"
@@ -16,13 +17,16 @@ import (
 type SenderFunc func(v interface{}) error
 type CompleteCallback func(reqID string, usage *protocol.Usage) string
 
+// Dependency Injection for Config Lookup
+var GetInstanceConfig func(id string) *protocol.InstanceConfig
+
 // DoRequest 执行真实的代理请求
 func DoRequest(ctx context.Context, s *RequestStreamer, send SenderFunc, onComplete CompleteCallback) {
 	reqID := s.ReqID
 
 	select {
 	case <-s.MetaReady:
-	case <-time.After(10 * time.Second):
+	case <-time.After(10 * time.Second): // Header wait timeout could also be a const
 		sendError(send, reqID, "Header timeout")
 		return
 	case <-ctx.Done():
@@ -35,35 +39,49 @@ func DoRequest(ctx context.Context, s *RequestStreamer, send SenderFunc, onCompl
 		return
 	}
 
-	// 1. 查找实例配置 (Mock Lookup)
-	// 在真实代码中，这里应该查本地 DB 或 Config
-	instance := &protocol.InstanceConfig{
-		ID: instanceID,
-		// 临时: 假设 ID 就是 Key，且 Endpoint 是官方的
-		// 生产环境必须从加密存储读取
+	// 1. 查找实例配置
+	var instance *protocol.InstanceConfig
+	if GetInstanceConfig != nil {
+		instance = GetInstanceConfig(instanceID)
+	}
+	
+	// Fallback or Error if not found
+	if instance == nil {
+		// Try minimal fallback if ID is self-contained (e.g. key)? No, unsafe.
+		// Fail fast.
+		sendError(send, reqID, "Instance config not found: "+instanceID)
+		return 
 	}
 	
 	// 2. 选择适配器
-	// 我们需要知道 Provider，但 s.Meta (HttpRequestPayload) 里没传 Provider
-	// 这是一个设计遗漏。Hub 应该传 Provider 或者我们根据 InstanceID 查出来。
-	// 临时方案: 假设 instanceID 包含 provider 前缀 (如 ant-1, acc-1=openai)
-	providerName := "openai"
-	if strings.HasPrefix(instanceID, "ant-") {
-		providerName = "anthropic"
+	providerName := s.Meta.TargetProvider
+	log.Printf("[Worker] Received Request. Provider: %s, InstanceID: %s", providerName, instanceID)
+	
+	if providerName == "" {
+		providerName = "openai" // Fallback
 	}
-	// 更严谨的做法: protocol.HttpRequestPayload 应该包含 Provider 字段
 	
 	adapter := providers.GetAdapter(providerName)
 	sniffer := adapter.GetSniffer()
 
 	// 3. 构造请求
-	// 默认 BaseURL
-	baseURL := "https://api.openai.com"
-	if providerName == "anthropic" {
-		baseURL = "https://api.anthropic.com"
+	baseURL := adapter.GetBaseURL(instance)
+	
+	// Join Path safely
+	// If baseURL has path (e.g. Azure), join it correctly with request path
+	baseHasSlash := strings.HasSuffix(baseURL, "/")
+	reqHasSlash := strings.HasPrefix(s.Meta.URL, "/")
+	
+	var targetURL string
+	if baseHasSlash && reqHasSlash {
+		targetURL = baseURL + s.Meta.URL[1:]
+	} else if !baseHasSlash && !reqHasSlash {
+		targetURL = baseURL + "/" + s.Meta.URL
+	} else {
+		targetURL = baseURL + s.Meta.URL
 	}
 	
-	targetURL := baseURL + s.Meta.URL
+	log.Printf("[Worker] Sending request to: %s", targetURL)
 	
 	req, err := http.NewRequestWithContext(ctx, s.Meta.Method, targetURL, s.GetBodyReader())
 	if err != nil {
@@ -78,22 +96,59 @@ func DoRequest(ctx context.Context, s *RequestStreamer, send SenderFunc, onCompl
 	}
 
 	// 5. 发送请求
-	client := &http.Client{Timeout: 180 * time.Second}
+	client := &http.Client{Timeout: config.DefaultRequestTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
-		sendError(send, reqID, "Network error: "+err.Error())
+		// Network Error -> Feedback
+		sendResponse(send, reqID, protocol.HttpResponsePayload{
+			Error:     "Network error: " + err.Error(),
+			ErrorType: "network_error",
+			IsFinal:   true,
+		})
 		return
 	}
 	defer resp.Body.Close()
 
+	// Resilience Logic: Check Status
+	if resp.StatusCode == 429 || resp.StatusCode >= 500 {
+		retryAfter := 0
+		// Parse Retry-After Header
+		if val := resp.Header.Get("Retry-After"); val != "" {
+			// Try parse int
+			fmt.Sscanf(val, "%d", &retryAfter)
+		}
+		
+		errType := "server_error"
+		if resp.StatusCode == 429 { errType = "rate_limit" }
+		
+		// Send Error with Feedback Info
+		// We DO NOT stream the body for these errors to avoid partial content.
+		// Just fail fast.
+		sendResponse(send, reqID, protocol.HttpResponsePayload{
+			StatusCode: resp.StatusCode,
+			Error:      fmt.Sprintf("Upstream Error %d", resp.StatusCode),
+			ErrorType:  errType,
+			RetryAfter: retryAfter,
+			InstanceID: instanceID, // Feedback Source
+			IsFinal:    true,
+		})
+		return
+	}
+
 	// 6. 处理响应
 	// 使用 TeeReader: 一边发给 Hub，一边喂给 Sniffer
 	pr, pw := io.Pipe()
+	defer pr.Close() // Ensure reader is closed to unblock writer
 	
 	// 启动一个 goroutine 负责把 resp.Body 写入 pipe
 	// 同时也写入 Sniffer
 	go func() {
-		defer pw.Close()
+		defer func() {
+			if r := recover(); r != nil {
+				log.Printf("[Worker] Panic in pipe copy: %v", r)
+			}
+			pw.Close() // Ensure pipe is closed
+		}()
 		// MultiWriter: 写入 Pipe (给 Hub) 和 Sniffer (计费)
 		mw := io.MultiWriter(pw, sniffer)
 		

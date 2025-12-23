@@ -7,6 +7,9 @@ import (
 
 // Adapter 负责请求重写 (鉴权/URL)
 type Adapter interface {
+	// GetBaseURL 返回厂商的基础 API 地址
+	GetBaseURL(instance *protocol.InstanceConfig) string
+
 	// RewriteRequest 根据实例配置修改请求 (URL, Headers, Auth)
 	// targetURL 是根据 Instance.Endpoint + Request.URL 拼接好的基础 URL
 	RewriteRequest(req *http.Request, instance *protocol.InstanceConfig) error

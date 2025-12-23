@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"os"
+	"strconv"
 	"time"
 
 	"github.com/go-sql-driver/mysql"
@@ -19,9 +21,15 @@ func NewDB(dsn string) (*DB, error) {
 		return nil, err
 	}
 	
-	conn.SetMaxOpenConns(100)
-	conn.SetMaxIdleConns(10)
-	conn.SetConnMaxLifetime(5 * time.Minute)
+	maxOpen := 100
+	if val := os.Getenv("DB_MAX_OPEN_CONNS"); val != "" {
+		if v, err := strconv.Atoi(val); err == nil {
+			maxOpen = v
+		}
+	}
+	conn.SetMaxOpenConns(maxOpen)
+	conn.SetMaxIdleConns(maxOpen / 10) // 10% idle
+	conn.SetConnMaxLifetime(3 * time.Minute)
 
 	if err := conn.Ping(); err != nil {
 		return nil, err
@@ -63,6 +71,11 @@ func (d *DB) RegisterOrValidateAgent(agentID, pubKey string) (string, error) {
 	err := d.conn.QueryRow("SELECT public_key, tier FROM agents WHERE id = ?", agentID).Scan(&existingKey, &tier)
 	
 	if err == sql.ErrNoRows {
+		// Strict Mode: Do not auto-register unless env says so
+		if os.Getenv("ENABLE_TOFU") != "true" {
+			return "", fmt.Errorf("agent %s not registered and TOFU is disabled", agentID)
+		}
+		
 		// 新 Agent，自动注册 (TOFU 模式)
 		_, err := d.conn.Exec("INSERT INTO agents (id, name, public_key, tier) VALUES (?, 'AutoReg', ?, 'B')", agentID, pubKey)
 		if err != nil {
@@ -133,4 +146,41 @@ func (d *DB) settleTxInternal(reqID string, userID int, agentID string, model st
 	}
 
 	return tx.Commit()
+}
+
+// LogAudit 记录审计日志 (Agent & Instances)
+func (d *DB) LogAudit(agentID string, eventType string, ip string, instances []struct{ID, Provider string}) {
+	// 1. Agent Log
+	_, err := d.conn.Exec("INSERT INTO agent_audit_logs (agent_id, event_type, ip) VALUES (?, ?, ?)", 
+		agentID, eventType, ip)
+	if err != nil {
+		log.Printf("[Audit] Failed to log agent: %v", err)
+	}
+
+	// 2. Instance Logs (只在 connect/ip_change 时记录快照)
+	if eventType == "connect" || eventType == "ip_change" {
+		if len(instances) == 0 { return }
+		
+		// Batch insert to avoid hitting SQL placeholder limits
+		batchSize := 500
+		for i := 0; i < len(instances); i += batchSize {
+			end := i + batchSize
+			if end > len(instances) { end = len(instances) }
+			
+			batch := instances[i:end]
+			query := "INSERT INTO instance_audit_logs (instance_id, agent_id, provider, ip) VALUES "
+			vals := []interface{}{}
+			
+			for _, inst := range batch {
+				query += "(?, ?, ?, ?),"
+				vals = append(vals, inst.ID, agentID, inst.Provider, ip)
+			}
+			query = query[:len(query)-1] // Remove last comma
+			
+			_, err = d.conn.Exec(query, vals...)
+			if err != nil {
+				log.Printf("[Audit] Failed to log instances batch: %v", err)
+			}
+		}
+	}
 }

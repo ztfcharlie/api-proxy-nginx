@@ -4,6 +4,8 @@ import (
 	"edge-agent/internal/protocol"
 	"errors"
 	"io"
+	"log"
+	"sync"
 	"time"
 )
 
@@ -17,6 +19,7 @@ type RequestStreamer struct {
 	
 	// 新增: 数据缓冲通道，解耦 WebSocket 读取和 HTTP 发送
 	chunkChan chan []byte
+	closeOnce sync.Once
 }
 
 func NewRequestStreamer(reqID string) *RequestStreamer {
@@ -37,7 +40,12 @@ func NewRequestStreamer(reqID string) *RequestStreamer {
 
 // pump 负责从 channel 取数据写入 pipe，这样就不会阻塞主循环
 func (s *RequestStreamer) pump() {
-	defer s.pw.Close() // 确保退出时关闭 PipeWriter，触发 EOF
+	defer func() {
+		if r := recover(); r != nil {
+			log.Printf("[Streamer] Panic in pump: %v", r)
+		}
+		s.pw.Close() 
+	}()
 
 	for chunk := range s.chunkChan {
 		// 这里的 Write 可能会阻塞 (如果 HTTP 发送太慢)
@@ -60,18 +68,27 @@ func (s *RequestStreamer) WriteChunk(payload protocol.HttpRequestPayload) error 
 	}
 
 	if len(payload.BodyChunk) > 0 {
+		// Check if channel is closed? No easy way.
+		// Use recover to prevent panic if writing to closed channel
+		defer func() {
+			if r := recover(); r != nil {
+				// Log ignored
+			}
+		}()
+		
 		select {
 		case s.chunkChan <- payload.BodyChunk:
 			// 写入成功
 		case <-time.After(100 * time.Millisecond):
-			// 缓冲区满了，说明 OpenAI 发送太慢，或者卡死了
-			// 为了保护 Agent 内存，我们要丢弃这个请求
+			// 缓冲区满了
 			return errors.New("stream buffer full (slow network)")
 		}
 	}
 
 	if payload.IsFinal {
-		close(s.chunkChan) // 关闭通道，通知 pump 退出
+		s.closeOnce.Do(func() {
+			close(s.chunkChan)
+		})
 	}
 	
 	return nil

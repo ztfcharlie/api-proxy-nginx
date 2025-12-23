@@ -44,6 +44,34 @@ func main() {
 			INDEX idx_agent (agent_id)
 		)`,
 		"INSERT IGNORE INTO users (username, api_key, balance) VALUES ('ant_user', 'sk-ant-test-key-123', 10.00)",
+		"INSERT IGNORE INTO users (username, api_key, balance) VALUES ('goog_user', 'sk-goog-test-key-123', 10.00)",
+		"INSERT IGNORE INTO users (username, api_key, balance) VALUES ('aws_user', 'sk-aws-test-key-123', 10.00)",
+		"INSERT IGNORE INTO users (username, api_key, balance) VALUES ('azure_user', 'sk-azure-test-key-123', 10.00)",
+		
+		// 审计日志: Agent 物理IP
+		`CREATE TABLE IF NOT EXISTS agent_audit_logs (
+			id INT AUTO_INCREMENT PRIMARY KEY,
+			agent_id VARCHAR(64) NOT NULL,
+			event_type VARCHAR(32) NOT NULL, -- 'connect', 'ip_change', 'probe'
+			ip VARCHAR(45) NOT NULL,
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			INDEX idx_agent (agent_id),
+			INDEX idx_created (created_at)
+		)`,
+
+		// 审计日志: Instance 归属与环境快照 (冗余存储，便于快速溯源)
+		`CREATE TABLE IF NOT EXISTS instance_audit_logs (
+			id INT AUTO_INCREMENT PRIMARY KEY,
+			instance_id VARCHAR(64) NOT NULL,
+			agent_id VARCHAR(64) NOT NULL,
+			provider VARCHAR(32) NOT NULL,
+			ip VARCHAR(45) NOT NULL, -- 继承自 Agent IP
+			created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+			INDEX idx_instance (instance_id),
+			INDEX idx_agent_inst (agent_id, instance_id)
+		)`,
+		
+		"ALTER TABLE agents ADD COLUMN last_hash VARCHAR(64) DEFAULT ''", // 账本校验
 	}
 
 	for _, q := range queries {

@@ -14,6 +14,8 @@ const (
     TypeResponse      PacketType = "response"
     TypePriceUpdate   PacketType = "price_update"
     TypeModelUpdate   PacketType = "model_update" // 新增: Agent 主动上报模型变更
+    TypeProbe         PacketType = "probe" // Hub 主动探测 IP
+    TypeAbort         PacketType = "abort" // Hub 通知 Agent 取消请求
 )
 
 type Packet struct {
@@ -42,6 +44,10 @@ type ModelUpdatePayload struct {
     Instances []InstanceConfig `json:"instances"`
 }
 
+type ProbePayload struct {
+    URL string `json:"url"` // Hub 的回响接口地址
+}
+
 type AuthChallengePayload struct {
     Nonce string `json:"nonce"`
 }
@@ -66,7 +72,8 @@ type HttpRequestPayload struct {
     PriceVersion     string            `json:"price_ver,omitempty"`
     BodyChunk        []byte            `json:"body_chunk,omitempty"`
     IsFinal          bool              `json:"is_final"`
-    TargetInstanceID string            `json:"target_instance_id,omitempty"` // 新增: 指导 Agent 选号
+    TargetInstanceID string            `json:"target_instance_id,omitempty"`
+    TargetProvider   string            `json:"target_provider,omitempty"` // 新增: 明确厂商
 }
 
 type HttpResponsePayload struct {
@@ -75,6 +82,9 @@ type HttpResponsePayload struct {
     BodyChunk  []byte            `json:"body_chunk"`
     IsFinal    bool              `json:"is_final"`
     Error      string            `json:"error,omitempty"`
+    ErrorType  string            `json:"error_type,omitempty"`
+    RetryAfter int               `json:"retry_after,omitempty"`
+    InstanceID string            `json:"instance_id,omitempty"` // 反馈源
     Usage      *Usage            `json:"usage,omitempty"`
     
     // 新增: Agent 的记账 Hash

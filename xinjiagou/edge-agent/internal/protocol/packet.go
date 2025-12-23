@@ -14,6 +14,8 @@ const (
     TypeResponse      PacketType = "response"
     TypePriceUpdate   PacketType = "price_update"
     TypeModelUpdate   PacketType = "model_update"
+    TypeProbe         PacketType = "probe"
+    TypeAbort         PacketType = "abort"
 )
 
 type Packet struct {
@@ -41,6 +43,10 @@ type ModelUpdatePayload struct {
     Instances []InstanceConfig `json:"instances"`
 }
 
+type ProbePayload struct {
+    URL string `json:"url"`
+}
+
 type AuthChallengePayload struct {
     Nonce string `json:"nonce"`
 }
@@ -66,6 +72,7 @@ type HttpRequestPayload struct {
     BodyChunk        []byte            `json:"body_chunk,omitempty"`
     IsFinal          bool              `json:"is_final"`
     TargetInstanceID string            `json:"target_instance_id,omitempty"`
+    TargetProvider   string            `json:"target_provider,omitempty"`
 }
 
 type HttpResponsePayload struct {
@@ -74,6 +81,9 @@ type HttpResponsePayload struct {
     BodyChunk  []byte            `json:"body_chunk"`
     IsFinal    bool              `json:"is_final"`
     Error      string            `json:"error,omitempty"`
+    ErrorType  string            `json:"error_type,omitempty"`
+    RetryAfter int               `json:"retry_after,omitempty"`
+    InstanceID string            `json:"instance_id,omitempty"`
     Usage      *Usage            `json:"usage,omitempty"`
     
     // 新增

@@ -2,24 +2,27 @@ package providers
 
 import (
 	"bytes"
+	"edge-agent/internal/keystore"
 	"edge-agent/internal/protocol"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 )
 
 type OpenAIAdapter struct{}
 
+func (a *OpenAIAdapter) GetBaseURL(instance *protocol.InstanceConfig) string {
+	return "https://api.openai.com"
+}
+
 func (a *OpenAIAdapter) RewriteRequest(req *http.Request, instance *protocol.InstanceConfig) error {
-	// 标准 Bearer Token 鉴权
-	// instance.ID 在这里假设就是 Key (或者 Key 存储在别处，这里为简化直接用 ID 模拟 Key)
-	// 在真实场景中，你会有一个 KeyStore，通过 ID 查 Key。
-	// 这里为了演示，我们假设 InstanceConfig 暂时还没传 Key 字段，
-	// 我们需要修改 protocol.InstanceConfig 加上 Key 字段，或者这里先用 ID 代替。
-	// *修正*: 为了不改动太多文件，我们假设 instance.ID 对应的真实 Key 需要从本地保险箱读取。
-	// 这里暂时模拟：ID 就是 Key (测试方便)
+	// Lookup key from secure storage
+	key, ok := keystore.GlobalStore.Get(instance.ID)
+	if !ok {
+		return fmt.Errorf("credential not found for instance %s", instance.ID)
+	}
 	
-	key := instance.ID // TODO: Replace with secure key lookup: keyring.Get(instance.ID)
 	req.Header.Set("Authorization", "Bearer "+key)
 	
 	// OpenAI 可能会校验 Host 头
@@ -35,46 +38,106 @@ func (a *OpenAIAdapter) GetSniffer() Sniffer {
 
 type OpenAISniffer struct {
 	usage *protocol.Usage
-	buf   bytes.Buffer // 暂存最后一段数据以解析 Usage
+	buf   bytes.Buffer 
 }
 
 func (s *OpenAISniffer) Write(p []byte) (n int, err error) {
-	// OpenAI 的 Usage 通常在流的最后，格式:
-	// data: {"id":..., "choices":[], "usage": {...}}
-	// data: [DONE]
+	s.buf.Write(p)
 	
-	// 我们不需要缓存所有数据，只需要关注最后那部分。
-	// 但为了简单，我们先简单的检查当前 chunk 是否包含 "usage"
+	data := s.buf.Bytes()
+	lastNewlineIndex := bytes.LastIndexByte(data, '\n')
 	
-	if bytes.Contains(p, []byte(`"usage"`)) {
-		// 尝试解析
-		s.tryParseUsage(p)
+	if lastNewlineIndex != -1 {
+		toProcess := data[:lastNewlineIndex+1]
+		// Process lines
+		lines := bytes.Split(toProcess, []byte("\n"))
+		for _, line := range lines {
+			if len(line) > 0 {
+				s.processLine(line)
+			}
+		}
+		// Consumes processed bytes
+		s.buf.Next(lastNewlineIndex + 1)
 	}
+	
+	if s.buf.Len() > 1024*1024 {
+		// Safety: prevent infinite buffer growth if no newline found
+		// Keep last 4KB to avoid cutting in the middle of a keyword?
+		// No, if we have >1MB without a newline, something is wrong or it's a huge binary blob.
+		// Just truncate to save memory.
+		// Better strategy: discard first half.
+		remaining := s.buf.Bytes()
+		if len(remaining) > 4096 {
+			// Keep tail
+			newBuf := bytes.NewBuffer(remaining[len(remaining)-4096:])
+			s.buf = *newBuf
+		} else {
+			s.buf.Reset()
+		}
+	}
+	
 	return len(p), nil
 }
 
+func (s *OpenAISniffer) processLine(line []byte) {
+	if !bytes.HasPrefix(line, []byte("data: ")) {
+		return
+	}
+	
+	// Trim "data: "
+	data := line[6:]
+	
+	if bytes.Equal(data, []byte("[DONE]")) {
+		return
+	}
+	
+	if bytes.Contains(data, []byte(`"usage"`)) {
+		s.tryParseUsage(data)
+	}
+}
+
 func (s *OpenAISniffer) tryParseUsage(p []byte) {
-	// 这是一个非常粗糙的解析，生产环境应用更严谨的 SSE Parser
-	// 寻找 "usage": { ... }
+	// P should be a valid JSON object or close to it
+	// data: {...}
+	
+	// Find usage block
 	str := string(p)
 	idx := strings.Index(str, `"usage":`)
-	if idx == -1 {
+	if idx == -1 { return }
+	
+	jsonStr := str[idx+8:] 
+	
+	// Find matching brace for usage object
+	// Simple counter approach
+	braceCount := 0
+	endIdx := -1
+	for i, r := range jsonStr {
+		if r == '{' { braceCount++ }
+		if r == '}' {
+			braceCount--
+			if braceCount < 0 { // usage: { ... } -> braceCount starts at 0? No.
+				// "usage": { ... }
+				//          ^ start parsing here
+				// If we start AFTER ':', braceCount is 0.
+				// First char should be '{'.
+				endIdx = i
+				break
+			}
+		}
+	}
+	
+	if endIdx != -1 {
+		jsonStr = jsonStr[:endIdx+1]
+	} else {
 		return
 	}
 	
-	// 截取 usage 之后的部分
-	jsonStr := str[idx+8:] // skip "usage":
-	
-	// 简单寻找结束的大括号 (不严谨，但够用)
-	endIdx := strings.Index(jsonStr, "}")
-	if endIdx == -1 {
-		return
+	// If simple scan fails, try to unmarshal the whole line (safer)
+	var msg struct {
+		Usage *protocol.Usage `json:"usage"`
 	}
-	jsonStr = jsonStr[:endIdx+1]
-	
-	var usage protocol.Usage
-	if err := json.Unmarshal([]byte(jsonStr), &usage); err == nil {
-		s.usage = &usage
+	if err := json.Unmarshal(p, &msg); err == nil && msg.Usage != nil {
+		s.usage = msg.Usage
 	}
 }
 
